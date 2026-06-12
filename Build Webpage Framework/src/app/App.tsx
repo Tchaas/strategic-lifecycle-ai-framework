@@ -1,5 +1,12 @@
 import { useState } from 'react';
-import { ChevronRight, FileText, Github, Menu, X, Check, AlertCircle, Lightbulb, Users, Target, TrendingUp, Database, GitBranch, Shield, BookOpen, FileCode, Activity } from 'lucide-react';
+import { ChevronRight, FileText, Github, Menu, X, Check, AlertCircle, Lightbulb, Users, Target, TrendingUp, Database, GitBranch, Shield, BookOpen, FileCode, Activity, Layers, Gauge, PanelTop, ListChecks } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './components/ui/accordion';
+import { Badge } from './components/ui/badge';
+import { Button } from './components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
+import { Progress } from './components/ui/progress';
+import { Separator } from './components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 
 export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -192,6 +199,33 @@ export default function App() {
     }
   ];
 
+  const componentGroups = [
+    {
+      name: "Navigation and commands",
+      count: 10,
+      icon: PanelTop,
+      examples: ["Button", "Navigation Menu", "Dropdown Menu", "Tabs", "Breadcrumb"]
+    },
+    {
+      name: "Data and status",
+      count: 9,
+      icon: Gauge,
+      examples: ["Badge", "Progress", "Table", "Chart", "Skeleton"]
+    },
+    {
+      name: "Forms and input",
+      count: 11,
+      icon: ListChecks,
+      examples: ["Input", "Textarea", "Select", "Checkbox", "Radio Group"]
+    },
+    {
+      name: "Panels and overlays",
+      count: 15,
+      icon: Layers,
+      examples: ["Card", "Dialog", "Sheet", "Drawer", "Accordion"]
+    }
+  ];
+
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
@@ -217,6 +251,7 @@ export default function App() {
               <button onClick={() => scrollToSection('ai-augmentation')} className="hover:text-lime-400 hover:drop-shadow-[0_0_8px_rgba(0,255,0,0.8)] transition-all whitespace-nowrap">AI Powers</button>
               <button onClick={() => scrollToSection('use-cases')} className="hover:text-lime-400 hover:drop-shadow-[0_0_8px_rgba(0,255,0,0.8)] transition-all whitespace-nowrap">Missions</button>
               <button onClick={() => scrollToSection('governance')} className="hover:text-lime-400 hover:drop-shadow-[0_0_8px_rgba(0,255,0,0.8)] transition-all whitespace-nowrap">Governance</button>
+              <button onClick={() => scrollToSection('ui-components')} className="hover:text-lime-400 hover:drop-shadow-[0_0_8px_rgba(0,255,0,0.8)] transition-all whitespace-nowrap">Components</button>
               <button onClick={() => scrollToSection('deliverables')} className="hover:text-lime-400 hover:drop-shadow-[0_0_8px_rgba(0,255,0,0.8)] transition-all whitespace-nowrap">Deliverables</button>
               <button onClick={() => scrollToSection('team')} className="hover:text-lime-400 hover:drop-shadow-[0_0_8px_rgba(0,255,0,0.8)] transition-all whitespace-nowrap">Player</button>
             </div>
@@ -249,6 +284,7 @@ export default function App() {
               <button onClick={() => scrollToSection('ai-augmentation')} className="block w-full text-left py-2 text-cyan-400 hover:text-lime-400">AI Powers</button>
               <button onClick={() => scrollToSection('use-cases')} className="block w-full text-left py-2 text-cyan-400 hover:text-lime-400">Missions</button>
               <button onClick={() => scrollToSection('governance')} className="block w-full text-left py-2 text-cyan-400 hover:text-lime-400">Governance</button>
+              <button onClick={() => scrollToSection('ui-components')} className="block w-full text-left py-2 text-cyan-400 hover:text-lime-400">Components</button>
               <button onClick={() => scrollToSection('deliverables')} className="block w-full text-left py-2 text-cyan-400 hover:text-lime-400">Deliverables</button>
               <button onClick={() => scrollToSection('team')} className="block w-full text-left py-2 text-cyan-400 hover:text-lime-400">Player</button>
             </div>
@@ -649,6 +685,131 @@ export default function App() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* UI Component System - Built Component Inventory */}
+      <section id="ui-components" className="py-16 px-4 bg-gradient-to-b from-black via-slate-950 to-black relative">
+        <div className="absolute inset-0 grid-bg opacity-20"></div>
+        <div className="max-w-6xl mx-auto relative z-10">
+          <div className="text-center mb-4">
+            <div className="inline-block px-4 py-2 border-2 border-cyan-400 bg-cyan-400/10 text-cyan-400 retro-heading text-xs mb-4">
+              COMPONENT SYSTEM ONLINE
+            </div>
+          </div>
+          <h2 className="retro-heading text-3xl md:text-4xl mb-4 text-center bg-gradient-to-r from-cyan-400 to-lime-400 bg-clip-text text-transparent">
+            Built UI Components
+          </h2>
+          <p className="text-center text-purple-200 mb-10 max-w-3xl mx-auto leading-relaxed">
+            The public build now surfaces the reusable UI component layer included in the project: cards, buttons, tabs, accordions, badges, progress indicators, form controls, overlays, and navigation primitives.
+          </p>
+
+          <Tabs defaultValue="inventory" className="w-full">
+            <TabsList className="mx-auto mb-8 bg-black border-2 border-cyan-500 rounded-md p-1 h-auto flex-wrap">
+              <TabsTrigger value="inventory" className="rounded-sm data-[state=active]:bg-cyan-500 data-[state=active]:text-black text-cyan-300 px-4 py-2">Inventory</TabsTrigger>
+              <TabsTrigger value="patterns" className="rounded-sm data-[state=active]:bg-lime-500 data-[state=active]:text-black text-lime-300 px-4 py-2">Patterns</TabsTrigger>
+              <TabsTrigger value="readiness" className="rounded-sm data-[state=active]:bg-fuchsia-500 data-[state=active]:text-black text-fuchsia-300 px-4 py-2">Readiness</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="inventory">
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+                {componentGroups.map((group) => {
+                  const Icon = group.icon;
+                  return (
+                    <Card key={group.name} className="bg-black/90 border-2 border-cyan-500 rounded-md shadow-[0_0_18px_rgba(0,255,255,0.25)]">
+                      <CardHeader>
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="p-2 border-2 border-lime-400 bg-lime-400/10">
+                            <Icon className="w-5 h-5 text-lime-400" />
+                          </div>
+                          <Badge className="rounded-sm bg-cyan-500 text-black hover:bg-cyan-400">{group.count} built</Badge>
+                        </div>
+                        <CardTitle className="retro-heading text-sm text-cyan-300">{group.name}</CardTitle>
+                        <CardDescription className="text-purple-300">Reusable primitives available in `src/app/components/ui`.</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-wrap gap-2">
+                          {group.examples.map((example) => (
+                            <Badge key={example} variant="outline" className="rounded-sm border-purple-400 text-purple-200">
+                              {example}
+                            </Badge>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="patterns">
+              <div className="grid lg:grid-cols-[1fr_1.2fr] gap-6">
+                <Card className="bg-black/90 border-2 border-lime-500 rounded-md">
+                  <CardHeader>
+                    <CardTitle className="retro-heading text-lime-400">Interactive Pattern Library</CardTitle>
+                    <CardDescription className="text-purple-300">Sample combinations used by the research website.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-wrap gap-3">
+                      <Button className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Primary action</Button>
+                      <Button variant="outline" className="rounded-sm border-cyan-400 text-cyan-300 bg-black hover:bg-cyan-400 hover:text-black">Secondary action</Button>
+                      <Button variant="ghost" className="rounded-sm text-fuchsia-300 hover:bg-fuchsia-400/20 hover:text-fuchsia-100">Quiet action</Button>
+                    </div>
+                    <Separator className="bg-cyan-500/40" />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-cyan-300">Lifecycle UI coverage</span>
+                        <span className="text-lime-400 retro-heading text-xs">82%</span>
+                      </div>
+                      <Progress value={82} className="h-3 bg-cyan-950 [&>div]:bg-lime-400" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-black/90 border-2 border-fuchsia-500 rounded-md">
+                  <CardHeader>
+                    <CardTitle className="retro-heading text-fuchsia-400">Component Usage Notes</CardTitle>
+                    <CardDescription className="text-purple-300">How the current UI kit supports the public framework page.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Accordion type="single" collapsible className="text-purple-200">
+                      <AccordionItem value="layout" className="border-cyan-500/40">
+                        <AccordionTrigger className="text-cyan-300 hover:text-cyan-100">Layout surfaces</AccordionTrigger>
+                        <AccordionContent className="text-purple-200">Cards, tabs, separators, and panels provide the structure for framework stages, deliverables, and review checkpoints.</AccordionContent>
+                      </AccordionItem>
+                      <AccordionItem value="workflow" className="border-cyan-500/40">
+                        <AccordionTrigger className="text-cyan-300 hover:text-cyan-100">Workflow controls</AccordionTrigger>
+                        <AccordionContent className="text-purple-200">Buttons, badges, progress, accordions, and tabs support exploration, state signaling, and compact disclosure.</AccordionContent>
+                      </AccordionItem>
+                      <AccordionItem value="future" className="border-cyan-500/40">
+                        <AccordionTrigger className="text-cyan-300 hover:text-cyan-100">Future expansion</AccordionTrigger>
+                        <AccordionContent className="text-purple-200">Dialog, sheet, form, table, chart, command, and calendar components are ready for later research artifacts and project workflows.</AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="readiness">
+              <Card className="bg-black/90 border-2 border-purple-500 rounded-md">
+                <CardHeader>
+                  <CardTitle className="retro-heading text-purple-300">Public Link Readiness</CardTitle>
+                  <CardDescription className="text-purple-300">What is included in the deployed artifact.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid md:grid-cols-3 gap-4">
+                    {["Framework page", "Component showcase", "CI/CD publishing"].map((item) => (
+                      <div key={item} className="flex items-center gap-3 border-2 border-lime-500/70 bg-lime-400/10 p-4">
+                        <Check className="w-5 h-5 text-lime-400 flex-shrink-0" />
+                        <span className="text-purple-100">{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </section>
 
