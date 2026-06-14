@@ -32,17 +32,28 @@ type Workspace = {
 
 type StrategicObjective = {
   id: string;
-  title: string;
-  objectiveStatement: string;
-  companyGoal: string;
-  strategicValueType: string;
-  targetOutcome: string;
-  targetMetric: string;
+  strategicInitiativeName: string;
+  executiveObjective: string;
+  strategicValueCategory: string;
+  expectedBusinessOutcome: string;
+  financialImpact: string;
+  urgencyRationale: string;
   targetImplementationYear: string;
-  currentStateSummary: string;
-  desiredFutureState: string;
-  businessProblem: string;
-  strategicRationale: string;
+  targetImplementationStartDate: string;
+  targetImplementationEndDate: string;
+  problemOpportunityStatement: string;
+  costOfInaction: string;
+  currentLimitation: string;
+  impactedTeams: string;
+  problemType: string;
+  valueHypothesis: string;
+  valueMeasurementApproach: string;
+  expectedValueType: string;
+  successMetric: string;
+  currentBaseline: string;
+  targetFutureState: string;
+  valueRealizationTimeframe: string;
+  strategicValueHypothesisSummary: string;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -55,38 +66,61 @@ const objectivesStorageKey = 'slaf.prototype.strategicObjectives';
 
 const strategicValueTypes = [
   'Revenue Growth',
-  'Cost Savings',
+  'Cost Reduction',
   'Customer Experience',
   'Operational Efficiency',
   'Risk Reduction',
   'Scalability',
-  'Process Optimization',
+  'Competitive Advantage',
 ];
 
+const strategicValueCategoryDescriptions: Record<string, string> = {
+  'Revenue Growth': 'Increase customer conversion or purchase frequency',
+  'Cost Reduction': 'Reduce operating cost or duplicated work',
+  'Operational Efficiency': 'Improve speed, throughput, or productivity',
+  'Customer Experience': 'Improve convenience, reliability, or satisfaction',
+  'Risk Reduction': 'Reduce compliance, security, or operational risk',
+  Scalability: 'Support growth without proportional cost increase',
+  'Competitive Advantage': 'Differentiate through speed, intelligence, or service quality',
+};
+
 const objectiveStatuses = ['Draft', 'Active', 'Archived'];
+const problemTypes = ['Customer Problem', 'Internal Business Problem', 'Both Customer and Internal Business Problem'];
+const expectedValueTypes = ['Financial', 'Operational', 'Customer-Focused', 'Risk-Focused', 'Technical', 'Mixed'];
 
 const processFlow = [
   'Strategic Objectives',
   'Lean Business Cases',
   'Initiatives',
-  'Value Streams',
-  'Capabilities',
+  'Business Architecture Component',
   'Product Discovery',
   'Conceptual Architecture',
+  'Requirements / Features / Epics',
 ];
 
 const defaultObjectiveForm: Omit<StrategicObjective, 'id' | 'createdAt' | 'updatedAt'> = {
-  title: '',
-  objectiveStatement: '',
-  companyGoal: '',
-  strategicValueType: 'Revenue Growth',
-  targetOutcome: '',
-  targetMetric: '',
+  strategicInitiativeName: '',
+  executiveObjective: '',
+  strategicValueCategory: '',
+  expectedBusinessOutcome: '',
+  financialImpact: '',
+  urgencyRationale: '',
   targetImplementationYear: '',
-  currentStateSummary: '',
-  desiredFutureState: '',
-  businessProblem: '',
-  strategicRationale: '',
+  targetImplementationStartDate: '',
+  targetImplementationEndDate: '',
+  problemOpportunityStatement: '',
+  costOfInaction: '',
+  currentLimitation: '',
+  impactedTeams: '',
+  problemType: '',
+  valueHypothesis: '',
+  valueMeasurementApproach: '',
+  expectedValueType: '',
+  successMetric: '',
+  currentBaseline: '',
+  targetFutureState: '',
+  valueRealizationTimeframe: '',
+  strategicValueHypothesisSummary: '',
   status: 'Draft',
 };
 
@@ -108,20 +142,32 @@ const createId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().to
 const normalizeObjective = (objective: StoredStrategicObjective): StrategicObjective => {
   const legacyYearKey = 'time' + 'Horizon';
   const targetImplementationYear = objective.targetImplementationYear || objective[legacyYearKey] || '';
+  const expectedBusinessOutcome = objective.expectedBusinessOutcome || objective.companyGoal || objective.targetOutcome || '';
 
   return {
     id: objective.id || createId('objective'),
-    title: objective.title || '',
-    objectiveStatement: objective.objectiveStatement || '',
-    companyGoal: objective.companyGoal || '',
-    strategicValueType: objective.strategicValueType || 'Revenue Growth',
-    targetOutcome: objective.targetOutcome || '',
-    targetMetric: objective.targetMetric || '',
+    strategicInitiativeName: objective.strategicInitiativeName || objective.title || '',
+    executiveObjective: objective.executiveObjective || objective.objectiveStatement || '',
+    strategicValueCategory: objective.strategicValueCategory || objective.strategicValueType || '',
+    expectedBusinessOutcome,
+    financialImpact: objective.financialImpact || '',
+    urgencyRationale: objective.urgencyRationale || objective.strategicRationale || '',
     targetImplementationYear,
-    currentStateSummary: objective.currentStateSummary || '',
-    desiredFutureState: objective.desiredFutureState || '',
-    businessProblem: objective.businessProblem || '',
-    strategicRationale: objective.strategicRationale || '',
+    targetImplementationStartDate: objective.targetImplementationStartDate || '',
+    targetImplementationEndDate: objective.targetImplementationEndDate || '',
+    problemOpportunityStatement: objective.problemOpportunityStatement || objective.businessProblem || '',
+    costOfInaction: objective.costOfInaction || '',
+    currentLimitation: objective.currentLimitation || '',
+    impactedTeams: objective.impactedTeams || '',
+    problemType: objective.problemType || '',
+    valueHypothesis: objective.valueHypothesis || '',
+    valueMeasurementApproach: objective.valueMeasurementApproach || '',
+    expectedValueType: objective.expectedValueType || '',
+    successMetric: objective.successMetric || objective.targetMetric || '',
+    currentBaseline: objective.currentBaseline || objective.currentStateSummary || '',
+    targetFutureState: objective.targetFutureState || objective.desiredFutureState || '',
+    valueRealizationTimeframe: objective.valueRealizationTimeframe || '',
+    strategicValueHypothesisSummary: objective.strategicValueHypothesisSummary || '',
     status: objective.status || 'Draft',
     createdAt: objective.createdAt || new Date().toISOString(),
     updatedAt: objective.updatedAt || new Date().toISOString(),
@@ -142,7 +188,10 @@ const loadObjectives = (): StrategicObjective[] => {
     const rawObjectives = localStorage.getItem(objectivesStorageKey);
     if (!rawObjectives) return [];
     const parsed = JSON.parse(rawObjectives) as StoredStrategicObjective[];
-    return Array.isArray(parsed) ? parsed.map(normalizeObjective).slice(0, 3) : [];
+    if (!Array.isArray(parsed)) return [];
+    const migratedObjectives = parsed.map(normalizeObjective).slice(0, 3);
+    localStorage.setItem(objectivesStorageKey, JSON.stringify(migratedObjectives));
+    return migratedObjectives;
   } catch {
     return [];
   }
@@ -187,10 +236,11 @@ function PrototypeShell({ workspace, children }: { workspace: Workspace | null; 
   );
 }
 
-function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+function Field({ id, label, helper, children }: { id: string; label: string; helper?: string; children: ReactNode }) {
   return (
     <div className="space-y-2">
       <Label htmlFor={id} className="text-slate-200">{label}</Label>
+      {helper && <p className="text-xs leading-relaxed text-slate-400">{helper}</p>}
       {children}
     </div>
   );
@@ -482,7 +532,7 @@ function ObjectiveSlot({ slotIndex, objective }: { slotIndex: number; objective?
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle className="retro-heading text-cyan-300">{objective.title}</CardTitle>
+            <CardTitle className="retro-heading text-cyan-300">{objective.strategicInitiativeName}</CardTitle>
             <CardDescription className="mt-1 text-slate-300">Strategic Objective {slotIndex + 1}</CardDescription>
           </div>
           <Badge className="rounded-sm bg-slate-800 text-slate-200 hover:bg-slate-800">{objective.status}</Badge>
@@ -491,20 +541,24 @@ function ObjectiveSlot({ slotIndex, objective }: { slotIndex: number; objective?
       <CardContent className="space-y-4 text-sm">
         <dl className="grid gap-3 text-slate-300">
           <div>
-            <dt className="text-xs uppercase text-slate-500">Strategic Value Type</dt>
-            <dd className="text-slate-100">{objective.strategicValueType || 'Not set'}</dd>
+            <dt className="text-xs uppercase text-slate-500">Executive Objective</dt>
+            <dd className="text-slate-100">{objective.executiveObjective || 'Not set'}</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase text-slate-500">Target Outcome</dt>
-            <dd className="text-slate-100">{objective.targetOutcome || 'Not set'}</dd>
+            <dt className="text-xs uppercase text-slate-500">Strategic Value Category</dt>
+            <dd className="text-slate-100">{objective.strategicValueCategory || 'Not set'}</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase text-slate-500">Target Metric</dt>
-            <dd className="text-slate-100">{objective.targetMetric || 'Not set'}</dd>
+            <dt className="text-xs uppercase text-slate-500">Expected Business Outcome</dt>
+            <dd className="text-slate-100">{objective.expectedBusinessOutcome || 'Not set'}</dd>
           </div>
           <div>
             <dt className="text-xs uppercase text-slate-500">Target Implementation Year</dt>
             <dd className="text-slate-100">{objective.targetImplementationYear || 'Not set'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-slate-500">Linked Lean Business Cases</dt>
+            <dd className="text-slate-100">0</dd>
           </div>
         </dl>
         <div className="grid gap-2">
@@ -513,7 +567,7 @@ function ObjectiveSlot({ slotIndex, objective }: { slotIndex: number; objective?
             Edit
           </Button>
           <Button onClick={() => navigateTo('/lean-business-case-placeholder', { objectiveId: objective.id })} className="rounded-sm bg-fuchsia-500 text-white hover:bg-fuchsia-400">
-            Next: Build Lean Business Case
+            Build Lean Business Case
           </Button>
         </div>
       </CardContent>
@@ -534,8 +588,23 @@ function StrategicObjectiveFormScreen({
   const existingObjective = objectives.find((objective) => objective.id === editId);
   const [form, setForm] = useState({ ...defaultObjectiveForm, ...existingObjective });
   const [error, setError] = useState('');
+  const [activeStep, setActiveStep] = useState(0);
   const isEditing = Boolean(existingObjective);
   const hasReachedLimit = objectives.length >= 3 && !isEditing;
+  const activeRequiredFields = [
+    ['strategicInitiativeName', 'Strategic Initiative Name'],
+    ['executiveObjective', 'Executive Objective'],
+    ['strategicValueCategory', 'Strategic Value Category'],
+    ['problemOpportunityStatement', 'Problem or Opportunity Statement'],
+    ['valueHypothesis', 'Value Hypothesis'],
+    ['status', 'Status'],
+  ] as const;
+  const missingActiveFields = activeRequiredFields
+    .filter(([field]) => !String(form[field] || '').trim())
+    .map(([, label]) => label);
+  const draftWarnings = form.status === 'Draft' && missingActiveFields.length > 0
+    ? `Draft can be saved now. Complete these fields before marking Active: ${missingActiveFields.join(', ')}.`
+    : '';
 
   const updateField = (field: keyof typeof defaultObjectiveForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -545,13 +614,20 @@ function StrategicObjectiveFormScreen({
     event.preventDefault();
     setError('');
 
-    if (!form.title.trim() || !form.objectiveStatement.trim()) {
-      setError('Strategic Objective Title and Objective Statement are required.');
+    if (!form.strategicInitiativeName.trim()) {
+      setError('Strategic Initiative Name is required before saving a draft.');
+      setActiveStep(0);
       return;
     }
 
     if (form.targetImplementationYear && !/^\d{4}$/.test(form.targetImplementationYear)) {
       setError('Target Implementation Year must be a four-digit year, such as 2026.');
+      setActiveStep(0);
+      return;
+    }
+
+    if (form.status === 'Active' && missingActiveFields.length > 0) {
+      setError(`Complete these fields before marking the objective Active: ${missingActiveFields.join(', ')}.`);
       return;
     }
 
@@ -564,8 +640,7 @@ function StrategicObjectiveFormScreen({
     const savedObjective: StrategicObjective = {
       ...form,
       id: existingObjective?.id || createId('objective'),
-      title: form.title.trim(),
-      objectiveStatement: form.objectiveStatement.trim(),
+      strategicInitiativeName: form.strategicInitiativeName.trim(),
       createdAt: existingObjective?.createdAt || now,
       updatedAt: now,
     };
@@ -586,7 +661,7 @@ function StrategicObjectiveFormScreen({
           <div>
             <Badge className="rounded-sm bg-cyan-500 text-black hover:bg-cyan-400">Step 1</Badge>
             <h1 className="retro-heading mt-4 text-3xl text-cyan-300">{isEditing ? 'Edit Strategic Objective' : 'Create Strategic Objective'}</h1>
-            <p className="mt-3 max-w-3xl text-slate-300">Define the strategic intent that will later anchor Lean Business Cases, initiatives, value streams, product discovery, and conceptual architecture.</p>
+            <p className="mt-3 max-w-3xl text-slate-300">Complete a guided strategic objective intake before building a Lean Business Case.</p>
           </div>
           <Button variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm border-slate-600 text-slate-200 hover:bg-slate-800">Back to Dashboard</Button>
         </div>
@@ -599,79 +674,193 @@ function StrategicObjectiveFormScreen({
         {error && (
           <div className="rounded-md border border-red-400/60 bg-red-500/10 p-4 text-sm text-red-100">{error}</div>
         )}
+        {draftWarnings && !error && (
+          <div className="rounded-md border border-yellow-400/50 bg-yellow-400/10 p-4 text-sm text-yellow-100">{draftWarnings}</div>
+        )}
 
         <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
           <CardContent className="pt-6">
             <form className="grid gap-5" onSubmit={submitObjective}>
-              <div className="grid gap-5 md:grid-cols-2">
-                <Field id="objective-title" label="Strategic Objective Title">
-                  <Input id="objective-title" value={form.title} onChange={(event) => updateField('title', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-                <Field id="company-goal" label="Company Goal">
-                  <Input id="company-goal" value={form.companyGoal} onChange={(event) => updateField('companyGoal', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
+              <div className="grid gap-3 md:grid-cols-3">
+                {['Define Strategic Objectives', 'Define Business Problem or Opportunity', 'Define Strategic Value Hypothesis'].map((step, index) => (
+                  <button
+                    key={step}
+                    type="button"
+                    onClick={() => setActiveStep(index)}
+                    className={`rounded-md border p-4 text-left transition ${activeStep === index ? 'border-lime-400 bg-lime-400/15 text-lime-100' : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-cyan-500'}`}
+                  >
+                    <div className="retro-heading mb-2 text-xs">Step {index + 1}</div>
+                    <div className="text-sm font-medium">{step}</div>
+                  </button>
+                ))}
               </div>
 
-              <Field id="objective-statement" label="Objective Statement">
-                <Textarea id="objective-statement" value={form.objectiveStatement} onChange={(event) => updateField('objectiveStatement', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
-              </Field>
+              {activeStep === 0 && (
+                <section className="grid gap-5">
+                  <div>
+                    <h2 className="retro-heading text-xl text-cyan-300">Step One: Define Strategic Objectives</h2>
+                    <p className="mt-2 text-sm text-slate-300">This section captures leadership intent and defines the strategic initiative identity.</p>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="strategic-initiative-name" label="Strategic Initiative Name" helper="What is the name of the strategic initiative?">
+                      <Input id="strategic-initiative-name" value={form.strategicInitiativeName} onChange={(event) => updateField('strategicInitiativeName', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="executive-objective" label="Executive Objective" helper="What executive objective is driving this initiative?">
+                      <Input id="executive-objective" value={form.executiveObjective} onChange={(event) => updateField('executiveObjective', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="strategic-value-category" label="Strategic Value Category" helper="Which strategic value category does this initiative support?">
+                      <Select value={form.strategicValueCategory} onValueChange={(value) => updateField('strategicValueCategory', value)}>
+                        <SelectTrigger id="strategic-value-category" className="border-slate-700 bg-slate-950 text-slate-100">
+                          <SelectValue placeholder="Select a value category" />
+                        </SelectTrigger>
+                        <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                          {strategicValueTypes.map((valueType) => <SelectItem key={valueType} value={valueType}>{valueType}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      {form.strategicValueCategory && (
+                        <p className="rounded-md border border-cyan-500/30 bg-cyan-400/10 p-3 text-xs text-cyan-100">
+                          {strategicValueCategoryDescriptions[form.strategicValueCategory]}
+                        </p>
+                      )}
+                    </Field>
+                    <Field id="expected-business-outcome" label="Expected Business Outcome" helper="What business outcome is leadership expecting?">
+                      <Input id="expected-business-outcome" value={form.expectedBusinessOutcome} onChange={(event) => updateField('expectedBusinessOutcome', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="financial-impact" label="Financial Impact" helper="What financial impact is expected or targeted?">
+                      <Textarea id="financial-impact" value={form.financialImpact} onChange={(event) => updateField('financialImpact', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="urgency-rationale" label="Urgency / Timing Rationale" helper="Why is this initiative important now?">
+                      <Textarea id="urgency-rationale" value={form.urgencyRationale} onChange={(event) => updateField('urgencyRationale', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-3">
+                    <Field id="target-implementation-year" label="Target Implementation Year">
+                      <Input id="target-implementation-year" inputMode="numeric" value={form.targetImplementationYear} onChange={(event) => updateField('targetImplementationYear', event.target.value)} placeholder="Example: 2026" className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="target-implementation-start-date" label="Target Implementation Start Date">
+                      <Input id="target-implementation-start-date" type="date" value={form.targetImplementationStartDate} onChange={(event) => updateField('targetImplementationStartDate', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="target-implementation-end-date" label="Target Implementation End Date">
+                      <Input id="target-implementation-end-date" type="date" value={form.targetImplementationEndDate} onChange={(event) => updateField('targetImplementationEndDate', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                  </div>
+                </section>
+              )}
 
-              <div className="grid gap-5 md:grid-cols-3">
-                <Field id="strategic-value-type" label="Strategic Value Type">
-                  <Select value={form.strategicValueType} onValueChange={(value) => updateField('strategicValueType', value)}>
-                    <SelectTrigger id="strategic-value-type" className="border-slate-700 bg-slate-950 text-slate-100">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
-                      {strategicValueTypes.map((valueType) => <SelectItem key={valueType} value={valueType}>{valueType}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field id="target-implementation-year" label="Target Implementation Year">
-                  <Input id="target-implementation-year" inputMode="numeric" value={form.targetImplementationYear} onChange={(event) => updateField('targetImplementationYear', event.target.value)} placeholder="Example: 2026" className="border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-                <Field id="status" label="Status">
-                  <Select value={form.status} onValueChange={(value) => updateField('status', value)}>
-                    <SelectTrigger id="status" className="border-slate-700 bg-slate-950 text-slate-100">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
-                      {objectiveStatuses.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
+              {activeStep === 1 && (
+                <section className="grid gap-5">
+                  <div>
+                    <h2 className="retro-heading text-xl text-cyan-300">Step Two: Define Business Problem or Opportunity</h2>
+                    <p className="mt-2 text-sm text-slate-300">This section captures the business need, current-state limitation, stakeholder impact, and value-stream direction.</p>
+                  </div>
+                  <div className="rounded-md border border-cyan-500/40 bg-cyan-400/10 p-4 text-sm text-cyan-100">
+                    This step supports traceability between executive intent, current-state limitations, impacted stakeholders, and downstream business architecture.
+                  </div>
+                  <Field id="problem-opportunity-statement" label="Problem or Opportunity Statement" helper="What problem or opportunity is this initiative trying to address?">
+                    <Textarea id="problem-opportunity-statement" value={form.problemOpportunityStatement} onChange={(event) => updateField('problemOpportunityStatement', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                  </Field>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="cost-of-inaction" label="Cost of Inaction" helper="What happens if the organization does nothing?">
+                      <Textarea id="cost-of-inaction" value={form.costOfInaction} onChange={(event) => updateField('costOfInaction', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="current-limitation" label="Current Process, System, or Operating Model Limitation" helper="What current process, system, or operating model is limiting the business?">
+                      <Textarea id="current-limitation" value={form.currentLimitation} onChange={(event) => updateField('currentLimitation', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="impacted-teams" label="Impacted Departments / Business Units / Teams" helper="Which departments, business units, or teams are impacted?">
+                      <Textarea id="impacted-teams" value={form.impactedTeams} onChange={(event) => updateField('impactedTeams', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="problem-type" label="Problem Type" helper="Is this initiative solving a customer problem, an internal business problem, or both?">
+                      <Select value={form.problemType} onValueChange={(value) => updateField('problemType', value)}>
+                        <SelectTrigger id="problem-type" className="border-slate-700 bg-slate-950 text-slate-100">
+                          <SelectValue placeholder="Select problem type" />
+                        </SelectTrigger>
+                        <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                          {problemTypes.map((problemType) => <SelectItem key={problemType} value={problemType}>{problemType}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+                </section>
+              )}
 
-              <div className="grid gap-5 md:grid-cols-2">
-                <Field id="target-outcome" label="Target Outcome">
-                  <Input id="target-outcome" value={form.targetOutcome} onChange={(event) => updateField('targetOutcome', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-                <Field id="target-metric" label="Target Metric">
-                  <Input id="target-metric" value={form.targetMetric} onChange={(event) => updateField('targetMetric', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-              </div>
+              {activeStep === 2 && (
+                <section className="grid gap-5">
+                  <div>
+                    <h2 className="retro-heading text-xl text-cyan-300">Step Three: Define Strategic Value Hypothesis</h2>
+                    <p className="mt-2 text-sm text-slate-300">This section defines the expected value, measurement approach, baseline, target state, and value realization timing.</p>
+                  </div>
+                  <Field id="value-hypothesis" label="Value Hypothesis" helper="What value will this initiative create?">
+                    <Textarea id="value-hypothesis" value={form.valueHypothesis} onChange={(event) => updateField('valueHypothesis', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                  </Field>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="value-measurement-approach" label="Value Measurement Approach" helper="How will the value be measured?">
+                      <Textarea id="value-measurement-approach" value={form.valueMeasurementApproach} onChange={(event) => updateField('valueMeasurementApproach', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="expected-value-type" label="Expected Value Type" helper="Is the expected value financial, operational, customer-focused, risk-focused, or technical?">
+                      <Select value={form.expectedValueType} onValueChange={(value) => updateField('expectedValueType', value)}>
+                        <SelectTrigger id="expected-value-type" className="border-slate-700 bg-slate-950 text-slate-100">
+                          <SelectValue placeholder="Select expected value type" />
+                        </SelectTrigger>
+                        <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                          {expectedValueTypes.map((valueType) => <SelectItem key={valueType} value={valueType}>{valueType}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-3">
+                    <Field id="success-metric" label="Success Metric" helper="What metric should improve if this initiative succeeds?">
+                      <Input id="success-metric" value={form.successMetric} onChange={(event) => updateField('successMetric', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="current-baseline" label="Current Baseline" helper="What baseline exists today?">
+                      <Input id="current-baseline" value={form.currentBaseline} onChange={(event) => updateField('currentBaseline', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="target-future-state" label="Target Future State" helper="What target should the organization reach?">
+                      <Input id="target-future-state" value={form.targetFutureState} onChange={(event) => updateField('targetFutureState', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="value-realization-timeframe" label="Value Realization Timeframe" helper="What timeframe is expected for value realization?">
+                      <Input id="value-realization-timeframe" value={form.valueRealizationTimeframe} onChange={(event) => updateField('valueRealizationTimeframe', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="status" label="Status">
+                      <Select value={form.status} onValueChange={(value) => updateField('status', value)}>
+                        <SelectTrigger id="status" className="border-slate-700 bg-slate-950 text-slate-100">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                          {objectiveStatuses.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+                  <Field id="strategic-value-hypothesis-summary" label="Strategic Value Hypothesis Summary" helper="Summarize the expected value in one short paragraph.">
+                    <Textarea
+                      id="strategic-value-hypothesis-summary"
+                      value={form.strategicValueHypothesisSummary}
+                      onChange={(event) => updateField('strategicValueHypothesisSummary', event.target.value)}
+                      placeholder="This initiative is expected to reduce fulfillment cost by improving inventory visibility, automating order routing, and reducing manual exception handling. Success will be measured through lower unit cost, faster order cycle time, and fewer fulfillment delays."
+                      className="min-h-28 border-slate-700 bg-slate-950 text-slate-100"
+                    />
+                  </Field>
+                </section>
+              )}
 
-              <div className="grid gap-5 md:grid-cols-2">
-                <Field id="current-state-summary" label="Current State Summary">
-                  <Textarea id="current-state-summary" value={form.currentStateSummary} onChange={(event) => updateField('currentStateSummary', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-                <Field id="desired-future-state" label="Desired Future State">
-                  <Textarea id="desired-future-state" value={form.desiredFutureState} onChange={(event) => updateField('desiredFutureState', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-              </div>
-
-              <div className="grid gap-5 md:grid-cols-2">
-                <Field id="business-problem" label="Business Problem">
-                  <Textarea id="business-problem" value={form.businessProblem} onChange={(event) => updateField('businessProblem', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-                <Field id="strategic-rationale" label="Strategic Rationale">
-                  <Textarea id="strategic-rationale" value={form.strategicRationale} onChange={(event) => updateField('strategicRationale', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-              </div>
-
-              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <div className="flex flex-col-reverse gap-3 border-t border-slate-700 pt-5 sm:flex-row sm:justify-between">
                 <Button type="button" variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm border-slate-600 text-slate-200 hover:bg-slate-800">Cancel</Button>
-                <Button type="submit" disabled={hasReachedLimit} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Save Objective</Button>
+                <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                  <Button type="button" variant="outline" disabled={activeStep === 0} onClick={() => setActiveStep((step) => Math.max(step - 1, 0))} className="rounded-sm border-slate-600 text-slate-200 hover:bg-slate-800 disabled:opacity-50">Back</Button>
+                  {activeStep < 2 ? (
+                    <Button type="button" onClick={() => setActiveStep((step) => Math.min(step + 1, 2))} className="rounded-sm bg-cyan-500 text-black hover:bg-cyan-400">Next</Button>
+                  ) : (
+                    <Button type="submit" disabled={hasReachedLimit} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Save Objective</Button>
+                  )}
+                </div>
               </div>
             </form>
           </CardContent>
@@ -699,7 +888,7 @@ function LeanBusinessCasePlaceholderScreen({
             <Badge className="w-fit rounded-sm bg-fuchsia-500 text-white hover:bg-fuchsia-400">Coming next</Badge>
             <CardTitle className="retro-heading pt-3 text-3xl text-fuchsia-300">Lean Business Case Placeholder</CardTitle>
             <CardDescription className="text-slate-300">
-              {selectedObjective ? `Selected strategic objective: ${selectedObjective.title}` : 'Select a strategic objective from the dashboard to continue later.'}
+              {selectedObjective ? `Selected strategic objective: ${selectedObjective.strategicInitiativeName}` : 'Select a strategic objective from the dashboard to continue later.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
