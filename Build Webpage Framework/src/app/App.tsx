@@ -1,16 +1,744 @@
-import { useState } from 'react';
-import { ChevronRight, FileText, Github, Menu, X, Check, AlertCircle, Lightbulb, Users, Target, TrendingUp, Database, GitBranch, Shield, BookOpen, FileCode, Activity, Layers, Gauge, PanelTop, ListChecks } from 'lucide-react';
+import { FormEvent, ReactNode, useEffect, useState } from 'react';
+import { ArrowLeft, ChevronRight, FileText, Github, LayoutDashboard, LogIn, Menu, Pencil, Plus, X, Check, AlertCircle, Lightbulb, Users, Target, TrendingUp, Database, GitBranch, Shield, BookOpen, FileCode, Activity, Layers, Gauge, PanelTop, ListChecks } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './components/ui/accordion';
 import { Badge } from './components/ui/badge';
 import { Button } from './components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
+import { Input } from './components/ui/input';
+import { Label } from './components/ui/label';
 import { Progress } from './components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
 import { Separator } from './components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
+import { Textarea } from './components/ui/textarea';
+
+type PrototypeRoute =
+  | '/'
+  | '/login'
+  | '/signup'
+  | '/workspace-onboarding'
+  | '/dashboard'
+  | '/strategic-objectives'
+  | '/lean-business-case-placeholder';
+
+type Workspace = {
+  id: string;
+  name: string;
+  description: string;
+  businessUnit: string;
+  industry: string;
+  createdAt: string;
+};
+
+type StrategicObjective = {
+  id: string;
+  title: string;
+  objectiveStatement: string;
+  companyGoal: string;
+  strategicValueType: string;
+  targetOutcome: string;
+  targetMetric: string;
+  targetImplementationYear: string;
+  currentStateSummary: string;
+  desiredFutureState: string;
+  businessProblem: string;
+  strategicRationale: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type StoredStrategicObjective = StrategicObjective & Record<string, string | undefined>;
+
+const workspaceStorageKey = 'slaf.prototype.workspace';
+const objectivesStorageKey = 'slaf.prototype.strategicObjectives';
+
+const strategicValueTypes = [
+  'Revenue Growth',
+  'Cost Savings',
+  'Customer Experience',
+  'Operational Efficiency',
+  'Risk Reduction',
+  'Scalability',
+  'Process Optimization',
+];
+
+const objectiveStatuses = ['Draft', 'Active', 'Archived'];
+
+const processFlow = [
+  'Strategic Objectives',
+  'Lean Business Cases',
+  'Initiatives',
+  'Value Streams',
+  'Capabilities',
+  'Product Discovery',
+  'Conceptual Architecture',
+];
+
+const defaultObjectiveForm: Omit<StrategicObjective, 'id' | 'createdAt' | 'updatedAt'> = {
+  title: '',
+  objectiveStatement: '',
+  companyGoal: '',
+  strategicValueType: 'Revenue Growth',
+  targetOutcome: '',
+  targetMetric: '',
+  targetImplementationYear: '',
+  currentStateSummary: '',
+  desiredFutureState: '',
+  businessProblem: '',
+  strategicRationale: '',
+  status: 'Draft',
+};
+
+const navigateTo = (route: PrototypeRoute, params?: Record<string, string>) => {
+  const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+  window.location.hash = `${route}${query}`;
+};
+
+const normalizeRoute = (hash: string): PrototypeRoute => {
+  const route = (hash.replace(/^#/, '').split('?')[0] || '/') as PrototypeRoute;
+  const knownRoutes: PrototypeRoute[] = ['/', '/login', '/signup', '/workspace-onboarding', '/dashboard', '/strategic-objectives', '/lean-business-case-placeholder'];
+  return knownRoutes.includes(route) ? route : '/';
+};
+
+const getRouteParams = () => new URLSearchParams(window.location.hash.replace(/^#[^?]*\??/, ''));
+
+const createId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+const normalizeObjective = (objective: StoredStrategicObjective): StrategicObjective => {
+  const legacyYearKey = 'time' + 'Horizon';
+  const targetImplementationYear = objective.targetImplementationYear || objective[legacyYearKey] || '';
+
+  return {
+    id: objective.id || createId('objective'),
+    title: objective.title || '',
+    objectiveStatement: objective.objectiveStatement || '',
+    companyGoal: objective.companyGoal || '',
+    strategicValueType: objective.strategicValueType || 'Revenue Growth',
+    targetOutcome: objective.targetOutcome || '',
+    targetMetric: objective.targetMetric || '',
+    targetImplementationYear,
+    currentStateSummary: objective.currentStateSummary || '',
+    desiredFutureState: objective.desiredFutureState || '',
+    businessProblem: objective.businessProblem || '',
+    strategicRationale: objective.strategicRationale || '',
+    status: objective.status || 'Draft',
+    createdAt: objective.createdAt || new Date().toISOString(),
+    updatedAt: objective.updatedAt || new Date().toISOString(),
+  };
+};
+
+const loadWorkspace = (): Workspace | null => {
+  try {
+    const rawWorkspace = localStorage.getItem(workspaceStorageKey);
+    return rawWorkspace ? JSON.parse(rawWorkspace) : null;
+  } catch {
+    return null;
+  }
+};
+
+const loadObjectives = (): StrategicObjective[] => {
+  try {
+    const rawObjectives = localStorage.getItem(objectivesStorageKey);
+    if (!rawObjectives) return [];
+    const parsed = JSON.parse(rawObjectives) as StoredStrategicObjective[];
+    return Array.isArray(parsed) ? parsed.map(normalizeObjective).slice(0, 3) : [];
+  } catch {
+    return [];
+  }
+};
+
+function PrototypeHeader({ workspace }: { workspace: Workspace | null }) {
+  return (
+    <header className="sticky top-0 z-50 border-b border-cyan-500/40 bg-slate-950/95 backdrop-blur">
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+        <div>
+          <div className="retro-heading text-sm text-cyan-300">Strategic Lifecycle Prototype</div>
+          <p className="text-sm text-slate-300">{workspace?.name || 'Workspace setup in progress'}</p>
+        </div>
+        <nav className="flex flex-wrap items-center gap-2 text-sm">
+          <Button variant="ghost" className="rounded-sm text-cyan-200 hover:bg-cyan-400/10 hover:text-cyan-100" onClick={() => navigateTo('/')}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Project Site
+          </Button>
+          {workspace && (
+            <>
+              <Button variant="ghost" className="rounded-sm text-slate-200 hover:bg-slate-800 hover:text-white" onClick={() => navigateTo('/dashboard')}>
+                <LayoutDashboard className="mr-2 h-4 w-4" />
+                Dashboard
+              </Button>
+              <Button variant="ghost" className="rounded-sm text-slate-200 hover:bg-slate-800 hover:text-white" onClick={() => navigateTo('/workspace-onboarding')}>
+                Workspace
+              </Button>
+            </>
+          )}
+        </nav>
+      </div>
+    </header>
+  );
+}
+
+function PrototypeShell({ workspace, children }: { workspace: Workspace | null; children: ReactNode }) {
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <PrototypeHeader workspace={workspace} />
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">{children}</main>
+    </div>
+  );
+}
+
+function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id} className="text-slate-200">{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function AuthScreen({ mode, workspace }: { mode: 'login' | 'signup'; workspace: Workspace | null }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showGooglePrompt, setShowGooglePrompt] = useState(false);
+
+  const continueAfterAuth = () => {
+    navigateTo(workspace ? '/dashboard' : '/workspace-onboarding');
+  };
+
+  const submitAuth = (event: FormEvent) => {
+    event.preventDefault();
+    continueAfterAuth();
+  };
+
+  if (showGooglePrompt) {
+    return (
+      <PrototypeShell workspace={workspace}>
+        <section className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[1fr_0.9fr] lg:items-center">
+          <div className="space-y-5">
+            <Badge className="rounded-sm bg-cyan-500 text-black hover:bg-cyan-400">Mock Google sign-in</Badge>
+            <h1 className="retro-heading text-3xl text-cyan-300 md:text-4xl">Continue to Sign In with Google</h1>
+            <p className="max-w-2xl text-lg leading-relaxed text-slate-300">
+              This prototype shows the expected Google account handoff before entering the workspace flow. No real Google OAuth connection is made yet.
+            </p>
+          </div>
+
+          <Card className="rounded-md border-cyan-500/60 bg-slate-900 text-slate-100 shadow-[0_0_30px_rgba(34,211,238,0.15)]">
+            <CardHeader>
+              <CardTitle className="text-xl text-slate-100">Sign in with Google</CardTitle>
+              <CardDescription className="text-slate-300">Choose how to continue into the Strategic Lifecycle Prototype.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <button
+                type="button"
+                onClick={continueAfterAuth}
+                className="flex w-full items-center gap-4 rounded-md border border-slate-700 bg-slate-950 p-4 text-left transition hover:border-cyan-400 hover:bg-cyan-400/10"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-lg font-semibold text-slate-900">G</div>
+                <div>
+                  <div className="font-medium text-slate-100">{email || 'prototype.user@example.com'}</div>
+                  <div className="text-sm text-slate-400">Continue with this Google account</div>
+                </div>
+              </button>
+              <Button onClick={continueAfterAuth} className="w-full rounded-sm bg-lime-500 text-black hover:bg-lime-400">
+                Continue to Prototype
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowGooglePrompt(false)} className="w-full rounded-sm border-slate-600 text-slate-200 hover:bg-slate-800">
+                Back to Sign In
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+      </PrototypeShell>
+    );
+  }
+
+  return (
+    <PrototypeShell workspace={workspace}>
+      <section className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[1fr_0.9fr] lg:items-center">
+        <div className="space-y-5">
+          <Badge className="rounded-sm bg-cyan-500 text-black hover:bg-cyan-400">Front-end prototype</Badge>
+          <h1 className="retro-heading text-3xl text-cyan-300 md:text-4xl">
+            {mode === 'login' ? 'Sign In / Login' : 'Create Prototype Account'}
+          </h1>
+          <p className="max-w-2xl text-lg leading-relaxed text-slate-300">
+            Sign in to begin mapping strategic objectives into Lean Business Cases, value streams, product discovery, and conceptual architecture.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {['Strategy to execution traceability', 'Mock workspace onboarding', 'Three strategic objective slots', 'Lean Business Case next step'].map((item) => (
+              <div key={item} className="flex items-center gap-3 border border-cyan-500/30 bg-slate-900 p-3 text-sm text-slate-200">
+                <Check className="h-4 w-4 flex-shrink-0 text-lime-400" />
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <Card className="rounded-md border-cyan-500/60 bg-slate-900 text-slate-100 shadow-[0_0_30px_rgba(34,211,238,0.15)]">
+          <CardHeader>
+            <CardTitle className="retro-heading text-cyan-300">{mode === 'login' ? 'Access Prototype' : 'Set Up Access'}</CardTitle>
+            <CardDescription className="text-slate-300">Mock authentication only. No account is created yet.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-4" onSubmit={submitAuth}>
+              <Field id="email" label="Email">
+                <Input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" className="border-slate-700 bg-slate-950 text-slate-100" />
+              </Field>
+              <Field id="password" label="Password">
+                <Input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Prototype password" className="border-slate-700 bg-slate-950 text-slate-100" />
+              </Field>
+              <Button type="submit" className="w-full rounded-sm bg-lime-500 text-black hover:bg-lime-400">
+                <LogIn className="mr-2 h-4 w-4" />
+                {mode === 'login' ? 'Sign In' : 'Create Account'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowGooglePrompt(true)} className="w-full rounded-sm border-cyan-500 bg-slate-950 text-cyan-200 hover:bg-cyan-500 hover:text-black">
+                Continue with Google
+              </Button>
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                <button type="button" className="text-cyan-300 hover:text-cyan-100" onClick={() => navigateTo(mode === 'login' ? '/signup' : '/login')}>
+                  {mode === 'login' ? 'Create Account / Sign Up' : 'Already have an account? Sign In'}
+                </button>
+                <button type="button" className="text-slate-400 hover:text-slate-200">Forgot password?</button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </section>
+    </PrototypeShell>
+  );
+}
+
+function WorkspaceOnboardingScreen({
+  workspace,
+  setWorkspace,
+}: {
+  workspace: Workspace | null;
+  setWorkspace: (workspace: Workspace) => void;
+}) {
+  const [form, setForm] = useState({
+    name: workspace?.name || '',
+    description: workspace?.description || '',
+    businessUnit: workspace?.businessUnit || '',
+    industry: workspace?.industry || '',
+  });
+
+  const updateField = (field: keyof typeof form, value: string) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const submitWorkspace = (event: FormEvent) => {
+    event.preventDefault();
+    const nextWorkspace: Workspace = {
+      id: workspace?.id || createId('workspace'),
+      name: form.name.trim() || 'Prototype Workspace',
+      description: form.description,
+      businessUnit: form.businessUnit,
+      industry: form.industry,
+      createdAt: workspace?.createdAt || new Date().toISOString(),
+    };
+    localStorage.setItem(workspaceStorageKey, JSON.stringify(nextWorkspace));
+    setWorkspace(nextWorkspace);
+    navigateTo('/dashboard');
+  };
+
+  return (
+    <PrototypeShell workspace={workspace}>
+      <section className="mx-auto max-w-4xl">
+        <div className="mb-8">
+          <Badge className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Default admin setup</Badge>
+          <h1 className="retro-heading mt-4 text-3xl text-cyan-300">Workspace Onboarding</h1>
+          <p className="mt-3 max-w-3xl text-slate-300">
+            Create a lightweight workspace for the front-end prototype. The first user who creates the workspace is treated as the default admin for now.
+          </p>
+        </div>
+        <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
+          <CardContent className="pt-6">
+            <form className="grid gap-5" onSubmit={submitWorkspace}>
+              <Field id="workspace-name" label="Workspace / Organization Name">
+                <Input id="workspace-name" value={form.name} onChange={(event) => updateField('name', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+              </Field>
+              <Field id="workspace-description" label="Workspace Description">
+                <Textarea id="workspace-description" value={form.description} onChange={(event) => updateField('description', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+              </Field>
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field id="business-unit" label="Company or Business Unit">
+                  <Input id="business-unit" value={form.businessUnit} onChange={(event) => updateField('businessUnit', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+                <Field id="industry" label="Primary Industry">
+                  <Input id="industry" value={form.industry} onChange={(event) => updateField('industry', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+              </div>
+              <div className="flex justify-end">
+                <Button type="submit" className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Create Workspace</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </section>
+    </PrototypeShell>
+  );
+}
+
+function DashboardScreen({
+  workspace,
+  objectives,
+}: {
+  workspace: Workspace | null;
+  objectives: StrategicObjective[];
+}) {
+  const hasReachedLimit = objectives.length >= 3;
+
+  return (
+    <PrototypeShell workspace={workspace}>
+      <section className="space-y-8">
+        <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
+          <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
+            <CardHeader>
+              <CardTitle className="retro-heading text-2xl text-cyan-300">Welcome to {workspace?.name || 'Prototype Workspace'}</CardTitle>
+              <CardDescription className="text-slate-300">Current prototype phase: Step 1: Define Strategic Objectives</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <p className="leading-relaxed text-slate-300">
+                Strategic objectives represent the company’s primary goals and provide the foundation for Lean Business Cases, initiatives, value streams, product discovery, and conceptual architecture.
+              </p>
+              <div className="rounded-md border border-lime-500/40 bg-lime-400/10 p-4 text-sm text-lime-100">
+                Prototype version: each workspace can define up to three strategic objectives that represent the company’s primary goals.
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-md border-fuchsia-500/50 bg-slate-900 text-slate-100">
+            <CardHeader>
+              <CardTitle className="retro-heading text-fuchsia-300">Workspace</CardTitle>
+              <CardDescription className="text-slate-300">{workspace?.businessUnit || 'Business unit not set'}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-slate-300">
+              <p>{workspace?.description || 'Use onboarding to add a workspace description.'}</p>
+              <p className="text-cyan-300">{workspace?.industry || 'Primary industry not set'}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
+          <CardHeader>
+            <CardTitle className="retro-heading text-cyan-300">Strategy to Implementation Flow</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-7">
+              {processFlow.map((step, index) => (
+                <div key={step} className={`rounded-md border p-3 text-center text-xs ${index === 0 ? 'border-lime-400 bg-lime-400/15 text-lime-100' : 'border-slate-700 bg-slate-950 text-slate-300'}`}>
+                  <div className="mb-1 font-semibold">{index + 1}</div>
+                  {step}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <section className="space-y-4">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <h2 className="retro-heading text-2xl text-cyan-300">Strategic Objectives</h2>
+              <p className="text-sm text-slate-300">{objectives.length} of 3 strategic objectives created.</p>
+            </div>
+            <Button disabled={hasReachedLimit} onClick={() => navigateTo('/strategic-objectives')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">
+              <Plus className="mr-2 h-4 w-4" />
+              Create Strategic Objective
+            </Button>
+          </div>
+          {hasReachedLimit && (
+            <div className="rounded-md border border-yellow-400/50 bg-yellow-400/10 p-4 text-sm text-yellow-100">
+              You have reached the prototype limit of three strategic objectives.
+            </div>
+          )}
+          <div className="grid gap-5 lg:grid-cols-3">
+            {[0, 1, 2].map((slotIndex) => (
+              <ObjectiveSlot key={slotIndex} slotIndex={slotIndex} objective={objectives[slotIndex]} />
+            ))}
+          </div>
+        </section>
+      </section>
+    </PrototypeShell>
+  );
+}
+
+function ObjectiveSlot({ slotIndex, objective }: { slotIndex: number; objective?: StrategicObjective }) {
+  if (!objective) {
+    return (
+      <Card className="rounded-md border-dashed border-slate-600 bg-slate-900/70 text-slate-100">
+        <CardHeader>
+          <CardTitle className="retro-heading text-slate-300">Strategic Objective {slotIndex + 1}</CardTitle>
+          <CardDescription className="text-slate-400">No strategic objective created yet</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" onClick={() => navigateTo('/strategic-objectives')} className="w-full rounded-sm border-cyan-500 text-cyan-200 hover:bg-cyan-500 hover:text-black">
+            Create Objective
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="retro-heading text-cyan-300">{objective.title}</CardTitle>
+            <CardDescription className="mt-1 text-slate-300">Strategic Objective {slotIndex + 1}</CardDescription>
+          </div>
+          <Badge className="rounded-sm bg-slate-800 text-slate-200 hover:bg-slate-800">{objective.status}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        <dl className="grid gap-3 text-slate-300">
+          <div>
+            <dt className="text-xs uppercase text-slate-500">Strategic Value Type</dt>
+            <dd className="text-slate-100">{objective.strategicValueType || 'Not set'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-slate-500">Target Outcome</dt>
+            <dd className="text-slate-100">{objective.targetOutcome || 'Not set'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-slate-500">Target Metric</dt>
+            <dd className="text-slate-100">{objective.targetMetric || 'Not set'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-slate-500">Target Implementation Year</dt>
+            <dd className="text-slate-100">{objective.targetImplementationYear || 'Not set'}</dd>
+          </div>
+        </dl>
+        <div className="grid gap-2">
+          <Button variant="outline" onClick={() => navigateTo('/strategic-objectives', { id: objective.id })} className="rounded-sm border-cyan-500 text-cyan-200 hover:bg-cyan-500 hover:text-black">
+            <Pencil className="mr-2 h-4 w-4" />
+            Edit
+          </Button>
+          <Button onClick={() => navigateTo('/lean-business-case-placeholder', { objectiveId: objective.id })} className="rounded-sm bg-fuchsia-500 text-white hover:bg-fuchsia-400">
+            Next: Build Lean Business Case
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StrategicObjectiveFormScreen({
+  workspace,
+  objectives,
+  setObjectives,
+}: {
+  workspace: Workspace | null;
+  objectives: StrategicObjective[];
+  setObjectives: (objectives: StrategicObjective[]) => void;
+}) {
+  const editId = getRouteParams().get('id');
+  const existingObjective = objectives.find((objective) => objective.id === editId);
+  const [form, setForm] = useState({ ...defaultObjectiveForm, ...existingObjective });
+  const [error, setError] = useState('');
+  const isEditing = Boolean(existingObjective);
+  const hasReachedLimit = objectives.length >= 3 && !isEditing;
+
+  const updateField = (field: keyof typeof defaultObjectiveForm, value: string) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const submitObjective = (event: FormEvent) => {
+    event.preventDefault();
+    setError('');
+
+    if (!form.title.trim() || !form.objectiveStatement.trim()) {
+      setError('Strategic Objective Title and Objective Statement are required.');
+      return;
+    }
+
+    if (form.targetImplementationYear && !/^\d{4}$/.test(form.targetImplementationYear)) {
+      setError('Target Implementation Year must be a four-digit year, such as 2026.');
+      return;
+    }
+
+    if (hasReachedLimit) {
+      setError('You have reached the prototype limit of three strategic objectives.');
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const savedObjective: StrategicObjective = {
+      ...form,
+      id: existingObjective?.id || createId('objective'),
+      title: form.title.trim(),
+      objectiveStatement: form.objectiveStatement.trim(),
+      createdAt: existingObjective?.createdAt || now,
+      updatedAt: now,
+    };
+
+    const nextObjectives = isEditing
+      ? objectives.map((objective) => (objective.id === savedObjective.id ? savedObjective : objective))
+      : [...objectives, savedObjective].slice(0, 3);
+
+    localStorage.setItem(objectivesStorageKey, JSON.stringify(nextObjectives));
+    setObjectives(nextObjectives);
+    navigateTo('/dashboard');
+  };
+
+  return (
+    <PrototypeShell workspace={workspace}>
+      <section className="mx-auto max-w-5xl space-y-6">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+          <div>
+            <Badge className="rounded-sm bg-cyan-500 text-black hover:bg-cyan-400">Step 1</Badge>
+            <h1 className="retro-heading mt-4 text-3xl text-cyan-300">{isEditing ? 'Edit Strategic Objective' : 'Create Strategic Objective'}</h1>
+            <p className="mt-3 max-w-3xl text-slate-300">Define the strategic intent that will later anchor Lean Business Cases, initiatives, value streams, product discovery, and conceptual architecture.</p>
+          </div>
+          <Button variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm border-slate-600 text-slate-200 hover:bg-slate-800">Back to Dashboard</Button>
+        </div>
+
+        {hasReachedLimit && (
+          <div className="rounded-md border border-yellow-400/50 bg-yellow-400/10 p-4 text-sm text-yellow-100">
+            You have reached the prototype limit of three strategic objectives.
+          </div>
+        )}
+        {error && (
+          <div className="rounded-md border border-red-400/60 bg-red-500/10 p-4 text-sm text-red-100">{error}</div>
+        )}
+
+        <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
+          <CardContent className="pt-6">
+            <form className="grid gap-5" onSubmit={submitObjective}>
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field id="objective-title" label="Strategic Objective Title">
+                  <Input id="objective-title" value={form.title} onChange={(event) => updateField('title', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+                <Field id="company-goal" label="Company Goal">
+                  <Input id="company-goal" value={form.companyGoal} onChange={(event) => updateField('companyGoal', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+              </div>
+
+              <Field id="objective-statement" label="Objective Statement">
+                <Textarea id="objective-statement" value={form.objectiveStatement} onChange={(event) => updateField('objectiveStatement', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+              </Field>
+
+              <div className="grid gap-5 md:grid-cols-3">
+                <Field id="strategic-value-type" label="Strategic Value Type">
+                  <Select value={form.strategicValueType} onValueChange={(value) => updateField('strategicValueType', value)}>
+                    <SelectTrigger id="strategic-value-type" className="border-slate-700 bg-slate-950 text-slate-100">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                      {strategicValueTypes.map((valueType) => <SelectItem key={valueType} value={valueType}>{valueType}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field id="target-implementation-year" label="Target Implementation Year">
+                  <Input id="target-implementation-year" inputMode="numeric" value={form.targetImplementationYear} onChange={(event) => updateField('targetImplementationYear', event.target.value)} placeholder="Example: 2026" className="border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+                <Field id="status" label="Status">
+                  <Select value={form.status} onValueChange={(value) => updateField('status', value)}>
+                    <SelectTrigger id="status" className="border-slate-700 bg-slate-950 text-slate-100">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                      {objectiveStatuses.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field id="target-outcome" label="Target Outcome">
+                  <Input id="target-outcome" value={form.targetOutcome} onChange={(event) => updateField('targetOutcome', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+                <Field id="target-metric" label="Target Metric">
+                  <Input id="target-metric" value={form.targetMetric} onChange={(event) => updateField('targetMetric', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+              </div>
+
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field id="current-state-summary" label="Current State Summary">
+                  <Textarea id="current-state-summary" value={form.currentStateSummary} onChange={(event) => updateField('currentStateSummary', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+                <Field id="desired-future-state" label="Desired Future State">
+                  <Textarea id="desired-future-state" value={form.desiredFutureState} onChange={(event) => updateField('desiredFutureState', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+              </div>
+
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field id="business-problem" label="Business Problem">
+                  <Textarea id="business-problem" value={form.businessProblem} onChange={(event) => updateField('businessProblem', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+                <Field id="strategic-rationale" label="Strategic Rationale">
+                  <Textarea id="strategic-rationale" value={form.strategicRationale} onChange={(event) => updateField('strategicRationale', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+              </div>
+
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <Button type="button" variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm border-slate-600 text-slate-200 hover:bg-slate-800">Cancel</Button>
+                <Button type="submit" disabled={hasReachedLimit} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Save Objective</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </section>
+    </PrototypeShell>
+  );
+}
+
+function LeanBusinessCasePlaceholderScreen({
+  workspace,
+  objectives,
+}: {
+  workspace: Workspace | null;
+  objectives: StrategicObjective[];
+}) {
+  const objectiveId = getRouteParams().get('objectiveId');
+  const selectedObjective = objectives.find((objective) => objective.id === objectiveId);
+
+  return (
+    <PrototypeShell workspace={workspace}>
+      <section className="mx-auto max-w-4xl">
+        <Card className="rounded-md border-fuchsia-500/50 bg-slate-900 text-slate-100">
+          <CardHeader>
+            <Badge className="w-fit rounded-sm bg-fuchsia-500 text-white hover:bg-fuchsia-400">Coming next</Badge>
+            <CardTitle className="retro-heading pt-3 text-3xl text-fuchsia-300">Lean Business Case Placeholder</CardTitle>
+            <CardDescription className="text-slate-300">
+              {selectedObjective ? `Selected strategic objective: ${selectedObjective.title}` : 'Select a strategic objective from the dashboard to continue later.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-lg leading-relaxed text-slate-300">
+              Lean Business Case creation is the next prototype step. Future functionality will allow users to create Lean Business Cases under a selected strategic objective.
+            </p>
+            <div className="rounded-md border border-cyan-500/40 bg-cyan-400/10 p-4 text-sm text-cyan-100">
+              Since each workspace can define up to three strategic objectives, a future Lean Business Case flow will start by confirming which strategic objective owns the business case.
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button onClick={() => navigateTo('/dashboard')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Return to Dashboard</Button>
+              <Button variant="outline" onClick={() => navigateTo('/strategic-objectives', selectedObjective ? { id: selectedObjective.id } : undefined)} className="rounded-sm border-cyan-500 text-cyan-200 hover:bg-cyan-500 hover:text-black">Review Strategic Objective</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+    </PrototypeShell>
+  );
+}
 
 export default function App() {
+  const [route, setRoute] = useState<PrototypeRoute>(() => normalizeRoute(window.location.hash));
+  const [workspace, setWorkspace] = useState<Workspace | null>(() => loadWorkspace());
+  const [strategicObjectives, setStrategicObjectives] = useState<StrategicObjective[]>(() => loadObjectives());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedStage, setSelectedStage] = useState<number | null>(null);
+
+  useEffect(() => {
+    const handleHashChange = () => setRoute(normalizeRoute(window.location.hash));
+    window.addEventListener('hashchange', handleHashChange);
+    if (!window.location.hash) {
+      window.location.hash = '/';
+    }
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(objectivesStorageKey, JSON.stringify(strategicObjectives));
+  }, [strategicObjectives]);
 
   const frameworkStages = [
     {
@@ -227,12 +955,48 @@ export default function App() {
   ];
 
   const scrollToSection = (id: string) => {
+    if (route !== '/') {
+      navigateTo('/');
+      window.setTimeout(() => {
+        const element = document.getElementById(id);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 50);
+      setMobileMenuOpen(false);
+      return;
+    }
+
     const element = document.getElementById(id);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
       setMobileMenuOpen(false);
     }
   };
+
+  if (route === '/login') {
+    return <AuthScreen mode="login" workspace={workspace} />;
+  }
+
+  if (route === '/signup') {
+    return <AuthScreen mode="signup" workspace={workspace} />;
+  }
+
+  if (route === '/workspace-onboarding') {
+    return <WorkspaceOnboardingScreen workspace={workspace} setWorkspace={setWorkspace} />;
+  }
+
+  if (route === '/dashboard') {
+    return <DashboardScreen workspace={workspace} objectives={strategicObjectives} />;
+  }
+
+  if (route === '/strategic-objectives') {
+    return <StrategicObjectiveFormScreen workspace={workspace} objectives={strategicObjectives} setObjectives={setStrategicObjectives} />;
+  }
+
+  if (route === '/lean-business-case-placeholder') {
+    return <LeanBusinessCasePlaceholderScreen workspace={workspace} objectives={strategicObjectives} />;
+  }
 
   return (
     <div className="min-h-screen bg-black">
@@ -261,9 +1025,9 @@ export default function App() {
                 <FileText className="w-4 h-4" />
                 View Research
               </button>
-              <button className="px-3 py-2 border-2 border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-black hover:shadow-[0_0_20px_rgba(0,255,255,0.8)] transition-all flex items-center gap-2">
-                <Github className="w-4 h-4" />
-                GitHub
+              <button onClick={() => navigateTo('/login')} className="px-3 py-2 border-2 border-cyan-400 text-cyan-400 hover:bg-cyan-400 hover:text-black hover:shadow-[0_0_20px_rgba(0,255,255,0.8)] transition-all flex items-center gap-2">
+                <LogIn className="w-4 h-4" />
+                Sign In / Login
               </button>
             </div>
 
@@ -287,6 +1051,7 @@ export default function App() {
               <button onClick={() => scrollToSection('ui-components')} className="block w-full text-left py-2 text-cyan-400 hover:text-lime-400">Components</button>
               <button onClick={() => scrollToSection('deliverables')} className="block w-full text-left py-2 text-cyan-400 hover:text-lime-400">Deliverables</button>
               <button onClick={() => scrollToSection('team')} className="block w-full text-left py-2 text-cyan-400 hover:text-lime-400">Player</button>
+              <button onClick={() => navigateTo('/login')} className="block w-full text-left py-2 text-cyan-400 hover:text-lime-400">Sign In / Login</button>
             </div>
           )}
         </div>
@@ -906,10 +1671,6 @@ export default function App() {
               <button className="retro-heading flex-1 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-black border-4 border-cyan-400 hover:shadow-[0_0_30px_rgba(0,255,255,0.8)] hover:scale-105 transition-all flex items-center justify-center gap-2 text-sm">
                 <Github className="w-5 h-5" />
                 GitHub Repository
-              </button>
-              <button className="retro-heading flex-1 px-6 py-3 bg-gradient-to-r from-fuchsia-500 to-purple-500 text-white border-4 border-fuchsia-400 hover:shadow-[0_0_30px_rgba(236,72,153,0.8)] hover:scale-105 transition-all flex items-center justify-center gap-2 text-sm">
-                <FileText className="w-5 h-5" />
-                Overleaf Document
               </button>
             </div>
           </div>
