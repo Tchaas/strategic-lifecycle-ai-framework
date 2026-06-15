@@ -17,12 +17,10 @@ type PrototypeUser = {
   email: string;
 };
 
-type ScopedStorage = Storage & {
-  __slafScopedPatchApplied?: boolean;
-  __slafOriginalGetItem?: Storage['getItem'];
-  __slafOriginalSetItem?: Storage['setItem'];
-  __slafOriginalRemoveItem?: Storage['removeItem'];
-};
+let patchApplied = false;
+let originalGetItem: Storage['getItem'] | null = null;
+let originalSetItem: Storage['setItem'] | null = null;
+let originalRemoveItem: Storage['removeItem'] | null = null;
 
 const parseJson = <T,>(value: string | null): T | null => {
   if (!value) return null;
@@ -34,11 +32,11 @@ const parseJson = <T,>(value: string | null): T | null => {
 };
 
 const encodeScope = (email: string) => encodeURIComponent(email.trim().toLowerCase());
-
 const getScopedKey = (key: string, email: string) => `slaf.prototype.account.${encodeScope(email)}.${key.replace('slaf.prototype.', '')}`;
 
-const getActiveRegisteredEmail = (storage: ScopedStorage) => {
-  const originalGetItem = storage.__slafOriginalGetItem || storage.getItem.bind(storage);
+const getActiveRegisteredEmail = (storage: Storage) => {
+  if (!originalGetItem) return null;
+
   const session = parseJson<AuthSession>(originalGetItem.call(storage, authStorageKey));
   if (!session?.email) return null;
 
@@ -50,49 +48,42 @@ const getActiveRegisteredEmail = (storage: ScopedStorage) => {
 };
 
 const applyScopedStoragePatch = () => {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || patchApplied) return;
 
-  const storage = window.localStorage as ScopedStorage;
-  if (storage.__slafScopedPatchApplied) return;
+  originalGetItem = Storage.prototype.getItem;
+  originalSetItem = Storage.prototype.setItem;
+  originalRemoveItem = Storage.prototype.removeItem;
 
-  const originalGetItem = storage.getItem.bind(storage);
-  const originalSetItem = storage.setItem.bind(storage);
-  const originalRemoveItem = storage.removeItem.bind(storage);
-
-  storage.__slafOriginalGetItem = originalGetItem;
-  storage.__slafOriginalSetItem = originalSetItem;
-  storage.__slafOriginalRemoveItem = originalRemoveItem;
-
-  storage.getItem = (key: string) => {
-    if (!scopedStorageKeys.has(key)) return originalGetItem(key);
-    const email = getActiveRegisteredEmail(storage);
+  Storage.prototype.getItem = function getScopedItem(key: string) {
+    if (!scopedStorageKeys.has(key)) return originalGetItem?.call(this, key) ?? null;
+    const email = getActiveRegisteredEmail(this);
     if (!email) return null;
-    return originalGetItem(getScopedKey(key, email));
+    return originalGetItem?.call(this, getScopedKey(key, email)) ?? null;
   };
 
-  storage.setItem = (key: string, value: string) => {
+  Storage.prototype.setItem = function setScopedItem(key: string, value: string) {
     if (!scopedStorageKeys.has(key)) {
-      originalSetItem(key, value);
+      originalSetItem?.call(this, key, value);
       return;
     }
 
-    const email = getActiveRegisteredEmail(storage);
+    const email = getActiveRegisteredEmail(this);
     if (!email) return;
-    originalSetItem(getScopedKey(key, email), value);
+    originalSetItem?.call(this, getScopedKey(key, email), value);
   };
 
-  storage.removeItem = (key: string) => {
+  Storage.prototype.removeItem = function removeScopedItem(key: string) {
     if (!scopedStorageKeys.has(key)) {
-      originalRemoveItem(key);
+      originalRemoveItem?.call(this, key);
       return;
     }
 
-    const email = getActiveRegisteredEmail(storage);
-    if (email) originalRemoveItem(getScopedKey(key, email));
-    originalRemoveItem(key);
+    const email = getActiveRegisteredEmail(this);
+    if (email) originalRemoveItem?.call(this, getScopedKey(key, email));
+    originalRemoveItem?.call(this, key);
   };
 
-  storage.__slafScopedPatchApplied = true;
+  patchApplied = true;
 };
 
 export default function PrototypeRoutesScopedStorage() {
