@@ -8,6 +8,8 @@ const scopedStorageKeys = new Set([
   'slaf.prototype.valueStreams',
   'slaf.prototype.strategicObjectives',
   'slaf.prototype.keyActivities',
+  'slaf.prototype.businessCapabilities',
+  'slaf.prototype.businessImpacts',
 ]);
 
 type AuthSession = {
