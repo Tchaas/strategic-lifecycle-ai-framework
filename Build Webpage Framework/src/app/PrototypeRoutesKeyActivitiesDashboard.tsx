@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
-import { ArrowLeft, Building2, LayoutDashboard, LogOut, Mail, Plus, Target, UserCheck, Workflow } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Building2, LayoutDashboard, LogOut, Mail, Plus, ShieldCheck, Target, UserCheck, Workflow } from 'lucide-react';
 import BasePrototypeRoutes from './PrototypeRoutesKeyActivities';
 import { Badge } from './components/ui/badge';
 import { Button } from './components/ui/button';
@@ -10,9 +10,11 @@ import { Label } from './components/ui/label';
 type AuthSession = { email: string; provider: string; signedInAt: string };
 type Workspace = { id: string; companyName?: string; name?: string; description?: string };
 type StrategicObjective = { id?: string; workspaceId?: string };
-type BusinessArchitecture = { id?: string; workspaceId?: string; status?: string };
-type ValueStream = { id?: string; workspaceId?: string; name?: string };
+type BusinessArchitecture = { id?: string; workspaceId?: string; name?: string; status?: string };
+type ValueStream = { id?: string; workspaceId?: string; businessArchitectureId?: string; name?: string };
 type KeyActivity = { id?: string; workspaceId?: string; valueStreamId?: string };
+type BusinessCapability = { id?: string; workspaceId?: string; businessArchitectureId?: string };
+type BusinessImpact = { id?: string; workspaceId?: string; businessArchitectureId?: string; severity?: string };
 type InviteStatus = 'pending' | 'Active' | 'Expired';
 
 type WorkspaceInvite = {
@@ -32,8 +34,12 @@ const strategicObjectivesStorageKey = 'slaf.prototype.strategicObjectives';
 const businessArchitectureStorageKey = 'slaf.prototype.businessArchitecture';
 const valueStreamsStorageKey = 'slaf.prototype.valueStreams';
 const keyActivitiesStorageKey = 'slaf.prototype.keyActivities';
+const capabilitiesStorageKey = 'slaf.prototype.businessCapabilities';
+const impactsStorageKey = 'slaf.prototype.businessImpacts';
 const invitesStorageKey = 'slaf.prototype.invites';
 const objectiveLimit = 3;
+const architectureLimit = 5;
+const valueStreamLimit = 6;
 const inviteLimit = 5;
 const inviteDurationMs = 5 * 24 * 60 * 60 * 1000;
 
@@ -54,13 +60,16 @@ const loadAuthSession = () => loadJson<AuthSession | null>(authStorageKey, null)
 const loadWorkspace = () => loadJson<Workspace | null>(workspaceStorageKey, null);
 const getWorkspaceName = (workspace: Workspace | null) => workspace?.companyName || workspace?.name || 'Workspace setup in progress';
 const loadObjectives = (workspaceId?: string) => workspaceId ? loadJson<StrategicObjective[]>(strategicObjectivesStorageKey, []).filter((item) => item.workspaceId === workspaceId) : [];
-const loadBusinessArchitecture = (workspaceId?: string) => {
-  if (!workspaceId) return null;
-  const architecture = loadJson<BusinessArchitecture | null>(businessArchitectureStorageKey, null);
-  return architecture?.workspaceId === workspaceId ? architecture : null;
+const loadBusinessArchitectures = (workspaceId?: string) => {
+  if (!workspaceId) return [];
+  const raw = loadJson<BusinessArchitecture[] | BusinessArchitecture | null>(businessArchitectureStorageKey, []);
+  const records = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return records.filter((item) => item.workspaceId === workspaceId);
 };
 const loadValueStreams = (workspaceId?: string) => workspaceId ? loadJson<ValueStream[]>(valueStreamsStorageKey, []).filter((item) => item.workspaceId === workspaceId) : [];
 const loadKeyActivities = (workspaceId?: string) => workspaceId ? loadJson<KeyActivity[]>(keyActivitiesStorageKey, []).filter((item) => item.workspaceId === workspaceId) : [];
+const loadCapabilities = (workspaceId?: string) => workspaceId ? loadJson<BusinessCapability[]>(capabilitiesStorageKey, []).filter((item) => item.workspaceId === workspaceId) : [];
+const loadImpacts = (workspaceId?: string) => workspaceId ? loadJson<BusinessImpact[]>(impactsStorageKey, []).filter((item) => item.workspaceId === workspaceId) : [];
 const loadInvites = (workspaceId?: string) => workspaceId ? loadJson<WorkspaceInvite[]>(invitesStorageKey, []).filter((item) => item.workspaceId === workspaceId) : [];
 const persistWorkspaceInvites = (workspaceId: string, workspaceInvites: WorkspaceInvite[]) => {
   const otherInvites = loadJson<WorkspaceInvite[]>(invitesStorageKey, []).filter((invite) => invite.workspaceId !== workspaceId);
@@ -148,9 +157,11 @@ function DashboardScreen() {
   const [session, setSession] = useState<AuthSession | null>(() => loadAuthSession());
   const [workspace, setWorkspace] = useState<Workspace | null>(() => loadWorkspace());
   const [objectives, setObjectives] = useState(() => loadObjectives(loadWorkspace()?.id));
-  const [architecture, setArchitecture] = useState(() => loadBusinessArchitecture(loadWorkspace()?.id));
+  const [architectures, setArchitectures] = useState(() => loadBusinessArchitectures(loadWorkspace()?.id));
   const [valueStreams, setValueStreams] = useState(() => loadValueStreams(loadWorkspace()?.id));
   const [keyActivities, setKeyActivities] = useState(() => loadKeyActivities(loadWorkspace()?.id));
+  const [capabilities, setCapabilities] = useState(() => loadCapabilities(loadWorkspace()?.id));
+  const [impacts, setImpacts] = useState(() => loadImpacts(loadWorkspace()?.id));
 
   useEffect(() => {
     const reload = () => {
@@ -158,9 +169,11 @@ function DashboardScreen() {
       setSession(loadAuthSession());
       setWorkspace(nextWorkspace);
       setObjectives(loadObjectives(nextWorkspace?.id));
-      setArchitecture(loadBusinessArchitecture(nextWorkspace?.id));
+      setArchitectures(loadBusinessArchitectures(nextWorkspace?.id));
       setValueStreams(loadValueStreams(nextWorkspace?.id));
       setKeyActivities(loadKeyActivities(nextWorkspace?.id));
+      setCapabilities(loadCapabilities(nextWorkspace?.id));
+      setImpacts(loadImpacts(nextWorkspace?.id));
     };
     window.addEventListener('storage', reload);
     return () => window.removeEventListener('storage', reload);
@@ -168,18 +181,22 @@ function DashboardScreen() {
 
   if (!session) { navigateTo('/login'); return null; }
 
+  const highSeverityImpacts = impacts.filter((impact) => impact.severity?.toLowerCase() === 'high').length;
+
   return (
     <PrototypeShell session={session} workspace={workspace}>
       <section className="space-y-8">
         <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-          <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100"><CardHeader><Badge className="w-fit rounded-sm bg-cyan-500 text-black hover:bg-cyan-400">Frontend-only prototype</Badge><CardTitle className="retro-heading pt-3 text-2xl text-cyan-300">Welcome to AI Augmented Lifecycle framework</CardTitle><CardDescription className="text-slate-300">Create the company workspace, define strategic objectives, capture business architecture, then define key activities for value streams.</CardDescription></CardHeader><CardContent className="space-y-5"><PrototypeNotice /><div className="grid gap-3 sm:grid-cols-4"><div className="rounded-md border border-slate-700 bg-slate-950 p-4"><div className="text-xs uppercase text-slate-500">Workspace</div><div className="mt-1 text-sm text-slate-100">{workspace ? getWorkspaceName(workspace) : 'Not created'}</div></div><div className="rounded-md border border-slate-700 bg-slate-950 p-4"><div className="text-xs uppercase text-slate-500">Strategic Objectives</div><div className="mt-1 text-2xl font-semibold text-lime-300">{objectives.length} / {objectiveLimit}</div></div><div className="rounded-md border border-slate-700 bg-slate-950 p-4"><div className="text-xs uppercase text-slate-500">Value Streams</div><div className="mt-1 text-2xl font-semibold text-cyan-300">{valueStreams.length}</div></div><div className="rounded-md border border-slate-700 bg-slate-950 p-4"><div className="text-xs uppercase text-slate-500">Key Activities</div><div className="mt-1 text-2xl font-semibold text-fuchsia-300">{keyActivities.length}</div></div></div></CardContent></Card>
+          <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100"><CardHeader><Badge className="w-fit rounded-sm bg-cyan-500 text-black hover:bg-cyan-400">Frontend-only prototype</Badge><CardTitle className="retro-heading pt-3 text-2xl text-cyan-300">Welcome to AI Augmented Lifecycle framework</CardTitle><CardDescription className="text-slate-300">Create the company workspace, define strategic objectives, capture business architecture, then define value streams, key activities, capabilities, and business impacts.</CardDescription></CardHeader><CardContent className="space-y-5"><PrototypeNotice /><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6"><div className="rounded-md border border-slate-700 bg-slate-950 p-4"><div className="text-xs uppercase text-slate-500">Workspace</div><div className="mt-1 text-sm text-slate-100">{workspace ? getWorkspaceName(workspace) : 'Not created'}</div></div><div className="rounded-md border border-slate-700 bg-slate-950 p-4"><div className="text-xs uppercase text-slate-500">Objectives</div><div className="mt-1 text-2xl font-semibold text-lime-300">{objectives.length} / {objectiveLimit}</div></div><div className="rounded-md border border-slate-700 bg-slate-950 p-4"><div className="text-xs uppercase text-slate-500">Architecture</div><div className="mt-1 text-2xl font-semibold text-cyan-300">{architectures.length} / {architectureLimit}</div></div><div className="rounded-md border border-slate-700 bg-slate-950 p-4"><div className="text-xs uppercase text-slate-500">Value Streams</div><div className="mt-1 text-2xl font-semibold text-cyan-300">{valueStreams.length}</div></div><div className="rounded-md border border-slate-700 bg-slate-950 p-4"><div className="text-xs uppercase text-slate-500">Capabilities</div><div className="mt-1 text-2xl font-semibold text-lime-300">{capabilities.length}</div></div><div className="rounded-md border border-slate-700 bg-slate-950 p-4"><div className="text-xs uppercase text-slate-500">Impacts</div><div className="mt-1 text-2xl font-semibold text-fuchsia-300">{impacts.length}</div></div></div></CardContent></Card>
           <SessionInvitePanel session={session} workspace={workspace} />
         </div>
-        <div className="grid gap-5 lg:grid-cols-4">
+        <div className="grid gap-5 lg:grid-cols-3">
           <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100"><CardHeader><div className="flex items-start gap-3"><Building2 className="mt-1 h-5 w-5 text-cyan-300" /><div><CardTitle className="retro-heading text-cyan-300">Workspace / Company Profile</CardTitle><CardDescription className="text-slate-300">{workspace ? 'Company context exists' : 'Required first'}</CardDescription></div></div></CardHeader><CardContent className="space-y-4 text-sm text-slate-300"><p>{workspace?.description || 'Create the company profile workspace before defining lifecycle artifacts.'}</p><Button onClick={() => navigateTo('/workspace-onboarding')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">{workspace ? 'View / Edit Workspace' : 'Create Workspace'}</Button></CardContent></Card>
           <Card className="rounded-md border-lime-500/50 bg-slate-900 text-slate-100"><CardHeader><div className="flex items-start gap-3"><Target className="mt-1 h-5 w-5 text-lime-300" /><div><CardTitle className="retro-heading text-lime-300">Strategic Objectives</CardTitle><CardDescription className="text-slate-300">{objectives.length} captured</CardDescription></div></div></CardHeader><CardContent className="space-y-4 text-sm text-slate-300"><p>Define executive intent and strategic value before moving into Business Architecture.</p><Button disabled={!workspace} onClick={() => navigateTo('/strategic-objectives')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">{objectives.length > 0 ? 'View / Edit Objectives' : 'Create Strategic Objective'}</Button></CardContent></Card>
-          <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100"><CardHeader><div className="flex items-start gap-3"><Workflow className="mt-1 h-5 w-5 text-cyan-300" /><div><CardTitle className="retro-heading text-cyan-300">Business Architecture</CardTitle><CardDescription className="text-slate-300">{architecture ? `${valueStreams.length} value stream${valueStreams.length === 1 ? '' : 's'}` : 'Built after objectives'}</CardDescription></div></div></CardHeader><CardContent className="space-y-4 text-sm text-slate-300"><p>Capture value streams that key activities will support.</p><Button disabled={!workspace || objectives.length === 0} onClick={() => navigateTo('/business-architecture')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Build Business Architecture</Button></CardContent></Card>
+          <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100"><CardHeader><div className="flex items-start gap-3"><Workflow className="mt-1 h-5 w-5 text-cyan-300" /><div><CardTitle className="retro-heading text-cyan-300">Business Architecture</CardTitle><CardDescription className="text-slate-300">{architectures.length} structure{architectures.length === 1 ? '' : 's'}, {valueStreams.length} value stream{valueStreams.length === 1 ? '' : 's'}</CardDescription></div></div></CardHeader><CardContent className="space-y-4 text-sm text-slate-300"><p>Capture organization structures and value streams that downstream analysis will support.</p><Button disabled={!workspace || objectives.length === 0} onClick={() => navigateTo('/business-architecture')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Build Business Architecture</Button></CardContent></Card>
           <Card className="rounded-md border-fuchsia-500/50 bg-slate-900 text-slate-100"><CardHeader><CardTitle className="retro-heading text-fuchsia-300">Key Activities</CardTitle><CardDescription className="text-slate-300">{keyActivities.length} linked to value streams</CardDescription></CardHeader><CardContent className="space-y-4 text-sm text-slate-300"><p>Define the major activities where value is created, delayed, blocked, transferred, or improved.</p><Button disabled={!workspace || valueStreams.length === 0} onClick={() => navigateTo('/key-activities')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Manage Key Activities</Button></CardContent></Card>
+          <Card className="rounded-md border-lime-500/50 bg-slate-900 text-slate-100"><CardHeader><div className="flex items-start gap-3"><ShieldCheck className="mt-1 h-5 w-5 text-lime-300" /><div><CardTitle className="retro-heading text-lime-300">Business Capabilities</CardTitle><CardDescription className="text-slate-300">{capabilities.length} capability record{capabilities.length === 1 ? '' : 's'}</CardDescription></div></div></CardHeader><CardContent className="space-y-4 text-sm text-slate-300"><p>Show which capabilities exist, need improvement, or must be created to support the objective.</p><Button disabled={!workspace || architectures.length === 0} onClick={() => navigateTo('/business-capabilities')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Manage Capabilities</Button></CardContent></Card>
+          <Card className="rounded-md border-fuchsia-500/50 bg-slate-900 text-slate-100"><CardHeader><div className="flex items-start gap-3"><AlertTriangle className="mt-1 h-5 w-5 text-fuchsia-300" /><div><CardTitle className="retro-heading text-fuchsia-300">Business Impacts</CardTitle><CardDescription className="text-slate-300">{impacts.length} impact record{impacts.length === 1 ? '' : 's'}, {highSeverityImpacts} high severity</CardDescription></div></div></CardHeader><CardContent className="space-y-4 text-sm text-slate-300"><p>Identify business impacts that will later justify Lean Business Cases and Product Discovery priorities.</p><Button disabled={!workspace || architectures.length === 0} onClick={() => navigateTo('/business-impacts')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Manage Impacts</Button></CardContent></Card>
         </div>
       </section>
     </PrototypeShell>
