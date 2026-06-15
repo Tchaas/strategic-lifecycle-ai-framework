@@ -1,0 +1,4 @@
+/* Keep company/workspace names inside the workspace and dashboard content, not the global prototype header. */
+header.sticky.top-0.z-50 p.text-sm.text-slate-300 {
+  display: none;
+}
