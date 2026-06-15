@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import PrototypeRoutesAuthFlow from './PrototypeRoutesAuthFlow';
-import PrototypeRoutesArchitectureTree from './PrototypeRoutesArchitectureTree';
+import PrototypeRoutesCapabilityImpact from './PrototypeRoutesCapabilityImpact';
 
 const authRoutes = ['/login', '/signup', '/forgot-password'];
 const getRoute = () => window.location.hash.replace(/^#/, '').split('?')[0] || '/';
@@ -15,5 +15,5 @@ export default function PrototypeRoutesEnterpriseAuthFlow() {
   }, []);
 
   if (authRoutes.includes(route)) return <PrototypeRoutesAuthFlow />;
-  return <PrototypeRoutesArchitectureTree />;
+  return <PrototypeRoutesCapabilityImpact />;
 }
