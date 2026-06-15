@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import PrototypeRoutesAuthFlow from './PrototypeRoutesAuthFlow';
+import PrototypeRoutesEnterpriseAuthFlow from './PrototypeRoutesEnterpriseAuthFlow';
 
 type AuthSession = {
   email: string;
@@ -61,5 +61,5 @@ export default function PrototypeRoutesAuthGuard() {
     return null;
   }
 
-  return <PrototypeRoutesAuthFlow />;
+  return <PrototypeRoutesEnterpriseAuthFlow />;
 }
