@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
-import { ArrowLeft, ChevronRight, FileText, Github, LayoutDashboard, LogIn, Menu, Pencil, Plus, X, Check, AlertCircle, Lightbulb, Users, Target, TrendingUp, Database, GitBranch, Shield, BookOpen, FileCode, Activity, Layers, Gauge, PanelTop, ListChecks } from 'lucide-react';
+import { ArrowLeft, ChevronRight, FileText, Github, LayoutDashboard, LogIn, Menu, Pencil, Plus, X, Check, AlertCircle, Lightbulb, Users, Target, TrendingUp, Database, GitBranch, Shield, BookOpen, FileCode, Activity, Layers, Gauge, PanelTop, ListChecks, Trash2, DollarSign } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './components/ui/accordion';
 import { Badge } from './components/ui/badge';
 import { Button } from './components/ui/button';
@@ -11,6 +11,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Separator } from './components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Textarea } from './components/ui/textarea';
+import type {
+  Workspace,
+  StrategicObjective,
+  StrategicObjectiveMetric,
+  LeanBusinessCase,
+  WorkspaceMember,
+  WorkspaceInvite,
+  StrategicValueCategory,
+  ProblemType,
+  ExpectedValueType,
+  ObjectiveStatus,
+  MetricCategory,
+  Priority,
+  CaseValueType,
+  CaseStatus,
+  InviteStatus,
+} from './types';
 
 type PrototypeRoute =
   | '/'
@@ -18,76 +35,161 @@ type PrototypeRoute =
   | '/signup'
   | '/workspace-onboarding'
   | '/dashboard'
+  | '/workspace-settings'
   | '/strategic-objectives'
-  | '/lean-business-case-placeholder';
+  | '/lean-business-case';
 
-type Workspace = {
-  id: string;
-  name: string;
-  description: string;
-  businessUnit: string;
-  industry: string;
-  createdAt: string;
-};
-
-type StrategicObjective = {
-  id: string;
-  title: string;
-  objectiveStatement: string;
-  companyGoal: string;
-  strategicValueType: string;
-  targetOutcome: string;
-  targetMetric: string;
-  targetImplementationYear: string;
-  currentStateSummary: string;
-  desiredFutureState: string;
-  businessProblem: string;
-  strategicRationale: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
+type StoredWorkspace = Workspace & Record<string, unknown>;
 type StoredStrategicObjective = StrategicObjective & Record<string, string | undefined>;
 
 const workspaceStorageKey = 'slaf.prototype.workspace';
 const objectivesStorageKey = 'slaf.prototype.strategicObjectives';
+const metricsStorageKey = 'slaf.prototype.metrics';
+const lbcStorageKey = 'slaf.prototype.leanBusinessCases';
+const membersStorageKey = 'slaf.prototype.workspaceMembers';
+const invitesStorageKey = 'slaf.prototype.workspaceInvites';
 
-const strategicValueTypes = [
-  'Revenue Growth',
-  'Cost Savings',
-  'Customer Experience',
-  'Operational Efficiency',
-  'Risk Reduction',
-  'Scalability',
-  'Process Optimization',
+const strategicValueCategoryOptions: { value: StrategicValueCategory; label: string; description: string }[] = [
+  { value: 'revenue_growth', label: 'Revenue Growth', description: 'Increase customer conversion or purchase frequency' },
+  { value: 'cost_reduction', label: 'Cost Reduction', description: 'Reduce operating cost or duplicated work' },
+  { value: 'operational_efficiency', label: 'Operational Efficiency', description: 'Improve speed, throughput, or productivity' },
+  { value: 'customer_experience', label: 'Customer Experience', description: 'Improve convenience, reliability, or satisfaction' },
+  { value: 'risk_reduction', label: 'Risk Reduction', description: 'Reduce compliance, security, or operational risk' },
+  { value: 'scalability', label: 'Scalability', description: 'Support growth without proportional cost increase' },
+  { value: 'competitive_advantage', label: 'Competitive Advantage', description: 'Differentiate through speed, intelligence, or service quality' },
 ];
 
-const objectiveStatuses = ['Draft', 'Active', 'Archived'];
+const objectiveStatusOptions: { value: ObjectiveStatus; label: string }[] = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'active', label: 'Active' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'archived', label: 'Archived' },
+];
+
+const problemTypeOptions: { value: ProblemType; label: string }[] = [
+  { value: 'customer', label: 'Customer Problem' },
+  { value: 'internal', label: 'Internal Business Problem' },
+  { value: 'both', label: 'Both Customer and Internal' },
+];
+
+const expectedValueTypeOptions: { value: ExpectedValueType; label: string }[] = [
+  { value: 'financial', label: 'Financial' },
+  { value: 'operational', label: 'Operational' },
+  { value: 'mixed', label: 'Mixed' },
+];
+
+const metricCategoryOptions: { value: MetricCategory; label: string }[] = [
+  { value: 'financial', label: 'Financial' },
+  { value: 'operational', label: 'Operational' },
+  { value: 'customer', label: 'Customer' },
+  { value: 'risk', label: 'Risk' },
+];
+
+const companySizeOptions = ['1-50', '51-200', '201-1000', '1000+'];
+
+const priorityOptions: { value: Priority; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+];
+
+const caseValueTypeOptions: { value: CaseValueType; label: string }[] = [
+  { value: 'cost_savings', label: 'Cost Savings' },
+  { value: 'revenue', label: 'Revenue' },
+  { value: 'risk_reduction', label: 'Risk Reduction' },
+  { value: 'efficiency', label: 'Efficiency' },
+];
+
+const caseStatusOptions: { value: CaseStatus; label: string }[] = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'active', label: 'Active' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'archived', label: 'Archived' },
+];
+
+const inviteStatusOptions: { value: InviteStatus; label: string }[] = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'accepted', label: 'Accepted' },
+  { value: 'expired', label: 'Expired' },
+];
+
+const getLabel = <T extends string>(value: T | '', options: { value: T; label: string }[]): string =>
+  options.find(o => o.value === value)?.label || '';
+
+const migrateValueCategory = (old: string): StrategicValueCategory | '' => {
+  const map: Record<string, StrategicValueCategory> = {
+    'Revenue Growth': 'revenue_growth', 'Cost Reduction': 'cost_reduction',
+    'Operational Efficiency': 'operational_efficiency', 'Customer Experience': 'customer_experience',
+    'Risk Reduction': 'risk_reduction', 'Scalability': 'scalability', 'Competitive Advantage': 'competitive_advantage',
+  };
+  return map[old] || (strategicValueCategoryOptions.some(o => o.value === old) ? old as StrategicValueCategory : '');
+};
+
+const migrateProblemType = (old: string): ProblemType | '' => {
+  const map: Record<string, ProblemType> = {
+    'Customer Problem': 'customer', 'Internal Business Problem': 'internal',
+    'Both Customer and Internal Business Problem': 'both',
+  };
+  return map[old] || (problemTypeOptions.some(o => o.value === old) ? old as ProblemType : '');
+};
+
+const migrateExpectedValueType = (old: string): ExpectedValueType | '' => {
+  const map: Record<string, ExpectedValueType> = {
+    'Financial': 'financial', 'Operational': 'operational', 'Mixed': 'mixed',
+    'Customer-Focused': 'mixed', 'Risk-Focused': 'financial', 'Technical': 'operational',
+  };
+  return map[old] || (expectedValueTypeOptions.some(o => o.value === old) ? old as ExpectedValueType : '');
+};
+
+const migrateStatus = (old: string): ObjectiveStatus => {
+  const map: Record<string, ObjectiveStatus> = {
+    'Draft': 'draft', 'Active': 'active', 'Completed': 'completed', 'Archived': 'archived',
+  };
+  return map[old] || (objectiveStatusOptions.some(o => o.value === old) ? old as ObjectiveStatus : 'draft');
+};
 
 const processFlow = [
   'Strategic Objectives',
+  'Business Architecture',
   'Lean Business Cases',
-  'Initiatives',
-  'Value Streams',
-  'Capabilities',
   'Product Discovery',
-  'Conceptual Architecture',
+  'Features & Requirements',
+  'Conceptual Deliverables',
+  'Implementation',
 ];
 
-const defaultObjectiveForm: Omit<StrategicObjective, 'id' | 'createdAt' | 'updatedAt'> = {
-  title: '',
-  objectiveStatement: '',
-  companyGoal: '',
-  strategicValueType: 'Revenue Growth',
-  targetOutcome: '',
-  targetMetric: '',
+const defaultObjectiveForm: Omit<StrategicObjective, 'id' | 'workspaceId' | 'createdAt' | 'updatedAt'> = {
+  strategicInitiativeName: '',
+  executiveObjective: '',
+  strategicValueCategory: '',
+  expectedBusinessOutcome: '',
+  financialImpact: '',
+  urgencyRationale: '',
   targetImplementationYear: '',
-  currentStateSummary: '',
-  desiredFutureState: '',
-  businessProblem: '',
-  strategicRationale: '',
-  status: 'Draft',
+  targetImplementationStartDate: '',
+  targetImplementationEndDate: '',
+  problemOpportunityStatement: '',
+  costOfInaction: '',
+  currentLimitation: '',
+  impactedTeams: '',
+  problemType: '',
+  valueHypothesis: '',
+  valueMeasurementApproach: '',
+  expectedValueType: '',
+  valueRealizationTimeframe: '',
+  status: 'draft',
+};
+
+const defaultLbcForm: Omit<LeanBusinessCase, 'id' | 'workspaceId' | 'strategicObjectiveId' | 'ownerUserId' | 'createdAt' | 'updatedAt'> = {
+  title: '',
+  summary: '',
+  problemOpportunityStatement: '',
+  valueHypothesis: '',
+  priority: '',
+  forecastCost: null,
+  forecastValue: null,
+  valueType: '',
+  status: 'draft',
 };
 
 const navigateTo = (route: PrototypeRoute, params?: Record<string, string>) => {
@@ -97,7 +199,8 @@ const navigateTo = (route: PrototypeRoute, params?: Record<string, string>) => {
 
 const normalizeRoute = (hash: string): PrototypeRoute => {
   const route = (hash.replace(/^#/, '').split('?')[0] || '/') as PrototypeRoute;
-  const knownRoutes: PrototypeRoute[] = ['/', '/login', '/signup', '/workspace-onboarding', '/dashboard', '/strategic-objectives', '/lean-business-case-placeholder'];
+  if (route === '/lean-business-case-placeholder' as string) return '/lean-business-case';
+  const knownRoutes: PrototypeRoute[] = ['/', '/login', '/signup', '/workspace-onboarding', '/dashboard', '/workspace-settings', '/strategic-objectives', '/lean-business-case'];
   return knownRoutes.includes(route) ? route : '/';
 };
 
@@ -108,21 +211,30 @@ const createId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().to
 const normalizeObjective = (objective: StoredStrategicObjective): StrategicObjective => {
   const legacyYearKey = 'time' + 'Horizon';
   const targetImplementationYear = objective.targetImplementationYear || objective[legacyYearKey] || '';
+  const expectedBusinessOutcome = objective.expectedBusinessOutcome || objective.companyGoal || objective.targetOutcome || '';
 
   return {
     id: objective.id || createId('objective'),
-    title: objective.title || '',
-    objectiveStatement: objective.objectiveStatement || '',
-    companyGoal: objective.companyGoal || '',
-    strategicValueType: objective.strategicValueType || 'Revenue Growth',
-    targetOutcome: objective.targetOutcome || '',
-    targetMetric: objective.targetMetric || '',
+    workspaceId: objective.workspaceId || '',
+    strategicInitiativeName: objective.strategicInitiativeName || objective.title || '',
+    executiveObjective: objective.executiveObjective || objective.objectiveStatement || '',
+    strategicValueCategory: migrateValueCategory(objective.strategicValueCategory || objective.strategicValueType || ''),
+    expectedBusinessOutcome,
+    financialImpact: objective.financialImpact || '',
+    urgencyRationale: objective.urgencyRationale || objective.strategicRationale || '',
     targetImplementationYear,
-    currentStateSummary: objective.currentStateSummary || '',
-    desiredFutureState: objective.desiredFutureState || '',
-    businessProblem: objective.businessProblem || '',
-    strategicRationale: objective.strategicRationale || '',
-    status: objective.status || 'Draft',
+    targetImplementationStartDate: objective.targetImplementationStartDate || '',
+    targetImplementationEndDate: objective.targetImplementationEndDate || '',
+    problemOpportunityStatement: objective.problemOpportunityStatement || objective.businessProblem || '',
+    costOfInaction: objective.costOfInaction || '',
+    currentLimitation: objective.currentLimitation || '',
+    impactedTeams: objective.impactedTeams || '',
+    problemType: migrateProblemType(objective.problemType || ''),
+    valueHypothesis: objective.valueHypothesis || '',
+    valueMeasurementApproach: objective.valueMeasurementApproach || '',
+    expectedValueType: migrateExpectedValueType(objective.expectedValueType || ''),
+    valueRealizationTimeframe: objective.valueRealizationTimeframe || '',
+    status: migrateStatus(objective.status || 'Draft'),
     createdAt: objective.createdAt || new Date().toISOString(),
     updatedAt: objective.updatedAt || new Date().toISOString(),
   };
@@ -130,8 +242,23 @@ const normalizeObjective = (objective: StoredStrategicObjective): StrategicObjec
 
 const loadWorkspace = (): Workspace | null => {
   try {
-    const rawWorkspace = localStorage.getItem(workspaceStorageKey);
-    return rawWorkspace ? JSON.parse(rawWorkspace) : null;
+    const raw = localStorage.getItem(workspaceStorageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredWorkspace;
+    return {
+      id: (parsed.id as string) || createId('workspace'),
+      name: (parsed.name as string) || '',
+      legalName: (parsed.legalName as string) || '',
+      description: (parsed.description as string) || '',
+      industry: (parsed.industry as string) || '',
+      companySize: (parsed.companySize as Workspace['companySize']) || '',
+      headquartersRegion: (parsed.headquartersRegion as string) || '',
+      website: (parsed.website as string) || '',
+      logoUrl: (parsed.logoUrl as string) || '',
+      annualRevenue: (parsed.annualRevenue as number) ?? null,
+      createdAt: (parsed.createdAt as string) || new Date().toISOString(),
+      updatedAt: (parsed.updatedAt as string) || new Date().toISOString(),
+    };
   } catch {
     return null;
   }
@@ -142,7 +269,54 @@ const loadObjectives = (): StrategicObjective[] => {
     const rawObjectives = localStorage.getItem(objectivesStorageKey);
     if (!rawObjectives) return [];
     const parsed = JSON.parse(rawObjectives) as StoredStrategicObjective[];
-    return Array.isArray(parsed) ? parsed.map(normalizeObjective).slice(0, 3) : [];
+    if (!Array.isArray(parsed)) return [];
+    const migratedObjectives = parsed.map(normalizeObjective).slice(0, 3);
+    localStorage.setItem(objectivesStorageKey, JSON.stringify(migratedObjectives));
+    return migratedObjectives;
+  } catch {
+    return [];
+  }
+};
+
+const loadMetrics = (): StrategicObjectiveMetric[] => {
+  try {
+    const raw = localStorage.getItem(metricsStorageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const loadLeanBusinessCases = (): LeanBusinessCase[] => {
+  try {
+    const raw = localStorage.getItem(lbcStorageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const loadMembers = (): WorkspaceMember[] => {
+  try {
+    const raw = localStorage.getItem(membersStorageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const loadInvites = (): WorkspaceInvite[] => {
+  try {
+    const raw = localStorage.getItem(invitesStorageKey);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
@@ -170,6 +344,10 @@ function PrototypeHeader({ workspace }: { workspace: Workspace | null }) {
               <Button variant="ghost" className="rounded-sm text-slate-200 hover:bg-slate-800 hover:text-white" onClick={() => navigateTo('/workspace-onboarding')}>
                 Workspace
               </Button>
+              <Button variant="ghost" className="rounded-sm text-slate-200 hover:bg-slate-800 hover:text-white" onClick={() => navigateTo('/workspace-settings')}>
+                <Users className="mr-2 h-4 w-4" />
+                Members
+              </Button>
             </>
           )}
         </nav>
@@ -187,10 +365,11 @@ function PrototypeShell({ workspace, children }: { workspace: Workspace | null; 
   );
 }
 
-function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+function Field({ id, label, helper, children }: { id: string; label: string; helper?: string; children: ReactNode }) {
   return (
     <div className="space-y-2">
       <Label htmlFor={id} className="text-slate-200">{label}</Label>
+      {helper && <p className="text-xs leading-relaxed text-slate-400">{helper}</p>}
       {children}
     </div>
   );
@@ -242,7 +421,7 @@ function AuthScreen({ mode, workspace }: { mode: 'login' | 'signup'; workspace: 
               <Button onClick={continueAfterAuth} className="w-full rounded-sm bg-lime-500 text-black hover:bg-lime-400">
                 Continue to Prototype
               </Button>
-              <Button type="button" variant="outline" onClick={() => setShowGooglePrompt(false)} className="w-full rounded-sm border-slate-600 text-slate-200 hover:bg-slate-800">
+              <Button type="button" onClick={() => setShowGooglePrompt(false)} className="w-full rounded-sm bg-lime-500 text-black hover:bg-lime-400">
                 Back to Sign In
               </Button>
             </CardContent>
@@ -316,9 +495,14 @@ function WorkspaceOnboardingScreen({
 }) {
   const [form, setForm] = useState({
     name: workspace?.name || '',
+    legalName: workspace?.legalName || '',
     description: workspace?.description || '',
-    businessUnit: workspace?.businessUnit || '',
     industry: workspace?.industry || '',
+    companySize: workspace?.companySize || '',
+    headquartersRegion: workspace?.headquartersRegion || '',
+    website: workspace?.website || '',
+    logoUrl: workspace?.logoUrl || '',
+    annualRevenue: workspace?.annualRevenue?.toString() || '',
   });
 
   const updateField = (field: keyof typeof form, value: string) => {
@@ -327,13 +511,20 @@ function WorkspaceOnboardingScreen({
 
   const submitWorkspace = (event: FormEvent) => {
     event.preventDefault();
+    const now = new Date().toISOString();
     const nextWorkspace: Workspace = {
       id: workspace?.id || createId('workspace'),
       name: form.name.trim() || 'Prototype Workspace',
+      legalName: form.legalName,
       description: form.description,
-      businessUnit: form.businessUnit,
       industry: form.industry,
-      createdAt: workspace?.createdAt || new Date().toISOString(),
+      companySize: form.companySize as Workspace['companySize'],
+      headquartersRegion: form.headquartersRegion,
+      website: form.website,
+      logoUrl: form.logoUrl,
+      annualRevenue: form.annualRevenue ? parseFloat(form.annualRevenue) : null,
+      createdAt: workspace?.createdAt || now,
+      updatedAt: now,
     };
     localStorage.setItem(workspaceStorageKey, JSON.stringify(nextWorkspace));
     setWorkspace(nextWorkspace);
@@ -347,28 +538,56 @@ function WorkspaceOnboardingScreen({
           <Badge className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Default admin setup</Badge>
           <h1 className="retro-heading mt-4 text-3xl text-cyan-300">Workspace Onboarding</h1>
           <p className="mt-3 max-w-3xl text-slate-300">
-            Create a lightweight workspace for the front-end prototype. The first user who creates the workspace is treated as the default admin for now.
+            Create a company profile workspace for the front-end prototype. The first user who creates the workspace is treated as the default admin for now.
           </p>
         </div>
         <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
           <CardContent className="pt-6">
             <form className="grid gap-5" onSubmit={submitWorkspace}>
-              <Field id="workspace-name" label="Workspace / Organization Name">
-                <Input id="workspace-name" value={form.name} onChange={(event) => updateField('name', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
-              </Field>
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field id="workspace-name" label="Company / Initiative Name">
+                  <Input id="workspace-name" value={form.name} onChange={(event) => updateField('name', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+                <Field id="legal-name" label="Legal Name">
+                  <Input id="legal-name" value={form.legalName} onChange={(event) => updateField('legalName', event.target.value)} placeholder="Optional" className="border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+              </div>
               <Field id="workspace-description" label="Workspace Description">
                 <Textarea id="workspace-description" value={form.description} onChange={(event) => updateField('description', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
               </Field>
               <div className="grid gap-5 md:grid-cols-2">
-                <Field id="business-unit" label="Company or Business Unit">
-                  <Input id="business-unit" value={form.businessUnit} onChange={(event) => updateField('businessUnit', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
                 <Field id="industry" label="Primary Industry">
                   <Input id="industry" value={form.industry} onChange={(event) => updateField('industry', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
                 </Field>
+                <Field id="company-size" label="Company Size">
+                  <Select value={form.companySize} onValueChange={(value) => updateField('companySize', value)}>
+                    <SelectTrigger id="company-size" className="border-slate-700 bg-slate-950 text-slate-100">
+                      <SelectValue placeholder="Select company size" />
+                    </SelectTrigger>
+                    <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                      {companySizeOptions.map((size) => <SelectItem key={size} value={size}>{size} employees</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field id="headquarters-region" label="Headquarters Region">
+                  <Input id="headquarters-region" value={form.headquartersRegion} onChange={(event) => updateField('headquartersRegion', event.target.value)} placeholder="Optional" className="border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+                <Field id="website" label="Website">
+                  <Input id="website" value={form.website} onChange={(event) => updateField('website', event.target.value)} placeholder="https://example.com" className="border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+              </div>
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field id="logo-url" label="Logo URL">
+                  <Input id="logo-url" value={form.logoUrl} onChange={(event) => updateField('logoUrl', event.target.value)} placeholder="Optional" className="border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
+                <Field id="annual-revenue" label="Annual Revenue">
+                  <Input id="annual-revenue" type="number" value={form.annualRevenue} onChange={(event) => updateField('annualRevenue', event.target.value)} placeholder="Optional" className="border-slate-700 bg-slate-950 text-slate-100" />
+                </Field>
               </div>
               <div className="flex justify-end">
-                <Button type="submit" className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Create Workspace</Button>
+                <Button type="submit" className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">{workspace ? 'Update Workspace' : 'Create Workspace'}</Button>
               </div>
             </form>
           </CardContent>
@@ -381,9 +600,15 @@ function WorkspaceOnboardingScreen({
 function DashboardScreen({
   workspace,
   objectives,
+  leanBusinessCases,
+  members,
+  invites,
 }: {
   workspace: Workspace | null;
   objectives: StrategicObjective[];
+  leanBusinessCases: LeanBusinessCase[];
+  members: WorkspaceMember[];
+  invites: WorkspaceInvite[];
 }) {
   const hasReachedLimit = objectives.length >= 3;
 
@@ -398,21 +623,37 @@ function DashboardScreen({
             </CardHeader>
             <CardContent className="space-y-5">
               <p className="leading-relaxed text-slate-300">
-                Strategic objectives represent the company’s primary goals and provide the foundation for Lean Business Cases, initiatives, value streams, product discovery, and conceptual architecture.
+                Strategic objectives represent the company's primary goals and provide the foundation for Lean Business Cases, initiatives, value streams, product discovery, and conceptual architecture.
               </p>
               <div className="rounded-md border border-lime-500/40 bg-lime-400/10 p-4 text-sm text-lime-100">
-                Prototype version: each workspace can define up to three strategic objectives that represent the company’s primary goals.
+                Prototype version: each workspace can define up to three strategic objectives that represent the company's primary goals.
               </div>
             </CardContent>
           </Card>
           <Card className="rounded-md border-fuchsia-500/50 bg-slate-900 text-slate-100">
             <CardHeader>
               <CardTitle className="retro-heading text-fuchsia-300">Workspace</CardTitle>
-              <CardDescription className="text-slate-300">{workspace?.businessUnit || 'Business unit not set'}</CardDescription>
+              <CardDescription className="text-slate-300">{workspace?.industry || 'Primary industry not set'}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-slate-300">
               <p>{workspace?.description || 'Use onboarding to add a workspace description.'}</p>
-              <p className="text-cyan-300">{workspace?.industry || 'Primary industry not set'}</p>
+              {workspace?.companySize && <p className="text-cyan-300">{workspace.companySize} employees</p>}
+              {workspace?.headquartersRegion && <p className="text-slate-400">{workspace.headquartersRegion}</p>}
+              <Separator className="bg-slate-700" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-fuchsia-400" />
+                  <span className="text-slate-200">{members.length} member{members.length !== 1 ? 's' : ''}</span>
+                  {invites.filter(i => i.status === 'pending').length > 0 && (
+                    <Badge className="rounded-sm bg-fuchsia-500/20 text-fuchsia-300 text-[10px] hover:bg-fuchsia-500/20">
+                      {invites.filter(i => i.status === 'pending').length} pending
+                    </Badge>
+                  )}
+                </div>
+                <Button variant="ghost" onClick={() => navigateTo('/workspace-settings')} className="h-7 rounded-sm px-2 text-xs text-fuchsia-300 hover:bg-fuchsia-500/20 hover:text-fuchsia-200">
+                  Manage
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -451,7 +692,7 @@ function DashboardScreen({
           )}
           <div className="grid gap-5 lg:grid-cols-3">
             {[0, 1, 2].map((slotIndex) => (
-              <ObjectiveSlot key={slotIndex} slotIndex={slotIndex} objective={objectives[slotIndex]} />
+              <ObjectiveSlot key={slotIndex} slotIndex={slotIndex} objective={objectives[slotIndex]} leanBusinessCases={objectives[slotIndex] ? leanBusinessCases.filter(c => c.strategicObjectiveId === objectives[slotIndex].id) : []} />
             ))}
           </div>
         </section>
@@ -460,7 +701,7 @@ function DashboardScreen({
   );
 }
 
-function ObjectiveSlot({ slotIndex, objective }: { slotIndex: number; objective?: StrategicObjective }) {
+function ObjectiveSlot({ slotIndex, objective, leanBusinessCases }: { slotIndex: number; objective?: StrategicObjective; leanBusinessCases: LeanBusinessCase[] }) {
   if (!objective) {
     return (
       <Card className="rounded-md border-dashed border-slate-600 bg-slate-900/70 text-slate-100">
@@ -469,7 +710,7 @@ function ObjectiveSlot({ slotIndex, objective }: { slotIndex: number; objective?
           <CardDescription className="text-slate-400">No strategic objective created yet</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button variant="outline" onClick={() => navigateTo('/strategic-objectives')} className="w-full rounded-sm border-cyan-500 text-cyan-200 hover:bg-cyan-500 hover:text-black">
+          <Button onClick={() => navigateTo('/strategic-objectives')} className="w-full rounded-sm bg-lime-500 text-black hover:bg-lime-400">
             Create Objective
           </Button>
         </CardContent>
@@ -477,43 +718,60 @@ function ObjectiveSlot({ slotIndex, objective }: { slotIndex: number; objective?
     );
   }
 
+  const hasReachedCaseLimit = leanBusinessCases.length >= 10;
+
   return (
     <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle className="retro-heading text-cyan-300">{objective.title}</CardTitle>
+            <CardTitle className="retro-heading text-cyan-300">{objective.strategicInitiativeName}</CardTitle>
             <CardDescription className="mt-1 text-slate-300">Strategic Objective {slotIndex + 1}</CardDescription>
           </div>
-          <Badge className="rounded-sm bg-slate-800 text-slate-200 hover:bg-slate-800">{objective.status}</Badge>
+          <Badge className="rounded-sm bg-slate-800 text-slate-200 hover:bg-slate-800">{getLabel(objective.status, objectiveStatusOptions) || objective.status}</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <dl className="grid gap-3 text-slate-300">
           <div>
-            <dt className="text-xs uppercase text-slate-500">Strategic Value Type</dt>
-            <dd className="text-slate-100">{objective.strategicValueType || 'Not set'}</dd>
+            <dt className="text-xs uppercase text-slate-500">Executive Objective</dt>
+            <dd className="text-slate-100">{objective.executiveObjective || 'Not set'}</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase text-slate-500">Target Outcome</dt>
-            <dd className="text-slate-100">{objective.targetOutcome || 'Not set'}</dd>
+            <dt className="text-xs uppercase text-slate-500">Strategic Value Category</dt>
+            <dd className="text-slate-100">{getLabel(objective.strategicValueCategory, strategicValueCategoryOptions) || 'Not set'}</dd>
           </div>
           <div>
-            <dt className="text-xs uppercase text-slate-500">Target Metric</dt>
-            <dd className="text-slate-100">{objective.targetMetric || 'Not set'}</dd>
+            <dt className="text-xs uppercase text-slate-500">Expected Business Outcome</dt>
+            <dd className="text-slate-100">{objective.expectedBusinessOutcome || 'Not set'}</dd>
           </div>
           <div>
             <dt className="text-xs uppercase text-slate-500">Target Implementation Year</dt>
             <dd className="text-slate-100">{objective.targetImplementationYear || 'Not set'}</dd>
           </div>
+          <div>
+            <dt className="text-xs uppercase text-slate-500">Lean Business Cases</dt>
+            <dd className="text-slate-100">{leanBusinessCases.length} of 10</dd>
+          </div>
         </dl>
+        {leanBusinessCases.length > 0 && (
+          <div className="space-y-1">
+            {leanBusinessCases.map(lbc => (
+              <button key={lbc.id} onClick={() => navigateTo('/lean-business-case', { id: lbc.id, objectiveId: objective.id })} className="flex w-full items-center justify-between rounded border border-slate-700 bg-slate-950 p-2 text-left text-xs hover:border-fuchsia-400 transition">
+                <span className="text-slate-200 truncate">{lbc.title}</span>
+                <Badge className="ml-2 rounded-sm bg-slate-800 text-slate-300 text-[10px] hover:bg-slate-800">{getLabel(lbc.status, caseStatusOptions)}</Badge>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="grid gap-2">
-          <Button variant="outline" onClick={() => navigateTo('/strategic-objectives', { id: objective.id })} className="rounded-sm border-cyan-500 text-cyan-200 hover:bg-cyan-500 hover:text-black">
+          <Button onClick={() => navigateTo('/strategic-objectives', { id: objective.id })} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">
             <Pencil className="mr-2 h-4 w-4" />
             Edit
           </Button>
-          <Button onClick={() => navigateTo('/lean-business-case-placeholder', { objectiveId: objective.id })} className="rounded-sm bg-fuchsia-500 text-white hover:bg-fuchsia-400">
-            Next: Build Lean Business Case
+          <Button disabled={hasReachedCaseLimit} onClick={() => navigateTo('/lean-business-case', { objectiveId: objective.id })} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">
+            <Plus className="mr-2 h-4 w-4" />
+            {hasReachedCaseLimit ? 'Case Limit Reached' : 'Build Lean Business Case'}
           </Button>
         </div>
       </CardContent>
@@ -525,33 +783,86 @@ function StrategicObjectiveFormScreen({
   workspace,
   objectives,
   setObjectives,
+  allMetrics,
+  setAllMetrics,
 }: {
   workspace: Workspace | null;
   objectives: StrategicObjective[];
   setObjectives: (objectives: StrategicObjective[]) => void;
+  allMetrics: StrategicObjectiveMetric[];
+  setAllMetrics: (metrics: StrategicObjectiveMetric[]) => void;
 }) {
   const editId = getRouteParams().get('id');
   const existingObjective = objectives.find((objective) => objective.id === editId);
   const [form, setForm] = useState({ ...defaultObjectiveForm, ...existingObjective });
+  const [metrics, setMetrics] = useState<StrategicObjectiveMetric[]>(
+    editId ? allMetrics.filter(m => m.strategicObjectiveId === editId) : []
+  );
   const [error, setError] = useState('');
+  const [activeStep, setActiveStep] = useState(0);
   const isEditing = Boolean(existingObjective);
   const hasReachedLimit = objectives.length >= 3 && !isEditing;
+  const activeRequiredFields = [
+    ['strategicInitiativeName', 'Strategic Initiative Name'],
+    ['executiveObjective', 'Executive Objective'],
+    ['strategicValueCategory', 'Strategic Value Category'],
+    ['problemOpportunityStatement', 'Problem or Opportunity Statement'],
+    ['valueHypothesis', 'Value Hypothesis'],
+  ] as const;
+  const missingActiveFields = activeRequiredFields
+    .filter(([field]) => !String(form[field] || '').trim())
+    .map(([, label]) => label);
+  const draftWarnings = form.status === 'draft' && missingActiveFields.length > 0
+    ? `Draft can be saved now. Complete these fields before marking Active: ${missingActiveFields.join(', ')}.`
+    : '';
 
   const updateField = (field: keyof typeof defaultObjectiveForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const addMetric = () => {
+    const now = new Date().toISOString();
+    setMetrics(prev => [...prev, {
+      id: createId('metric'),
+      strategicObjectiveId: editId || '',
+      workspaceId: '',
+      name: '',
+      metricCategory: '',
+      baselineValue: null,
+      targetValue: null,
+      unit: '',
+      timeframe: '',
+      createdAt: now,
+      updatedAt: now,
+    }]);
+  };
+
+  const updateMetric = (metricId: string, field: keyof StrategicObjectiveMetric, value: string | number | null) => {
+    setMetrics(prev => prev.map(m => m.id === metricId ? { ...m, [field]: value, updatedAt: new Date().toISOString() } : m));
+  };
+
+  const removeMetric = (metricId: string) => {
+    setMetrics(prev => prev.filter(m => m.id !== metricId));
   };
 
   const submitObjective = (event: FormEvent) => {
     event.preventDefault();
     setError('');
 
-    if (!form.title.trim() || !form.objectiveStatement.trim()) {
-      setError('Strategic Objective Title and Objective Statement are required.');
+    if (!form.strategicInitiativeName.trim()) {
+      setError('Strategic Initiative Name is required before saving a draft.');
+      setActiveStep(0);
       return;
     }
 
     if (form.targetImplementationYear && !/^\d{4}$/.test(form.targetImplementationYear)) {
       setError('Target Implementation Year must be a four-digit year, such as 2026.');
+      setActiveStep(0);
+      return;
+    }
+
+    if (form.status === 'active' && missingActiveFields.length > 0) {
+      setError(`Complete these fields before marking the objective Active: ${missingActiveFields.join(', ')}.`);
       return;
     }
 
@@ -561,11 +872,12 @@ function StrategicObjectiveFormScreen({
     }
 
     const now = new Date().toISOString();
+    const objectiveId = existingObjective?.id || createId('objective');
     const savedObjective: StrategicObjective = {
       ...form,
-      id: existingObjective?.id || createId('objective'),
-      title: form.title.trim(),
-      objectiveStatement: form.objectiveStatement.trim(),
+      id: objectiveId,
+      workspaceId: workspace?.id || '',
+      strategicInitiativeName: form.strategicInitiativeName.trim(),
       createdAt: existingObjective?.createdAt || now,
       updatedAt: now,
     };
@@ -574,10 +886,18 @@ function StrategicObjectiveFormScreen({
       ? objectives.map((objective) => (objective.id === savedObjective.id ? savedObjective : objective))
       : [...objectives, savedObjective].slice(0, 3);
 
+    const updatedMetrics = metrics.map(m => ({ ...m, strategicObjectiveId: objectiveId }));
+    const otherMetrics = allMetrics.filter(m => m.strategicObjectiveId !== objectiveId);
+    const nextMetrics = [...otherMetrics, ...updatedMetrics];
+
     localStorage.setItem(objectivesStorageKey, JSON.stringify(nextObjectives));
+    localStorage.setItem(metricsStorageKey, JSON.stringify(nextMetrics));
     setObjectives(nextObjectives);
+    setAllMetrics(nextMetrics);
     navigateTo('/dashboard');
   };
+
+  const valueCategoryDescription = strategicValueCategoryOptions.find(o => o.value === form.strategicValueCategory)?.description;
 
   return (
     <PrototypeShell workspace={workspace}>
@@ -586,9 +906,9 @@ function StrategicObjectiveFormScreen({
           <div>
             <Badge className="rounded-sm bg-cyan-500 text-black hover:bg-cyan-400">Step 1</Badge>
             <h1 className="retro-heading mt-4 text-3xl text-cyan-300">{isEditing ? 'Edit Strategic Objective' : 'Create Strategic Objective'}</h1>
-            <p className="mt-3 max-w-3xl text-slate-300">Define the strategic intent that will later anchor Lean Business Cases, initiatives, value streams, product discovery, and conceptual architecture.</p>
+            <p className="mt-3 max-w-3xl text-slate-300">Complete a guided strategic objective intake before building a Lean Business Case.</p>
           </div>
-          <Button variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm border-slate-600 text-slate-200 hover:bg-slate-800">Back to Dashboard</Button>
+          <Button onClick={() => navigateTo('/dashboard')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Back to Dashboard</Button>
         </div>
 
         {hasReachedLimit && (
@@ -599,79 +919,238 @@ function StrategicObjectiveFormScreen({
         {error && (
           <div className="rounded-md border border-red-400/60 bg-red-500/10 p-4 text-sm text-red-100">{error}</div>
         )}
+        {draftWarnings && !error && (
+          <div className="rounded-md border border-yellow-400/50 bg-yellow-400/10 p-4 text-sm text-yellow-100">{draftWarnings}</div>
+        )}
 
         <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
           <CardContent className="pt-6">
             <form className="grid gap-5" onSubmit={submitObjective}>
-              <div className="grid gap-5 md:grid-cols-2">
-                <Field id="objective-title" label="Strategic Objective Title">
-                  <Input id="objective-title" value={form.title} onChange={(event) => updateField('title', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-                <Field id="company-goal" label="Company Goal">
-                  <Input id="company-goal" value={form.companyGoal} onChange={(event) => updateField('companyGoal', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
+              <div className="grid gap-3 md:grid-cols-3">
+                {['Define Strategic Objectives', 'Define Business Problem or Opportunity', 'Value Hypothesis & Metrics'].map((step, index) => (
+                  <button
+                    key={step}
+                    type="button"
+                    onClick={() => setActiveStep(index)}
+                    className={`rounded-md border p-4 text-left transition ${activeStep === index ? 'border-lime-400 bg-lime-400/15 text-lime-100' : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-cyan-500'}`}
+                  >
+                    <div className="retro-heading mb-2 text-xs">Step {index + 1}</div>
+                    <div className="text-sm font-medium">{step}</div>
+                  </button>
+                ))}
               </div>
 
-              <Field id="objective-statement" label="Objective Statement">
-                <Textarea id="objective-statement" value={form.objectiveStatement} onChange={(event) => updateField('objectiveStatement', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
-              </Field>
+              {activeStep === 0 && (
+                <section className="grid gap-5">
+                  <div>
+                    <h2 className="retro-heading text-xl text-cyan-300">Step One: Define Strategic Objectives</h2>
+                    <p className="mt-2 text-sm text-slate-300">This section captures leadership intent and defines the strategic initiative identity.</p>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="strategic-initiative-name" label="Strategic Initiative Name" helper="What is the name of the strategic initiative?">
+                      <Input id="strategic-initiative-name" value={form.strategicInitiativeName} onChange={(event) => updateField('strategicInitiativeName', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="executive-objective" label="Executive Objective" helper="What executive objective is driving this initiative?">
+                      <Input id="executive-objective" value={form.executiveObjective} onChange={(event) => updateField('executiveObjective', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="strategic-value-category" label="Strategic Value Category" helper="Which strategic value category does this initiative support?">
+                      <Select value={form.strategicValueCategory} onValueChange={(value) => updateField('strategicValueCategory', value)}>
+                        <SelectTrigger id="strategic-value-category" className="border-slate-700 bg-slate-950 text-slate-100">
+                          <SelectValue placeholder="Select a value category" />
+                        </SelectTrigger>
+                        <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                          {strategicValueCategoryOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      {valueCategoryDescription && (
+                        <p className="rounded-md border border-cyan-500/30 bg-cyan-400/10 p-3 text-xs text-cyan-100">
+                          {valueCategoryDescription}
+                        </p>
+                      )}
+                    </Field>
+                    <Field id="expected-business-outcome" label="Expected Business Outcome" helper="What business outcome is leadership expecting?">
+                      <Input id="expected-business-outcome" value={form.expectedBusinessOutcome} onChange={(event) => updateField('expectedBusinessOutcome', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="financial-impact" label="Financial Impact" helper="What financial impact is expected or targeted?">
+                      <Textarea id="financial-impact" value={form.financialImpact} onChange={(event) => updateField('financialImpact', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="urgency-rationale" label="Urgency / Timing Rationale" helper="Why is this initiative important now?">
+                      <Textarea id="urgency-rationale" value={form.urgencyRationale} onChange={(event) => updateField('urgencyRationale', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-3">
+                    <Field id="target-implementation-year" label="Target Implementation Year">
+                      <Input id="target-implementation-year" inputMode="numeric" value={form.targetImplementationYear} onChange={(event) => updateField('targetImplementationYear', event.target.value)} placeholder="Example: 2026" className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="target-implementation-start-date" label="Target Implementation Start Date">
+                      <Input id="target-implementation-start-date" type="date" value={form.targetImplementationStartDate} onChange={(event) => updateField('targetImplementationStartDate', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="target-implementation-end-date" label="Target Implementation End Date">
+                      <Input id="target-implementation-end-date" type="date" value={form.targetImplementationEndDate} onChange={(event) => updateField('targetImplementationEndDate', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                  </div>
+                </section>
+              )}
 
-              <div className="grid gap-5 md:grid-cols-3">
-                <Field id="strategic-value-type" label="Strategic Value Type">
-                  <Select value={form.strategicValueType} onValueChange={(value) => updateField('strategicValueType', value)}>
-                    <SelectTrigger id="strategic-value-type" className="border-slate-700 bg-slate-950 text-slate-100">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
-                      {strategicValueTypes.map((valueType) => <SelectItem key={valueType} value={valueType}>{valueType}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field id="target-implementation-year" label="Target Implementation Year">
-                  <Input id="target-implementation-year" inputMode="numeric" value={form.targetImplementationYear} onChange={(event) => updateField('targetImplementationYear', event.target.value)} placeholder="Example: 2026" className="border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-                <Field id="status" label="Status">
-                  <Select value={form.status} onValueChange={(value) => updateField('status', value)}>
-                    <SelectTrigger id="status" className="border-slate-700 bg-slate-950 text-slate-100">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
-                      {objectiveStatuses.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
+              {activeStep === 1 && (
+                <section className="grid gap-5">
+                  <div>
+                    <h2 className="retro-heading text-xl text-cyan-300">Step Two: Define Business Problem or Opportunity</h2>
+                    <p className="mt-2 text-sm text-slate-300">This section captures the business need, current-state limitation, stakeholder impact, and value-stream direction.</p>
+                  </div>
+                  <div className="rounded-md border border-cyan-500/40 bg-cyan-400/10 p-4 text-sm text-cyan-100">
+                    This step supports traceability between executive intent, current-state limitations, impacted stakeholders, and downstream business architecture.
+                  </div>
+                  <Field id="problem-opportunity-statement" label="Problem or Opportunity Statement" helper="What problem or opportunity is this initiative trying to address?">
+                    <Textarea id="problem-opportunity-statement" value={form.problemOpportunityStatement} onChange={(event) => updateField('problemOpportunityStatement', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                  </Field>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="cost-of-inaction" label="Cost of Inaction" helper="What happens if the organization does nothing?">
+                      <Textarea id="cost-of-inaction" value={form.costOfInaction} onChange={(event) => updateField('costOfInaction', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="current-limitation" label="Current Process, System, or Operating Model Limitation" helper="What current process, system, or operating model is limiting the business?">
+                      <Textarea id="current-limitation" value={form.currentLimitation} onChange={(event) => updateField('currentLimitation', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="impacted-teams" label="Impacted Departments / Business Units / Teams" helper="Which departments, business units, or teams are impacted?">
+                      <Textarea id="impacted-teams" value={form.impactedTeams} onChange={(event) => updateField('impactedTeams', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="problem-type" label="Problem Type" helper="Is this initiative solving a customer problem, an internal business problem, or both?">
+                      <Select value={form.problemType} onValueChange={(value) => updateField('problemType', value)}>
+                        <SelectTrigger id="problem-type" className="border-slate-700 bg-slate-950 text-slate-100">
+                          <SelectValue placeholder="Select problem type" />
+                        </SelectTrigger>
+                        <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                          {problemTypeOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+                </section>
+              )}
 
-              <div className="grid gap-5 md:grid-cols-2">
-                <Field id="target-outcome" label="Target Outcome">
-                  <Input id="target-outcome" value={form.targetOutcome} onChange={(event) => updateField('targetOutcome', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-                <Field id="target-metric" label="Target Metric">
-                  <Input id="target-metric" value={form.targetMetric} onChange={(event) => updateField('targetMetric', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-              </div>
+              {activeStep === 2 && (
+                <section className="grid gap-5">
+                  <div>
+                    <h2 className="retro-heading text-xl text-cyan-300">Step Three: Value Hypothesis & Metrics</h2>
+                    <p className="mt-2 text-sm text-slate-300">This section defines the expected value, measurement approach, and measurable success metrics.</p>
+                  </div>
+                  <Field id="value-hypothesis" label="Value Hypothesis" helper="What value will this initiative create?">
+                    <Textarea id="value-hypothesis" value={form.valueHypothesis} onChange={(event) => updateField('valueHypothesis', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                  </Field>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="value-measurement-approach" label="Value Measurement Approach" helper="How will the value be measured?">
+                      <Textarea id="value-measurement-approach" value={form.valueMeasurementApproach} onChange={(event) => updateField('valueMeasurementApproach', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="expected-value-type" label="Expected Value Type" helper="Is the expected value financial, operational, or mixed?">
+                      <Select value={form.expectedValueType} onValueChange={(value) => updateField('expectedValueType', value)}>
+                        <SelectTrigger id="expected-value-type" className="border-slate-700 bg-slate-950 text-slate-100">
+                          <SelectValue placeholder="Select expected value type" />
+                        </SelectTrigger>
+                        <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                          {expectedValueTypeOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="value-realization-timeframe" label="Value Realization Timeframe" helper="What timeframe is expected for value realization?">
+                      <Input id="value-realization-timeframe" value={form.valueRealizationTimeframe} onChange={(event) => updateField('valueRealizationTimeframe', event.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                    </Field>
+                    <Field id="status" label="Status">
+                      <Select value={form.status} onValueChange={(value) => updateField('status', value)}>
+                        <SelectTrigger id="status" className="border-slate-700 bg-slate-950 text-slate-100">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                          {objectiveStatusOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
 
-              <div className="grid gap-5 md:grid-cols-2">
-                <Field id="current-state-summary" label="Current State Summary">
-                  <Textarea id="current-state-summary" value={form.currentStateSummary} onChange={(event) => updateField('currentStateSummary', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-                <Field id="desired-future-state" label="Desired Future State">
-                  <Textarea id="desired-future-state" value={form.desiredFutureState} onChange={(event) => updateField('desiredFutureState', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-              </div>
+                  <Separator className="bg-slate-700" />
 
-              <div className="grid gap-5 md:grid-cols-2">
-                <Field id="business-problem" label="Business Problem">
-                  <Textarea id="business-problem" value={form.businessProblem} onChange={(event) => updateField('businessProblem', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-                <Field id="strategic-rationale" label="Strategic Rationale">
-                  <Textarea id="strategic-rationale" value={form.strategicRationale} onChange={(event) => updateField('strategicRationale', event.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
-                </Field>
-              </div>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="retro-heading text-lg text-cyan-300">Strategic Objective Metrics</h3>
+                        <p className="mt-1 text-xs text-slate-400">Define measurable goals with baseline and target values (integers).</p>
+                      </div>
+                      <Button type="button" variant="outline" onClick={addMetric} className="rounded-sm border-lime-500 text-lime-300 hover:bg-lime-500 hover:text-black">
+                        <Plus className="mr-1 h-4 w-4" />
+                        Add Metric
+                      </Button>
+                    </div>
 
-              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                <Button type="button" variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm border-slate-600 text-slate-200 hover:bg-slate-800">Cancel</Button>
-                <Button type="submit" disabled={hasReachedLimit} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Save Objective</Button>
+                    {metrics.length === 0 && (
+                      <div className="mt-4 rounded-md border border-dashed border-slate-600 p-6 text-center text-sm text-slate-400">
+                        No metrics defined yet. Add a metric to track measurable success goals.
+                      </div>
+                    )}
+
+                    <div className="mt-4 space-y-4">
+                      {metrics.map((metric, index) => (
+                        <div key={metric.id} className="rounded-md border border-slate-700 bg-slate-950 p-4">
+                          <div className="mb-3 flex items-center justify-between">
+                            <span className="retro-heading text-xs text-cyan-400">Metric {index + 1}</span>
+                            <Button type="button" variant="ghost" onClick={() => removeMetric(metric.id)} className="h-7 w-7 p-0 text-red-400 hover:bg-red-500/20 hover:text-red-300">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div className="grid gap-4">
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <Field id={`metric-name-${metric.id}`} label="Metric Name">
+                                <Input id={`metric-name-${metric.id}`} value={metric.name} onChange={(e) => updateMetric(metric.id, 'name', e.target.value)} placeholder='e.g. "Structural cost savings"' className="border-slate-700 bg-slate-900 text-slate-100" />
+                              </Field>
+                              <Field id={`metric-category-${metric.id}`} label="Category">
+                                <Select value={metric.metricCategory} onValueChange={(value) => updateMetric(metric.id, 'metricCategory', value)}>
+                                  <SelectTrigger id={`metric-category-${metric.id}`} className="border-slate-700 bg-slate-900 text-slate-100">
+                                    <SelectValue placeholder="Select category" />
+                                  </SelectTrigger>
+                                  <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                                    {metricCategoryOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </Field>
+                            </div>
+                            <div className="grid gap-4 md:grid-cols-4">
+                              <Field id={`metric-baseline-${metric.id}`} label="Baseline Value">
+                                <Input id={`metric-baseline-${metric.id}`} type="number" value={metric.baselineValue?.toString() ?? ''} onChange={(e) => updateMetric(metric.id, 'baselineValue', e.target.value ? parseInt(e.target.value) : null)} placeholder="Integer" className="border-slate-700 bg-slate-900 text-slate-100" />
+                              </Field>
+                              <Field id={`metric-target-${metric.id}`} label="Target Value">
+                                <Input id={`metric-target-${metric.id}`} type="number" value={metric.targetValue?.toString() ?? ''} onChange={(e) => updateMetric(metric.id, 'targetValue', e.target.value ? parseInt(e.target.value) : null)} placeholder="Integer" className="border-slate-700 bg-slate-900 text-slate-100" />
+                              </Field>
+                              <Field id={`metric-unit-${metric.id}`} label="Unit">
+                                <Input id={`metric-unit-${metric.id}`} value={metric.unit} onChange={(e) => updateMetric(metric.id, 'unit', e.target.value)} placeholder="USD | % | days" className="border-slate-700 bg-slate-900 text-slate-100" />
+                              </Field>
+                              <Field id={`metric-timeframe-${metric.id}`} label="Timeframe">
+                                <Input id={`metric-timeframe-${metric.id}`} value={metric.timeframe} onChange={(e) => updateMetric(metric.id, 'timeframe', e.target.value)} placeholder="By FY2025" className="border-slate-700 bg-slate-900 text-slate-100" />
+                              </Field>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              <div className="flex flex-col-reverse gap-3 border-t border-slate-700 pt-5 sm:flex-row sm:justify-between">
+                <Button type="button" onClick={() => navigateTo('/dashboard')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Cancel</Button>
+                <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                  <Button type="button" disabled={activeStep === 0} onClick={() => setActiveStep((step) => Math.max(step - 1, 0))} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Back</Button>
+                  {activeStep < 2 ? (
+                    <Button type="button" onClick={() => setActiveStep((step) => Math.min(step + 1, 2))} className="rounded-sm bg-cyan-500 text-black hover:bg-cyan-400">Next</Button>
+                  ) : (
+                    <Button type="submit" disabled={hasReachedLimit} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Save Objective</Button>
+                  )}
+                </div>
               </div>
             </form>
           </CardContent>
@@ -681,38 +1160,494 @@ function StrategicObjectiveFormScreen({
   );
 }
 
-function LeanBusinessCasePlaceholderScreen({
+function WorkspaceSettingsScreen({
   workspace,
-  objectives,
+  members,
+  setMembers,
+  invites,
+  setInvites,
 }: {
   workspace: Workspace | null;
-  objectives: StrategicObjective[];
+  members: WorkspaceMember[];
+  setMembers: (members: WorkspaceMember[]) => void;
+  invites: WorkspaceInvite[];
+  setInvites: (invites: WorkspaceInvite[]) => void;
 }) {
-  const objectiveId = getRouteParams().get('objectiveId');
-  const selectedObjective = objectives.find((objective) => objective.id === objectiveId);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteError, setInviteError] = useState('');
+  const [inviteSuccess, setInviteSuccess] = useState('');
+
+  const pendingInvites = invites.filter(i => i.status === 'pending');
+  const acceptedInvites = invites.filter(i => i.status === 'accepted');
+
+  const sendInvite = (event: FormEvent) => {
+    event.preventDefault();
+    setInviteError('');
+    setInviteSuccess('');
+
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email) {
+      setInviteError('Email is required.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setInviteError('Please enter a valid email address.');
+      return;
+    }
+    if (invites.some(i => i.invitedEmail === email && i.status === 'pending')) {
+      setInviteError('An invite is already pending for this email.');
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const newInvite: WorkspaceInvite = {
+      id: createId('invite'),
+      workspaceId: workspace?.id || '',
+      invitedEmail: email,
+      invitedByUserId: '',
+      inviteToken: createId('token'),
+      status: 'pending',
+      expiresAt,
+      acceptedAt: null,
+    };
+
+    const nextInvites = [...invites, newInvite];
+    localStorage.setItem(invitesStorageKey, JSON.stringify(nextInvites));
+    setInvites(nextInvites);
+    setInviteEmail('');
+    setInviteSuccess(`Invite sent to ${email}`);
+  };
+
+  const acceptInvite = (inviteId: string) => {
+    const now = new Date().toISOString();
+    const invite = invites.find(i => i.id === inviteId);
+    if (!invite) return;
+
+    const updatedInvites = invites.map(i =>
+      i.id === inviteId ? { ...i, status: 'accepted' as InviteStatus, acceptedAt: now } : i
+    );
+    localStorage.setItem(invitesStorageKey, JSON.stringify(updatedInvites));
+    setInvites(updatedInvites);
+
+    const newMember: WorkspaceMember = {
+      id: createId('member'),
+      workspaceId: workspace?.id || '',
+      userId: createId('user'),
+      isAdmin: false,
+      joinedAt: now,
+    };
+    const nextMembers = [...members, newMember];
+    localStorage.setItem(membersStorageKey, JSON.stringify(nextMembers));
+    setMembers(nextMembers);
+  };
+
+  const revokeInvite = (inviteId: string) => {
+    const nextInvites = invites.filter(i => i.id !== inviteId);
+    localStorage.setItem(invitesStorageKey, JSON.stringify(nextInvites));
+    setInvites(nextInvites);
+  };
+
+  const removeMember = (memberId: string) => {
+    const nextMembers = members.filter(m => m.id !== memberId);
+    localStorage.setItem(membersStorageKey, JSON.stringify(nextMembers));
+    setMembers(nextMembers);
+  };
+
+  const toggleAdmin = (memberId: string) => {
+    const nextMembers = members.map(m =>
+      m.id === memberId ? { ...m, isAdmin: !m.isAdmin } : m
+    );
+    localStorage.setItem(membersStorageKey, JSON.stringify(nextMembers));
+    setMembers(nextMembers);
+  };
 
   return (
     <PrototypeShell workspace={workspace}>
-      <section className="mx-auto max-w-4xl">
-        <Card className="rounded-md border-fuchsia-500/50 bg-slate-900 text-slate-100">
+      <section className="mx-auto max-w-4xl space-y-6">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+          <div>
+            <Badge className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Workspace</Badge>
+            <h1 className="retro-heading mt-4 text-3xl text-cyan-300">Members & Invites</h1>
+            <p className="mt-3 max-w-3xl text-slate-300">Invite team members to collaborate in {workspace?.name || 'this workspace'}.</p>
+          </div>
+          <Button onClick={() => navigateTo('/dashboard')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Back to Dashboard</Button>
+        </div>
+
+        <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
           <CardHeader>
-            <Badge className="w-fit rounded-sm bg-fuchsia-500 text-white hover:bg-fuchsia-400">Coming next</Badge>
-            <CardTitle className="retro-heading pt-3 text-3xl text-fuchsia-300">Lean Business Case Placeholder</CardTitle>
+            <CardTitle className="retro-heading text-cyan-300">Invite Members</CardTitle>
+            <CardDescription className="text-slate-300">Send an invite by email. Invites expire after 7 days.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="flex gap-3" onSubmit={sendInvite}>
+              <div className="flex-1">
+                <Input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="colleague@company.com"
+                  className="border-slate-700 bg-slate-950 text-slate-100"
+                />
+              </div>
+              <Button type="submit" className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">
+                <Plus className="mr-2 h-4 w-4" />
+                Send Invite
+              </Button>
+            </form>
+            {inviteError && (
+              <div className="mt-3 rounded-md border border-red-400/60 bg-red-500/10 p-3 text-sm text-red-100">{inviteError}</div>
+            )}
+            {inviteSuccess && (
+              <div className="mt-3 rounded-md border border-lime-400/60 bg-lime-500/10 p-3 text-sm text-lime-100">{inviteSuccess}</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {pendingInvites.length > 0 && (
+          <Card className="rounded-md border-fuchsia-500/50 bg-slate-900 text-slate-100">
+            <CardHeader>
+              <CardTitle className="retro-heading text-fuchsia-300">Pending Invites</CardTitle>
+              <CardDescription className="text-slate-300">{pendingInvites.length} invite{pendingInvites.length !== 1 ? 's' : ''} awaiting response</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {pendingInvites.map(invite => (
+                  <div key={invite.id} className="flex items-center justify-between rounded border border-slate-700 bg-slate-950 p-3">
+                    <div>
+                      <p className="text-sm text-slate-200">{invite.invitedEmail}</p>
+                      <p className="text-xs text-slate-400">Expires {new Date(invite.expiresAt).toLocaleDateString()}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button onClick={() => acceptInvite(invite.id)} className="h-7 rounded-sm bg-lime-500 px-3 text-xs text-black hover:bg-lime-400">
+                        <Check className="mr-1 h-3 w-3" />
+                        Accept
+                      </Button>
+                      <Button variant="ghost" onClick={() => revokeInvite(invite.id)} className="h-7 rounded-sm px-2 text-xs text-red-400 hover:bg-red-500/20 hover:text-red-300">
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
+          <CardHeader>
+            <CardTitle className="retro-heading text-cyan-300">Workspace Members</CardTitle>
             <CardDescription className="text-slate-300">
-              {selectedObjective ? `Selected strategic objective: ${selectedObjective.title}` : 'Select a strategic objective from the dashboard to continue later.'}
+              {members.length === 0
+                ? 'No members yet. The workspace owner is the default admin.'
+                : `${members.length} member${members.length !== 1 ? 's' : ''} in this workspace`}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <p className="text-lg leading-relaxed text-slate-300">
-              Lean Business Case creation is the next prototype step. Future functionality will allow users to create Lean Business Cases under a selected strategic objective.
-            </p>
-            <div className="rounded-md border border-cyan-500/40 bg-cyan-400/10 p-4 text-sm text-cyan-100">
-              Since each workspace can define up to three strategic objectives, a future Lean Business Case flow will start by confirming which strategic objective owns the business case.
+          <CardContent>
+            <div className="mb-3 flex items-center justify-between rounded border border-lime-500/30 bg-lime-400/10 p-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-lime-500 text-sm font-semibold text-black">O</div>
+                <div>
+                  <p className="text-sm text-slate-200">Workspace Owner (You)</p>
+                  <p className="text-xs text-slate-400">Default admin</p>
+                </div>
+              </div>
+              <Badge className="rounded-sm bg-lime-500/20 text-lime-300 hover:bg-lime-500/20">Admin</Badge>
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row">
+
+            {members.length > 0 && (
+              <div className="space-y-2">
+                {members.map(member => (
+                  <div key={member.id} className="flex items-center justify-between rounded border border-slate-700 bg-slate-950 p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-fuchsia-500/30 text-sm text-fuchsia-300">M</div>
+                      <div>
+                        <p className="text-sm text-slate-200">Member</p>
+                        <p className="text-xs text-slate-400">Joined {new Date(member.joinedAt).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" onClick={() => toggleAdmin(member.id)} className="h-7 rounded-sm px-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-100">
+                        {member.isAdmin ? 'Remove Admin' : 'Make Admin'}
+                      </Button>
+                      {member.isAdmin && <Badge className="rounded-sm bg-lime-500/20 text-lime-300 hover:bg-lime-500/20">Admin</Badge>}
+                      <Button variant="ghost" onClick={() => removeMember(member.id)} className="h-7 rounded-sm px-2 text-xs text-red-400 hover:bg-red-500/20 hover:text-red-300">
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {acceptedInvites.length > 0 && (
+              <div className="mt-4">
+                <p className="mb-2 text-xs uppercase text-slate-500">Accepted Invites</p>
+                <div className="space-y-1">
+                  {acceptedInvites.map(invite => (
+                    <div key={invite.id} className="flex items-center justify-between rounded border border-slate-700/50 bg-slate-950/50 p-2 text-xs">
+                      <span className="text-slate-300">{invite.invitedEmail}</span>
+                      <Badge className="rounded-sm bg-slate-800 text-slate-400 text-[10px] hover:bg-slate-800">Accepted</Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+    </PrototypeShell>
+  );
+}
+
+function LeanBusinessCaseFormScreen({
+  workspace,
+  objectives,
+  leanBusinessCases,
+  setLeanBusinessCases,
+}: {
+  workspace: Workspace | null;
+  objectives: StrategicObjective[];
+  leanBusinessCases: LeanBusinessCase[];
+  setLeanBusinessCases: (cases: LeanBusinessCase[]) => void;
+}) {
+  const params = getRouteParams();
+  const editId = params.get('id');
+  const objectiveId = params.get('objectiveId');
+  const existingCase = leanBusinessCases.find((c) => c.id === editId);
+  const resolvedObjectiveId = existingCase?.strategicObjectiveId || objectiveId || '';
+  const selectedObjective = objectives.find((o) => o.id === resolvedObjectiveId);
+
+  const [form, setForm] = useState({ ...defaultLbcForm, ...existingCase });
+  const [error, setError] = useState('');
+  const [activeStep, setActiveStep] = useState(0);
+  const isEditing = Boolean(existingCase);
+  const casesForObjective = leanBusinessCases.filter(c => c.strategicObjectiveId === resolvedObjectiveId);
+  const hasReachedLimit = casesForObjective.length >= 10 && !isEditing;
+
+  const activeRequiredFields = [
+    ['title', 'Title'],
+    ['summary', 'Summary'],
+    ['problemOpportunityStatement', 'Problem or Opportunity Statement'],
+    ['valueHypothesis', 'Value Hypothesis'],
+    ['priority', 'Priority'],
+  ] as const;
+  const missingActiveFields = activeRequiredFields
+    .filter(([field]) => !String(form[field as keyof typeof form] || '').toString().trim())
+    .map(([, label]) => label);
+  const draftWarnings = form.status === 'draft' && missingActiveFields.length > 0
+    ? `Draft can be saved now. Complete these fields before marking Active: ${missingActiveFields.join(', ')}.`
+    : '';
+
+  const updateField = <K extends keyof typeof defaultLbcForm>(field: K, value: (typeof defaultLbcForm)[K]) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const submitCase = (event: FormEvent) => {
+    event.preventDefault();
+    setError('');
+
+    if (!selectedObjective) {
+      setError('A strategic objective must be selected.');
+      return;
+    }
+
+    if (!form.title.trim()) {
+      setError('Title is required before saving a draft.');
+      setActiveStep(0);
+      return;
+    }
+
+    if (form.status === 'active' && missingActiveFields.length > 0) {
+      setError(`Complete these fields before marking Active: ${missingActiveFields.join(', ')}.`);
+      return;
+    }
+
+    if (hasReachedLimit) {
+      setError('This objective has reached the limit of 10 lean business cases.');
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const savedCase: LeanBusinessCase = {
+      id: existingCase?.id || createId('lbc'),
+      workspaceId: workspace?.id || '',
+      strategicObjectiveId: resolvedObjectiveId,
+      ownerUserId: '',
+      title: form.title.trim(),
+      summary: form.summary,
+      problemOpportunityStatement: form.problemOpportunityStatement,
+      valueHypothesis: form.valueHypothesis,
+      priority: form.priority,
+      forecastCost: form.forecastCost,
+      forecastValue: form.forecastValue,
+      valueType: form.valueType,
+      status: form.status,
+      createdAt: existingCase?.createdAt || now,
+      updatedAt: now,
+    };
+
+    const nextCases = isEditing
+      ? leanBusinessCases.map((c) => (c.id === savedCase.id ? savedCase : c))
+      : [...leanBusinessCases, savedCase];
+
+    localStorage.setItem(lbcStorageKey, JSON.stringify(nextCases));
+    setLeanBusinessCases(nextCases);
+    navigateTo('/dashboard');
+  };
+
+  if (!selectedObjective) {
+    return (
+      <PrototypeShell workspace={workspace}>
+        <section className="mx-auto max-w-4xl">
+          <Card className="rounded-md border-fuchsia-500/50 bg-slate-900 text-slate-100">
+            <CardHeader>
+              <CardTitle className="retro-heading text-2xl text-fuchsia-300">Lean Business Case</CardTitle>
+              <CardDescription className="text-slate-300">Select a strategic objective from the dashboard first.</CardDescription>
+            </CardHeader>
+            <CardContent>
               <Button onClick={() => navigateTo('/dashboard')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Return to Dashboard</Button>
-              <Button variant="outline" onClick={() => navigateTo('/strategic-objectives', selectedObjective ? { id: selectedObjective.id } : undefined)} className="rounded-sm border-cyan-500 text-cyan-200 hover:bg-cyan-500 hover:text-black">Review Strategic Objective</Button>
-            </div>
+            </CardContent>
+          </Card>
+        </section>
+      </PrototypeShell>
+    );
+  }
+
+  return (
+    <PrototypeShell workspace={workspace}>
+      <section className="mx-auto max-w-5xl space-y-6">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+          <div>
+            <Badge className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Step 2</Badge>
+            <h1 className="retro-heading mt-4 text-3xl text-fuchsia-300">{isEditing ? 'Edit Lean Business Case' : 'Create Lean Business Case'}</h1>
+            <p className="mt-3 max-w-3xl text-slate-300">
+              Objective: <span className="text-cyan-300">{selectedObjective.strategicInitiativeName}</span>
+            </p>
+          </div>
+          <Button onClick={() => navigateTo('/dashboard')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Back to Dashboard</Button>
+        </div>
+
+        {hasReachedLimit && (
+          <div className="rounded-md border border-yellow-400/50 bg-yellow-400/10 p-4 text-sm text-yellow-100">
+            This objective has reached the limit of 10 lean business cases.
+          </div>
+        )}
+        {error && (
+          <div className="rounded-md border border-red-400/60 bg-red-500/10 p-4 text-sm text-red-100">{error}</div>
+        )}
+        {draftWarnings && !error && (
+          <div className="rounded-md border border-yellow-400/50 bg-yellow-400/10 p-4 text-sm text-yellow-100">{draftWarnings}</div>
+        )}
+
+        <Card className="rounded-md border-fuchsia-500/50 bg-slate-900 text-slate-100">
+          <CardContent className="pt-6">
+            <form className="grid gap-5" onSubmit={submitCase}>
+              <div className="grid gap-3 md:grid-cols-2">
+                {['Define Business Case', 'Prioritization & Forecast'].map((step, index) => (
+                  <button
+                    key={step}
+                    type="button"
+                    onClick={() => setActiveStep(index)}
+                    className={`rounded-md border p-4 text-left transition ${activeStep === index ? 'border-fuchsia-400 bg-fuchsia-400/15 text-fuchsia-100' : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-fuchsia-500'}`}
+                  >
+                    <div className="retro-heading mb-2 text-xs">Step {index + 1}</div>
+                    <div className="text-sm font-medium">{step}</div>
+                  </button>
+                ))}
+              </div>
+
+              {activeStep === 0 && (
+                <section className="grid gap-5">
+                  <div>
+                    <h2 className="retro-heading text-xl text-fuchsia-300">Step One: Define Business Case</h2>
+                    <p className="mt-2 text-sm text-slate-300">Define the granular sub-initiative, its problem statement, and value hypothesis.</p>
+                  </div>
+                  <Field id="lbc-title" label="Title" helper="What is the name of this business case?">
+                    <Input id="lbc-title" value={form.title} onChange={(e) => updateField('title', e.target.value)} className="border-slate-700 bg-slate-950 text-slate-100" />
+                  </Field>
+                  <Field id="lbc-summary" label="Summary" helper="Summarize the business case in a few sentences.">
+                    <Textarea id="lbc-summary" value={form.summary} onChange={(e) => updateField('summary', e.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                  </Field>
+                  <Field id="lbc-problem" label="Problem or Opportunity Statement" helper="What problem or opportunity does this case address?">
+                    <Textarea id="lbc-problem" value={form.problemOpportunityStatement} onChange={(e) => updateField('problemOpportunityStatement', e.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                  </Field>
+                  <Field id="lbc-value-hypothesis" label="Value Hypothesis" helper="What value will this business case create?">
+                    <Textarea id="lbc-value-hypothesis" value={form.valueHypothesis} onChange={(e) => updateField('valueHypothesis', e.target.value)} className="min-h-24 border-slate-700 bg-slate-950 text-slate-100" />
+                  </Field>
+                </section>
+              )}
+
+              {activeStep === 1 && (
+                <section className="grid gap-5">
+                  <div>
+                    <h2 className="retro-heading text-xl text-fuchsia-300">Step Two: Prioritization & Forecast</h2>
+                    <p className="mt-2 text-sm text-slate-300">Set priority, forecast cost and value, and determine the status.</p>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="lbc-priority" label="Priority">
+                      <Select value={form.priority} onValueChange={(value) => updateField('priority', value as Priority)}>
+                        <SelectTrigger id="lbc-priority" className="border-slate-700 bg-slate-950 text-slate-100">
+                          <SelectValue placeholder="Select priority" />
+                        </SelectTrigger>
+                        <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                          {priorityOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field id="lbc-value-type" label="Value Type">
+                      <Select value={form.valueType} onValueChange={(value) => updateField('valueType', value as CaseValueType)}>
+                        <SelectTrigger id="lbc-value-type" className="border-slate-700 bg-slate-950 text-slate-100">
+                          <SelectValue placeholder="Select value type" />
+                        </SelectTrigger>
+                        <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                          {caseValueTypeOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <Field id="lbc-forecast-cost" label="Forecast Cost" helper="Case-level cost estimate (optional).">
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                        <Input id="lbc-forecast-cost" type="number" step="0.01" value={form.forecastCost?.toString() ?? ''} onChange={(e) => updateField('forecastCost', e.target.value ? parseFloat(e.target.value) : null)} placeholder="0.00" className="border-slate-700 bg-slate-950 pl-9 text-slate-100" />
+                      </div>
+                    </Field>
+                    <Field id="lbc-forecast-value" label="Forecast Value" helper="Case-level value estimate (optional).">
+                      <div className="relative">
+                        <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                        <Input id="lbc-forecast-value" type="number" step="0.01" value={form.forecastValue?.toString() ?? ''} onChange={(e) => updateField('forecastValue', e.target.value ? parseFloat(e.target.value) : null)} placeholder="0.00" className="border-slate-700 bg-slate-950 pl-9 text-slate-100" />
+                      </div>
+                    </Field>
+                  </div>
+                  <Field id="lbc-status" label="Status">
+                    <Select value={form.status} onValueChange={(value) => updateField('status', value as CaseStatus)}>
+                      <SelectTrigger id="lbc-status" className="border-slate-700 bg-slate-950 text-slate-100">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="border-slate-700 bg-slate-950 text-slate-100">
+                        {caseStatusOptions.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <div className="rounded-md border border-cyan-500/40 bg-cyan-400/10 p-4 text-sm text-cyan-100">
+                    Architecture links (value streams, key activities, capabilities) can be added in a future update once the Business Architecture screens are built.
+                  </div>
+                </section>
+              )}
+
+              <div className="flex flex-col-reverse gap-3 border-t border-slate-700 pt-5 sm:flex-row sm:justify-between">
+                <Button type="button" onClick={() => navigateTo('/dashboard')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Cancel</Button>
+                <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                  <Button type="button" disabled={activeStep === 0} onClick={() => setActiveStep((step) => Math.max(step - 1, 0))} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Back</Button>
+                  {activeStep < 1 ? (
+                    <Button type="button" onClick={() => setActiveStep(1)} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Next</Button>
+                  ) : (
+                    <Button type="submit" disabled={hasReachedLimit} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Save Business Case</Button>
+                  )}
+                </div>
+              </div>
+            </form>
           </CardContent>
         </Card>
       </section>
@@ -724,6 +1659,10 @@ export default function App() {
   const [route, setRoute] = useState<PrototypeRoute>(() => normalizeRoute(window.location.hash));
   const [workspace, setWorkspace] = useState<Workspace | null>(() => loadWorkspace());
   const [strategicObjectives, setStrategicObjectives] = useState<StrategicObjective[]>(() => loadObjectives());
+  const [allMetrics, setAllMetrics] = useState<StrategicObjectiveMetric[]>(() => loadMetrics());
+  const [leanBusinessCases, setLeanBusinessCases] = useState<LeanBusinessCase[]>(() => loadLeanBusinessCases());
+  const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>(() => loadMembers());
+  const [workspaceInvites, setWorkspaceInvites] = useState<WorkspaceInvite[]>(() => loadInvites());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedStage, setSelectedStage] = useState<number | null>(null);
 
@@ -987,15 +1926,19 @@ export default function App() {
   }
 
   if (route === '/dashboard') {
-    return <DashboardScreen workspace={workspace} objectives={strategicObjectives} />;
+    return <DashboardScreen workspace={workspace} objectives={strategicObjectives} leanBusinessCases={leanBusinessCases} members={workspaceMembers} invites={workspaceInvites} />;
+  }
+
+  if (route === '/workspace-settings') {
+    return <WorkspaceSettingsScreen workspace={workspace} members={workspaceMembers} setMembers={setWorkspaceMembers} invites={workspaceInvites} setInvites={setWorkspaceInvites} />;
   }
 
   if (route === '/strategic-objectives') {
-    return <StrategicObjectiveFormScreen workspace={workspace} objectives={strategicObjectives} setObjectives={setStrategicObjectives} />;
+    return <StrategicObjectiveFormScreen workspace={workspace} objectives={strategicObjectives} setObjectives={setStrategicObjectives} allMetrics={allMetrics} setAllMetrics={setAllMetrics} />;
   }
 
-  if (route === '/lean-business-case-placeholder') {
-    return <LeanBusinessCasePlaceholderScreen workspace={workspace} objectives={strategicObjectives} />;
+  if (route === '/lean-business-case') {
+    return <LeanBusinessCaseFormScreen workspace={workspace} objectives={strategicObjectives} leanBusinessCases={leanBusinessCases} setLeanBusinessCases={setLeanBusinessCases} />;
   }
 
   return (
