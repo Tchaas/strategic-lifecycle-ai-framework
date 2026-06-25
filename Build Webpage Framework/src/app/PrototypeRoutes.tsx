@@ -289,7 +289,7 @@ function AuthScreen({ mode, session, workspace, onSignIn, onSignOut }: { mode: '
                 </div>
               </button>
               <Button onClick={() => continueAfterAuth('google')} className="w-full rounded-sm bg-lime-500 text-black hover:bg-lime-400">Continue to Dashboard</Button>
-              <Button type="button" variant="outline" onClick={() => setShowGooglePrompt(false)} className="w-full rounded-sm border-slate-600 bg-slate-950 text-slate-200 hover:bg-slate-800">Back</Button>
+              <Button type="button" variant="outline" onClick={() => setShowGooglePrompt(false)} className="w-full rounded-sm bg-lime-500 text-black hover:bg-lime-400">Back</Button>
             </CardContent>
           </Card>
         </section>
@@ -336,7 +336,7 @@ function AuthScreen({ mode, session, workspace, onSignIn, onSignOut }: { mode: '
                 {mode === 'login' ? <LogIn className="mr-2 h-4 w-4" /> : <UserPlus className="mr-2 h-4 w-4" />}
                 {mode === 'login' ? 'Sign In' : 'Create Account'}
               </Button>
-              <Button type="button" variant="outline" onClick={() => setShowGooglePrompt(true)} className="w-full rounded-sm border-cyan-500 bg-slate-950 text-cyan-200 hover:bg-cyan-500 hover:text-black">
+              <Button type="button" variant="outline" onClick={() => setShowGooglePrompt(true)} className="w-full rounded-sm bg-lime-500 text-black hover:bg-lime-400">
                 Continue with Google
               </Button>
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
@@ -366,7 +366,7 @@ function ForgotPasswordScreen({ session, workspace, onSignOut }: { session: Auth
     <PrototypeShell session={session} workspace={workspace} onSignOut={onSignOut}>
       <section className="mx-auto max-w-3xl space-y-6">
         <div>
-          <Badge className="rounded-sm bg-fuchsia-500 text-white hover:bg-fuchsia-400">Password recovery</Badge>
+          <Badge className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Password recovery</Badge>
           <h1 className="retro-heading mt-4 text-3xl text-cyan-300">Recover Password</h1>
           <p className="mt-3 text-slate-300">Enter the email address that would receive a reset link once backend auth is connected.</p>
         </div>
@@ -383,7 +383,7 @@ function ForgotPasswordScreen({ session, workspace, onSignOut }: { session: Auth
                 </div>
               )}
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                <Button type="button" variant="outline" onClick={() => navigateTo('/login')} className="rounded-sm border-slate-600 bg-slate-950 text-slate-200 hover:bg-slate-800">Back to Sign In</Button>
+                <Button type="button" variant="outline" onClick={() => navigateTo('/login')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Back to Sign In</Button>
                 <Button type="submit" className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">
                   <KeyRound className="mr-2 h-4 w-4" />
                   Send Recovery Link
@@ -451,7 +451,7 @@ function WorkspaceScreen({ session, workspace, setWorkspace, onSignOut }: { sess
               Create or update the company profile that will anchor business architecture, strategic objectives, and downstream lifecycle artifacts.
             </p>
           </div>
-          <Button variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm border-slate-600 bg-slate-950 text-slate-200 hover:bg-slate-800">Back to Dashboard</Button>
+          <Button variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Back to Dashboard</Button>
         </div>
         <PrototypeNotice />
         <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
@@ -708,7 +708,7 @@ function BusinessArchitectureScreen({ session, workspace, architecture, setArchi
               Capture existing organization components that can be leveraged or changed before backend APIs and strategic objective workflows are connected.
             </p>
           </div>
-          <Button variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm border-slate-600 bg-slate-950 text-slate-200 hover:bg-slate-800">Back to Dashboard</Button>
+          <Button variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Back to Dashboard</Button>
         </div>
         <PrototypeNotice />
         <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
