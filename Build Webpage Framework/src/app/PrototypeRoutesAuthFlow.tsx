@@ -259,7 +259,7 @@ function ForgotPasswordScreen() {
     <AuthShell>
       <section className="mx-auto max-w-3xl space-y-6">
         <div>
-          <Badge className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Password recovery</Badge>
+          <Badge className="rounded-sm bg-fuchsia-500 text-white hover:bg-fuchsia-400">Password recovery</Badge>
           <h1 className="retro-heading mt-4 text-3xl text-cyan-300">Recover Password</h1>
           <p className="mt-3 text-slate-300">Enter the email address that would receive a reset link once backend auth is connected.</p>
         </div>
@@ -273,7 +273,7 @@ function ForgotPasswordScreen() {
               {error && <div className="rounded-md border border-red-400/60 bg-red-500/10 p-4 text-sm text-red-100">{error}</div>}
               {submitted && <div className="rounded-md border border-lime-500/40 bg-lime-400/10 p-4 text-sm text-lime-100">Mock recovery submitted. A real reset email will be implemented when backend authentication is added.</div>}
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                <Button type="button" variant="outline" onClick={() => navigateTo('/login')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Back to Sign In</Button>
+                <Button type="button" variant="outline" onClick={() => navigateTo('/login')} className="rounded-sm border-slate-600 bg-slate-950 text-slate-200 hover:bg-slate-800">Back to Sign In</Button>
                 <Button type="submit" className="rounded-sm bg-lime-500 text-black hover:bg-lime-400"><KeyRound className="mr-2 h-4 w-4" />Send Recovery Link</Button>
               </div>
             </form>

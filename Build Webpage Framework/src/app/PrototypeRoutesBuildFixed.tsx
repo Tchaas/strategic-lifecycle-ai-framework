@@ -251,7 +251,7 @@ function AuthScreen({ mode, session, workspace, onSignIn, onSignOut }: { mode: '
                 </div>
               </button>
               <Button onClick={() => continueAfterAuth('google')} className="w-full rounded-sm bg-lime-500 text-black hover:bg-lime-400">Continue to Dashboard</Button>
-              <Button type="button" variant="outline" onClick={() => setShowGooglePrompt(false)} className="w-full rounded-sm bg-lime-500 text-black hover:bg-lime-400">Back</Button>
+              <Button type="button" variant="outline" onClick={() => setShowGooglePrompt(false)} className="w-full rounded-sm border-slate-600 bg-slate-950 text-slate-200 hover:bg-slate-800">Back</Button>
             </CardContent>
           </Card>
         </section>
@@ -289,7 +289,7 @@ function AuthScreen({ mode, session, workspace, onSignIn, onSignOut }: { mode: '
                 {mode === 'login' ? <LogIn className="mr-2 h-4 w-4" /> : <UserPlus className="mr-2 h-4 w-4" />}
                 {mode === 'login' ? 'Sign In' : 'Create Account'}
               </Button>
-              <Button type="button" variant="outline" onClick={() => setShowGooglePrompt(true)} className="w-full rounded-sm bg-lime-500 text-black hover:bg-lime-400">Continue with Google</Button>
+              <Button type="button" variant="outline" onClick={() => setShowGooglePrompt(true)} className="w-full rounded-sm border-cyan-500 bg-slate-950 text-cyan-200 hover:bg-cyan-500 hover:text-black">Continue with Google</Button>
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                 <button type="button" className="text-cyan-300 hover:text-cyan-100" onClick={() => navigateTo(mode === 'login' ? '/signup' : '/login')}>{mode === 'login' ? 'Create Account / Sign Up' : 'Already have an account? Sign In'}</button>
                 <button type="button" className="text-slate-400 hover:text-slate-200" onClick={() => navigateTo('/forgot-password')}>Forgot password?</button>
@@ -310,7 +310,7 @@ function ForgotPasswordScreen({ session, workspace, onSignOut }: { session: Auth
     <PrototypeShell session={session} workspace={workspace} onSignOut={onSignOut}>
       <section className="mx-auto max-w-3xl space-y-6">
         <div>
-          <Badge className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Password recovery</Badge>
+          <Badge className="rounded-sm bg-fuchsia-500 text-white hover:bg-fuchsia-400">Password recovery</Badge>
           <h1 className="retro-heading mt-4 text-3xl text-cyan-300">Recover Password</h1>
           <p className="mt-3 text-slate-300">Enter the email address that would receive a reset link once backend auth is connected.</p>
         </div>
@@ -321,7 +321,7 @@ function ForgotPasswordScreen({ session, workspace, onSignOut }: { session: Auth
               <Field id="recovery-email" label="Email"><Input id="recovery-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" className="border-slate-700 bg-slate-950 text-slate-100" /></Field>
               {submitted && <div className="rounded-md border border-lime-500/40 bg-lime-400/10 p-4 text-sm text-lime-100">Mock recovery submitted. A real reset email will be implemented when backend authentication is added.</div>}
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                <Button type="button" variant="outline" onClick={() => navigateTo('/login')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Back to Sign In</Button>
+                <Button type="button" variant="outline" onClick={() => navigateTo('/login')} className="rounded-sm border-slate-600 bg-slate-950 text-slate-200 hover:bg-slate-800">Back to Sign In</Button>
                 <Button type="submit" className="rounded-sm bg-lime-500 text-black hover:bg-lime-400"><KeyRound className="mr-2 h-4 w-4" />Send Recovery Link</Button>
               </div>
             </form>
@@ -382,7 +382,7 @@ function WorkspaceScreen({ session, workspace, setWorkspace, onSignOut }: { sess
             <h1 className="retro-heading mt-4 text-3xl text-cyan-300">Workspace Onboarding</h1>
             <p className="mt-3 max-w-3xl text-slate-300">Create or update the company profile that anchors the lifecycle artifacts. Workspace setup is not a lifecycle stage.</p>
           </div>
-          <Button variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Back to Dashboard</Button>
+          <Button variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm border-slate-600 bg-slate-950 text-slate-200 hover:bg-slate-800">Back to Dashboard</Button>
         </div>
         <PrototypeNotice />
         <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
@@ -571,7 +571,7 @@ function BusinessArchitectureScreen({ session, workspace, architecture, setArchi
             <h1 className="retro-heading mt-4 text-3xl text-cyan-300">Business Architecture / Organization Structure</h1>
             <p className="mt-3 max-w-3xl text-slate-300">Capture existing organization components for later lifecycle use. The displayed lifecycle still starts with Strategic Objectives.</p>
           </div>
-          <Button variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm bg-lime-500 text-black hover:bg-lime-400">Back to Dashboard</Button>
+          <Button variant="outline" onClick={() => navigateTo('/dashboard')} className="rounded-sm border-slate-600 bg-slate-950 text-slate-200 hover:bg-slate-800">Back to Dashboard</Button>
         </div>
         <PrototypeNotice />
         <Card className="rounded-md border-cyan-500/50 bg-slate-900 text-slate-100">
