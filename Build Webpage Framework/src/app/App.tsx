@@ -11,6 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Separator } from './components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Textarea } from './components/ui/textarea';
+import { seededStrategicLifecycleState } from '../mock/strategicLifecycleMock';
+import { calculateObjectiveFinancialRollup, cardinalityLimits } from '../rules/lifecycleRules';
+import type { Implementation, ImplementationValueStream } from '../types/model';
 
 type PrototypeRoute =
   | '/'
@@ -203,6 +206,8 @@ const metricsStorageKey = 'slaf.prototype.metrics';
 const lbcStorageKey = 'slaf.prototype.leanBusinessCases';
 const genericRecordStorageKey = 'slaf.prototype.lifecycleRecords';
 
+type ObjectiveFinancialRollup = ReturnType<typeof calculateObjectiveFinancialRollup>;
+
 const strategicValueCategoryOptions: { value: Exclude<StrategicValueCategory, ''>; label: string }[] = [
   { value: 'revenue_growth', label: 'Revenue Growth' },
   { value: 'cost_reduction', label: 'Cost Reduction' },
@@ -257,6 +262,9 @@ const companySizeOptions: Workspace['companySize'][] = ['1-50', '51-200', '201-1
 
 const getOptionLabel = <T extends string>(value: T | '', options: { value: T; label: string }[]) =>
   options.find(option => option.value === value)?.label || '';
+
+const formatCurrency = (value: number) =>
+  value.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
 const draftActiveStatusOptions = [
   { value: 'draft', label: 'Draft' },
@@ -870,10 +878,30 @@ const normalizeObjective = (objective: StoredStrategicObjective): StrategicObjec
   };
 };
 
+const getSeedWorkspace = (): Workspace | null => {
+  const workspace = seededStrategicLifecycleState.workspaces[0];
+  if (!workspace) return null;
+
+  return {
+    id: workspace.id,
+    name: workspace.name,
+    legalName: workspace.legalName,
+    description: workspace.description,
+    industry: workspace.industry,
+    companySize: workspace.companySize,
+    headquartersRegion: workspace.headquartersRegion,
+    website: workspace.website,
+    logoUrl: workspace.logoUrl,
+    annualRevenue: workspace.annualRevenue ?? null,
+    createdAt: workspace.createdAt,
+    updatedAt: workspace.updatedAt,
+  };
+};
+
 const loadWorkspace = (): Workspace | null => {
   try {
     const rawWorkspace = localStorage.getItem(workspaceStorageKey);
-    if (!rawWorkspace) return null;
+    if (!rawWorkspace) return getSeedWorkspace();
     const parsed = JSON.parse(rawWorkspace) as StoredWorkspace;
     return {
       id: (parsed.id as string) || createId('workspace'),
@@ -897,25 +925,31 @@ const loadWorkspace = (): Workspace | null => {
 const loadObjectives = (): StrategicObjective[] => {
   try {
     const rawObjectives = localStorage.getItem(objectivesStorageKey);
-    if (!rawObjectives) return [];
+    if (!rawObjectives) {
+      return seededStrategicLifecycleState.strategicObjectives
+        .map(objective => normalizeObjective(objective as unknown as StoredStrategicObjective))
+        .slice(0, cardinalityLimits.strategicObjectivesPerWorkspace);
+    }
     const parsed = JSON.parse(rawObjectives) as StoredStrategicObjective[];
     if (!Array.isArray(parsed)) return [];
-    const migratedObjectives = parsed.map(normalizeObjective).slice(0, 3);
+    const migratedObjectives = parsed.map(normalizeObjective).slice(0, cardinalityLimits.strategicObjectivesPerWorkspace);
     localStorage.setItem(objectivesStorageKey, JSON.stringify(migratedObjectives));
     return migratedObjectives;
   } catch {
-    return [];
+    return seededStrategicLifecycleState.strategicObjectives
+      .map(objective => normalizeObjective(objective as unknown as StoredStrategicObjective))
+      .slice(0, cardinalityLimits.strategicObjectivesPerWorkspace);
   }
 };
 
-const loadList = <T,>(key: string): T[] => {
+const loadList = <T,>(key: string, seed: T[] = []): T[] => {
   try {
     const raw = localStorage.getItem(key);
-    if (!raw) return [];
+    if (!raw) return seed;
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return [];
+    return seed;
   }
 };
 
@@ -945,20 +979,107 @@ const saveRefreshToken = (token: PrototypeRefreshToken) => {
   localStorage.setItem(refreshTokensStorageKey, JSON.stringify([...existing, token]));
 };
 
+const stringifyGenericValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) return value.join(',');
+  return String(value);
+};
+
+const toGenericRecord = (record: Record<string, unknown>): GenericRecord => {
+  const genericRecord: Record<string, string> = {};
+  Object.entries(record).forEach(([key, value]) => {
+    genericRecord[key] = stringifyGenericValue(value);
+  });
+  return genericRecord as GenericRecord;
+};
+
+const getSeedGenericRecords = (): Record<GenericEntityKey, GenericRecord[]> => {
+  const seededCollections: Partial<Record<GenericEntityKey, Record<string, unknown>[]>> = {
+    departments: seededStrategicLifecycleState.departments as unknown as Record<string, unknown>[],
+    businessArchitecture: seededStrategicLifecycleState.businessArchitectures as unknown as Record<string, unknown>[],
+    valueStreams: seededStrategicLifecycleState.valueStreams as unknown as Record<string, unknown>[],
+    keyActivities: seededStrategicLifecycleState.keyActivities as unknown as Record<string, unknown>[],
+    businessCapabilities: seededStrategicLifecycleState.businessCapabilities as unknown as Record<string, unknown>[],
+    businessProcesses: seededStrategicLifecycleState.businessProcesses as unknown as Record<string, unknown>[],
+    stakeholderPersonas: seededStrategicLifecycleState.stakeholderPersonas as unknown as Record<string, unknown>[],
+    informationConcepts: seededStrategicLifecycleState.informationConcepts as unknown as Record<string, unknown>[],
+    businessImpacts: seededStrategicLifecycleState.businessImpacts as unknown as Record<string, unknown>[],
+    strategicObjectiveValueStreams: seededStrategicLifecycleState.strategicObjectiveValueStreams as unknown as Record<string, unknown>[],
+    strategicObjectiveCapabilities: seededStrategicLifecycleState.strategicObjectiveCapabilities as unknown as Record<string, unknown>[],
+    valueStreamCapabilities: seededStrategicLifecycleState.valueStreamCapabilities as unknown as Record<string, unknown>[],
+    keyActivityCapabilities: seededStrategicLifecycleState.keyActivityCapabilities as unknown as Record<string, unknown>[],
+    leanBusinessCaseValueStreams: seededStrategicLifecycleState.leanBusinessCaseValueStreams as unknown as Record<string, unknown>[],
+    leanBusinessCaseKeyActivities: seededStrategicLifecycleState.leanBusinessCaseKeyActivities as unknown as Record<string, unknown>[],
+    leanBusinessCaseCapabilities: seededStrategicLifecycleState.leanBusinessCaseCapabilities as unknown as Record<string, unknown>[],
+    discovery: seededStrategicLifecycleState.discoveries as unknown as Record<string, unknown>[],
+    discoveryStakeholderPersonas: seededStrategicLifecycleState.discoveryStakeholderPersonas as unknown as Record<string, unknown>[],
+    discoveryBusinessProcesses: seededStrategicLifecycleState.discoveryBusinessProcesses as unknown as Record<string, unknown>[],
+    discoveryInformationConcepts: seededStrategicLifecycleState.discoveryInformationConcepts as unknown as Record<string, unknown>[],
+    features: seededStrategicLifecycleState.features as unknown as Record<string, unknown>[],
+    requirements: seededStrategicLifecycleState.requirements as unknown as Record<string, unknown>[],
+    conceptualDeliverables: seededStrategicLifecycleState.conceptualDeliverables as unknown as Record<string, unknown>[],
+    implementation: seededStrategicLifecycleState.implementations as unknown as Record<string, unknown>[],
+    implementationValueStreams: seededStrategicLifecycleState.implementationValueStreams as unknown as Record<string, unknown>[],
+  };
+
+  return lifecycleEntityConfigs.reduce((acc, config) => {
+    acc[config.key] = (seededCollections[config.key] || []).map(toGenericRecord);
+    return acc;
+  }, {} as Record<GenericEntityKey, GenericRecord[]>);
+};
+
 const loadGenericRecords = (): Record<GenericEntityKey, GenericRecord[]> => {
   try {
     const raw = localStorage.getItem(genericRecordStorageKey);
+    if (!raw) return getSeedGenericRecords();
     const parsed = raw ? JSON.parse(raw) : {};
     return lifecycleEntityConfigs.reduce((acc, config) => {
       acc[config.key] = Array.isArray(parsed[config.key]) ? parsed[config.key] : [];
       return acc;
     }, {} as Record<GenericEntityKey, GenericRecord[]>);
   } catch {
-    return lifecycleEntityConfigs.reduce((acc, config) => {
-      acc[config.key] = [];
-      return acc;
-    }, {} as Record<GenericEntityKey, GenericRecord[]>);
+    return getSeedGenericRecords();
   }
+};
+
+const toOptionalNumber = (value: string | number | null | undefined): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const toNumber = (value: string | number | null | undefined): number => toOptionalNumber(value) ?? 0;
+
+const getFinancialRollupInputs = (genericRecords: Record<GenericEntityKey, GenericRecord[]>) => {
+  const implementations: Implementation[] = (genericRecords.implementation || []).map(record => ({
+    id: record.id,
+    workspaceId: record.workspaceId,
+    leanBusinessCaseId: record.leanBusinessCaseId,
+    actualCost: toOptionalNumber(record.actualCost),
+    actualValue: toOptionalNumber(record.actualValue),
+    valueType: record.valueType as Implementation['valueType'],
+    implementationStatus: record.implementationStatus as Implementation['implementationStatus'],
+    startDate: record.startDate,
+    completionDate: record.completionDate,
+    outcomeNotes: record.outcomeNotes,
+    createdByUserId: record.createdByUserId,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  }));
+
+  const implementationValueStreams: ImplementationValueStream[] = (genericRecords.implementationValueStreams || []).map(record => ({
+    id: record.id,
+    workspaceId: record.workspaceId,
+    implementationId: record.implementationId,
+    valueStreamId: record.valueStreamId,
+    allocatedCost: toNumber(record.allocatedCost),
+    allocatedValue: toNumber(record.allocatedValue),
+    createdByUserId: record.createdByUserId,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  }));
+
+  return { implementations, implementationValueStreams };
 };
 
 const getGenericStatusOptions = (statusKind?: GenericEntityConfig['statusKind']) => {
@@ -1300,7 +1421,15 @@ function DashboardScreen({
   leanBusinessCases: LeanBusinessCase[];
   genericRecords: Record<GenericEntityKey, GenericRecord[]>;
 }) {
-  const hasReachedLimit = objectives.length >= 3;
+  const hasReachedLimit = objectives.length >= cardinalityLimits.strategicObjectivesPerWorkspace;
+  const { implementations, implementationValueStreams } = getFinancialRollupInputs(genericRecords);
+  const getObjectiveRollup = (objectiveId: string) =>
+    calculateObjectiveFinancialRollup(
+      objectiveId,
+      leanBusinessCases,
+      implementations,
+      implementationValueStreams,
+    );
   const architectureKeys: GenericEntityKey[] = [
     'businessArchitecture',
     'valueStreams',
@@ -1405,7 +1534,7 @@ function DashboardScreen({
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
               <div>
                 <h2 className="retro-heading text-2xl text-cyan-300">Strategic Objectives</h2>
-                <p className="text-sm text-slate-300">{objectives.length} of 3 strategic objectives created. Departments are optional setup.</p>
+                <p className="text-sm text-slate-300">{objectives.length} of {cardinalityLimits.strategicObjectivesPerWorkspace} strategic objectives created. Departments are optional setup.</p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Button variant="outline" onClick={() => navigateTo('/lifecycle-entry', { entity: 'departments' })} className="rounded-sm border-cyan-500 text-cyan-200 hover:bg-cyan-500 hover:text-black">Manage Departments</Button>
@@ -1428,6 +1557,7 @@ function DashboardScreen({
                   objective={objectives[slotIndex]}
                   metrics={objectives[slotIndex] ? metrics.filter(metric => metric.strategicObjectiveId === objectives[slotIndex].id) : []}
                   leanBusinessCases={objectives[slotIndex] ? leanBusinessCases.filter(businessCase => businessCase.strategicObjectiveId === objectives[slotIndex].id) : []}
+                  financialRollup={objectives[slotIndex] ? getObjectiveRollup(objectives[slotIndex].id) : undefined}
                 />
               ))}
             </div>
@@ -1453,10 +1583,10 @@ function DashboardScreen({
                   <Card key={objective.id} className="rounded-md border-fuchsia-500/40 bg-slate-900 text-slate-100">
                     <CardHeader>
                       <CardTitle className="retro-heading text-fuchsia-300">{objective.strategicInitiativeName}</CardTitle>
-                      <CardDescription className="text-slate-300">{cases.length} of 10 Lean Business Cases</CardDescription>
+                      <CardDescription className="text-slate-300">{cases.length} of {cardinalityLimits.leanBusinessCasesPerObjective} Lean Business Cases</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <Button disabled={cases.length >= 10} onClick={() => navigateTo('/lean-business-case', { objectiveId: objective.id })} className="w-full rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Create Lean Business Case</Button>
+                      <Button disabled={cases.length >= cardinalityLimits.leanBusinessCasesPerObjective} onClick={() => navigateTo('/lean-business-case', { objectiveId: objective.id })} className="w-full rounded-sm bg-lime-500 text-black hover:bg-lime-400 disabled:opacity-50">Create Lean Business Case</Button>
                       {cases.map(businessCase => (
                         <button key={businessCase.id} type="button" onClick={() => navigateTo('/lean-business-case', { id: businessCase.id, objectiveId: objective.id })} className="block w-full rounded border border-slate-700 bg-slate-950 p-2 text-left text-sm text-slate-200 hover:border-fuchsia-400">
                           {businessCase.title}
@@ -1504,11 +1634,13 @@ function ObjectiveSlot({
   objective,
   metrics,
   leanBusinessCases,
+  financialRollup,
 }: {
   slotIndex: number;
   objective?: StrategicObjective;
   metrics: StrategicObjectiveMetric[];
   leanBusinessCases: LeanBusinessCase[];
+  financialRollup?: ObjectiveFinancialRollup;
 }) {
   if (!objective) {
     return (
@@ -1553,9 +1685,36 @@ function ObjectiveSlot({
           </div>
           <div>
             <dt className="text-xs uppercase text-slate-500">Lean Business Cases</dt>
-            <dd className="text-slate-100">{leanBusinessCases.length} of 10</dd>
+            <dd className="text-slate-100">{leanBusinessCases.length} of {cardinalityLimits.leanBusinessCasesPerObjective}</dd>
           </div>
         </dl>
+        {financialRollup && (
+          <div className="rounded-md border border-lime-500/40 bg-lime-400/10 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="retro-heading text-xs text-lime-200">Forecast vs Actual</p>
+              <Badge className="rounded-sm bg-slate-800 text-slate-200 hover:bg-slate-800">Computed</Badge>
+            </div>
+            <dl className="grid gap-2 text-xs text-slate-300">
+              <div className="flex items-center justify-between gap-3">
+                <dt>Forecast cost entered on cases</dt>
+                <dd className="font-mono text-slate-100">{formatCurrency(financialRollup.forecastCost)}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt>Forecast value entered on cases</dt>
+                <dd className="font-mono text-slate-100">{formatCurrency(financialRollup.forecastValue)}</dd>
+              </div>
+              <Separator className="bg-lime-500/30" />
+              <div className="flex items-center justify-between gap-3">
+                <dt>Actual cost from implementation allocations</dt>
+                <dd className="font-mono text-lime-100">{formatCurrency(financialRollup.actualCost)}</dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt>Actual value from implementation allocations</dt>
+                <dd className="font-mono text-lime-100">{formatCurrency(financialRollup.actualValue)}</dd>
+              </div>
+            </dl>
+          </div>
+        )}
         {leanBusinessCases.length > 0 && (
           <div className="space-y-2">
             {leanBusinessCases.map((businessCase) => (
@@ -1576,8 +1735,8 @@ function ObjectiveSlot({
             <Pencil className="mr-2 h-4 w-4" />
             Edit
           </Button>
-          <Button disabled={leanBusinessCases.length >= 10} onClick={() => navigateTo('/lean-business-case', { objectiveId: objective.id })} className="rounded-sm bg-fuchsia-500 text-white hover:bg-fuchsia-400 disabled:opacity-50">
-            {leanBusinessCases.length >= 10 ? 'Case Limit Reached' : 'Build Lean Business Case'}
+          <Button disabled={leanBusinessCases.length >= cardinalityLimits.leanBusinessCasesPerObjective} onClick={() => navigateTo('/lean-business-case', { objectiveId: objective.id })} className="rounded-sm bg-fuchsia-500 text-white hover:bg-fuchsia-400 disabled:opacity-50">
+            {leanBusinessCases.length >= cardinalityLimits.leanBusinessCasesPerObjective ? 'Case Limit Reached' : 'Build Lean Business Case'}
           </Button>
         </div>
       </CardContent>
@@ -2372,8 +2531,18 @@ export default function App() {
   const [route, setRoute] = useState<PrototypeRoute>(() => normalizeRoute(window.location.hash));
   const [workspace, setWorkspace] = useState<Workspace | null>(() => loadWorkspace());
   const [strategicObjectives, setStrategicObjectives] = useState<StrategicObjective[]>(() => loadObjectives());
-  const [objectiveMetrics, setObjectiveMetrics] = useState<StrategicObjectiveMetric[]>(() => loadList<StrategicObjectiveMetric>(metricsStorageKey));
-  const [leanBusinessCases, setLeanBusinessCases] = useState<LeanBusinessCase[]>(() => loadList<LeanBusinessCase>(lbcStorageKey));
+  const [objectiveMetrics, setObjectiveMetrics] = useState<StrategicObjectiveMetric[]>(() =>
+    loadList<StrategicObjectiveMetric>(
+      metricsStorageKey,
+      seededStrategicLifecycleState.strategicObjectiveMetrics as unknown as StrategicObjectiveMetric[],
+    ),
+  );
+  const [leanBusinessCases, setLeanBusinessCases] = useState<LeanBusinessCase[]>(() =>
+    loadList<LeanBusinessCase>(
+      lbcStorageKey,
+      seededStrategicLifecycleState.leanBusinessCases as unknown as LeanBusinessCase[],
+    ),
+  );
   const [genericRecords, setGenericRecords] = useState<Record<GenericEntityKey, GenericRecord[]>>(() => loadGenericRecords());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedStage, setSelectedStage] = useState<number | null>(null);
