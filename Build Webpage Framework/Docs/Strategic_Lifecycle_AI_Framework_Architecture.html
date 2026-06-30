@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strategic Lifecycle AI Framework — Architecture Reference</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.3/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0a0f1e; --bg2:#0d1426; --panel:#111a2e; --panel2:#0f1830;
+    --line:#1e2a44; --line2:#27365a;
+    --text:#e2e8f0; --muted:#94a3b8; --faint:#64748b;
+    --cyan:#22d3ee; --green:#34d399; --purple:#a78bfa; --blue:#38bdf8;
+    --teal:#2dd4bf; --amber:#fbbf24; --pink:#f472b6; --violet:#c084fc; --rose:#fb7185;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 80% -10%, #11203f 0%, var(--bg) 55%);color:var(--text);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased}
+  a{color:var(--cyan);text-decoration:none}
+  header.top{position:sticky;top:0;z-index:50;background:rgba(10,15,30,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .top-inner{max-width:1180px;margin:0 auto;padding:14px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .brand{font-family:var(--mono);font-size:13px;letter-spacing:.04em;color:var(--muted)}
+  .brand b{color:var(--text);font-weight:600}
+  nav.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+  nav.tabs a{font-size:13px;padding:6px 11px;border-radius:7px;color:var(--muted);border:1px solid transparent}
+  nav.tabs a:hover{color:var(--text);background:var(--panel);border-color:var(--line)}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 22px 90px}
+  .hero{padding:54px 0 30px;border-bottom:1px solid var(--line)}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan)}
+  h1{font-size:34px;line-height:1.12;margin:14px 0 10px;font-weight:680;letter-spacing:-.01em}
+  h1 .sub{display:block;font-size:17px;color:var(--muted);font-weight:400;margin-top:8px;letter-spacing:0}
+  .lede{color:var(--muted);max-width:760px;font-size:15px}
+  .pillrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+  .pill{font-family:var(--mono);font-size:12px;padding:7px 12px;border-radius:999px;border:1px solid var(--line2);background:var(--panel);color:var(--muted)}
+  .pill b{color:var(--text)}
+  section{padding:46px 0;border-bottom:1px solid var(--line);scroll-margin-top:74px}
+  h2{font-size:13px;font-family:var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin:0 0 6px}
+  h2 + .h2sub{font-size:23px;font-weight:640;margin:0 0 22px;letter-spacing:-.01em}
+  h3{font-size:15px;margin:30px 0 12px;font-weight:620}
+  p.note{color:var(--muted);font-size:14px;max-width:820px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media(max-width:880px){.grid2,.grid3{grid-template-columns:1fr}}
+  .card{background:linear-gradient(180deg,var(--panel) 0%,var(--panel2) 100%);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .card.accent{border-left:3px solid var(--cyan)}
+  .k{font-family:var(--mono);font-size:12.5px;color:var(--cyan)}
+  .muted{color:var(--muted)} .faint{color:var(--faint)}
+  .small{font-size:13px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 26px}
+  .legend span{font-family:var(--mono);font-size:11.5px;display:inline-flex;align-items:center;gap:7px;color:var(--muted)}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .ph{font-family:var(--mono);font-size:10.5px;padding:2px 7px;border-radius:5px;border:1px solid var(--line2)}
+  .ph1{color:var(--cyan);border-color:#164e63;background:#0a2a33}
+  .ph2{color:var(--violet);border-color:#4c2d6b;background:#1d1233}
+  .jx{font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:5px;color:var(--faint);border:1px dashed var(--line2)}
+
+  /* schema */
+  .grouphead{display:flex;align-items:center;gap:10px;margin:34px 0 4px}
+  .grouphead .bar{width:4px;height:18px;border-radius:2px}
+  .grouphead h3{margin:0;font-size:14px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase}
+  .grouphead .ct{font-family:var(--mono);font-size:11px;color:var(--faint);margin-left:auto}
+  .tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;margin-top:14px}
+  .tbl{background:var(--panel2);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+  .tbl-h{display:flex;align-items:center;gap:8px;padding:11px 13px;background:rgba(255,255,255,.02);border-bottom:1px solid var(--line)}
+  .tbl-h .name{font-family:var(--mono);font-size:13.5px;font-weight:600}
+  .tbl-h .tag{margin-left:auto;display:flex;gap:6px}
+  .cols{padding:8px 13px 12px;font-family:var(--mono);font-size:12px}
+  .col{display:flex;gap:8px;padding:3px 0;border-bottom:1px dotted #18233c;align-items:baseline;flex-wrap:wrap}
+  .col:last-child{border-bottom:none}
+  .col .cn{color:var(--text);min-width:120px}
+  .col .ct2{color:var(--muted)}
+  .col .ck{font-size:10px;padding:1px 5px;border-radius:4px;border:1px solid var(--line2);color:var(--faint)}
+  .col .ck.pk{color:var(--amber);border-color:#5a4a16}
+  .col .ck.fk{color:var(--cyan);border-color:#164e63}
+  .col .ck.uq{color:var(--green);border-color:#14532d}
+  .col .ck.nn{color:var(--faint)}
+  .col .cnote{color:var(--faint);font-size:11px;width:100%;padding-left:0}
+  .col .enum{color:var(--violet)}
+
+  /* api */
+  .apigroup{margin-top:26px}
+  .apigroup .gh{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+  .apigroup .gh .bar{width:4px;height:16px;border-radius:2px}
+  .apigroup .gh h3{margin:0;font-size:13.5px;font-family:var(--mono)}
+  table.api{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  table.api th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:9px 12px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.02)}
+  table.api td{padding:9px 12px;border-bottom:1px solid #16203a;vertical-align:top}
+  table.api tr:last-child td{border-bottom:none}
+  .m{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 7px;border-radius:5px;display:inline-block;min-width:46px;text-align:center}
+  .m.GET{color:#7dd3fc;background:#0b2a3a;border:1px solid #164e63}
+  .m.POST{color:#86efac;background:#0c2a18;border:1px solid #14532d}
+  .m.PATCH{color:#fcd34d;background:#2a2109;border:1px solid #5a4a16}
+  .m.DELETE{color:#fda4af;background:#2a0f15;border:1px solid #6b1f2a}
+  .route{font-family:var(--mono);font-size:12px;color:var(--text)}
+  .route .p{color:var(--cyan)}
+  .sy{font-family:var(--mono);font-size:10.5px;padding:2px 7px;border-radius:5px;border:1px solid var(--line2);white-space:nowrap}
+  .sy.sync{color:var(--green);border-color:#14532d}
+  .sy.async{color:var(--amber);border-color:#5a4a16}
+  .twrites{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+  /* rules */
+  .ruleset{margin-top:22px}
+  .rcat{display:flex;align-items:center;gap:9px;margin:26px 0 10px}
+  .rcat .bar{width:4px;height:16px;border-radius:2px}
+  .rcat h3{margin:0;font-size:13.5px;font-family:var(--mono)}
+  .rule{display:flex;gap:12px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);margin-bottom:8px}
+  .rule .num{font-family:var(--mono);font-size:11px;color:var(--faint);min-width:26px;padding-top:1px}
+  .rule .body{font-size:13.5px}
+  .rule .body .t{color:var(--text)}
+  .rule .tags{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+  .rule .tags code{font-family:var(--mono);font-size:10.5px;color:var(--cyan);background:#0a2233;border:1px solid #133;padding:1px 6px;border-radius:5px}
+  .callout{border:1px solid var(--line2);border-left:3px solid var(--amber);background:#15110a;border-radius:10px;padding:13px 16px;margin:14px 0;font-size:13.5px;color:#e8dcc2}
+  .callout.good{border-left-color:var(--green);background:#0c1611;color:#cfe9d8}
+  .callout b{color:#fff}
+  .mermaid{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:18px;overflow:auto}
+  .diaghint{font-size:12px;color:var(--faint);margin:8px 2px 0;font-family:var(--mono)}
+  footer{padding:34px 0;color:var(--faint);font-size:12.5px;font-family:var(--mono)}
+  .flowline{font-family:var(--mono);font-size:13px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow:auto;white-space:nowrap}
+  .flowline b{color:var(--green)} .flowline .a{color:var(--cyan)} .flowline .ar{color:var(--faint)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand"><b>Strategic Lifecycle AI Framework</b> · Architecture Reference</div>
+    <nav class="tabs">
+      <a href="#overview">Overview</a>
+      <a href="#er">Relationships</a>
+      <a href="#aiflow">AI Flow</a>
+      <a href="#schema">Schema</a>
+      <a href="#api">API Contracts</a>
+      <a href="#rules">Business Rules</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="hero" id="overview">
+    <div class="eyebrow">Phase 1 + Phase 2 · pre-implementation review</div>
+    <h1>Database schema &amp; API contracts
+      <span class="sub">Every table, endpoint, relationship, and business rule settled in design — in one place to verify before Claude Code scaffolds the backend.</span>
+    </h1>
+    <p class="lede">The model translates executive strategy into traceable, implementation-ready architecture. Forecasts are entered at progressively finer altitudes (objective → case → discovery); actuals are entered once at implementation and resolve both upward to the objective and sideways to value streams. The traceability spine — <span class="k">case → feature → capability → value stream / key activity</span> — is what every linking table exists to preserve.</p>
+    <div class="pillrow" id="pills"></div>
+  </div>
+
+  <section id="flowsec" style="border-bottom:none;padding-bottom:8px">
+    <h2>The flow</h2>
+    <div class="h2sub">What leads to what</div>
+    <div class="flowline">
+      <span class="a">Sign up / sign in</span> <span class="ar">→</span> <b>Company Profile</b> (workspace) <span class="ar">→</span> Departments <span class="ar">→</span> <b>Strategic Objective</b> <span class="ar">→</span> <span class="muted">Business Architecture (optional)</span> <span class="ar">→</span> Value Streams · Key Activities · Capabilities <span class="ar">⟶ Phase 2 ⟶</span> <b>Lean Business Case</b> <span class="ar">→</span> Discovery <span class="ar">→</span> Features · Requirements <span class="ar">→</span> Conceptual Deliverables <span class="ar">→</span> Implementation (actuals)
+    </div>
+    <div class="grid3" style="margin-top:16px">
+      <div class="card accent"><div class="k">Forecast — 3 altitudes</div><p class="small muted" style="margin:8px 0 0">Strategic Objective (hypothesis, integer metrics + <code>financial_impact</code>) → Lean Business Case (<code>forecast_cost/value</code>) → Discovery (qualitative refinement).</p></div>
+      <div class="card accent" style="border-left-color:var(--rose)"><div class="k" style="color:var(--rose)">Actuals — entered once</div><p class="small muted" style="margin:8px 0 0">At Implementation, per value stream (<code>implementation_value_streams.allocated_cost/value</code>). Objective actuals are <b>computed</b>, never stored.</p></div>
+      <div class="card accent" style="border-left-color:var(--green)"><div class="k" style="color:var(--green)">Governance</div><p class="small muted" style="margin:8px 0 0">Deliverables are <b>suggestions</b>: generated from data, edited by a human, saved as final (<code>suggested → user_finalized</code>). The AI layer plugs into this same gate with zero schema change.</p></div>
+    </div>
+
+    <div class="callout"><b>Deliberate changes from the original board</b> — verify these were intended: (1) Business Architecture is now <b>company-level</b> (one per workspace), not objective-owned — its create route moved to <code>/workspaces/:id/business-architecture</code>. (2) <code>lean_business_cases</code> is a <b>new table</b> (the board had its API but no DDL). (3) <code>business_impact_links</code> is <b>retired</b> — impacts now carry an optional <code>linked_value_stream_id</code> + <code>linked_lean_business_case_id</code>. (4) Single <code>success_metric</code> text fields on the objective are replaced by the <code>strategic_objective_metrics</code> child table (integers). (5) Auth is single-provider on <code>users</code> (the board's <code>users</code> had no <code>password_hash</code>). (6) <code>users</code> table name standardized (board referenced <code>user_profiles</code> in one FK).</div>
+    <div class="callout good" style="border-left-color:#e879f9"><b>AI Assistance Layer — additive, stateless, cost-aware.</b> The AI that helps users fill in each component is a set of backend-mediated endpoints (<code>/ai/draft</code>, <code>/ai/refine</code>, <code>/ai/suggest-links</code>) over the unchanged 33-table schema — <b>no new tables</b>, because suggestions live only in the browser until the user saves through the normal entity endpoints. Cost is controlled by design: every call is user-triggered (nothing fires on typing), <b>one structured call drafts a whole component</b> rather than one call per field, a cheap model handles routine drafting with a larger model reserved for heavy synthesis, and prompt caching + lean (linked-records-only) context keep input tokens small. See the <a href="#api">AI Assistance Layer</a> API group and the <a href="#rules">AI assistance</a> rules.</div>
+  </section>
+
+  <section id="er">
+    <h2>Relationships</h2>
+    <div class="h2sub">Entity-relationship diagram</div>
+    <p class="note">Shows structural relationships and key fields (PK / FK / name). Full column detail is in <a href="#schema">Schema</a> below. <b>Convention:</b> every entity table also carries <code>created_by_user_id</code> (FK → users) and <code>created_at</code>/<code>updated_at</code>; these are omitted from the diagram and cards to keep them readable.</p>
+    <pre class="mermaid" id="erdiagram"></pre>
+    <div class="diaghint">↕ scroll / pinch to zoom · 33 tables (22 entities + 11 link tables)</div>
+    <div class="h2sub" style="margin-top:28px">Origin &amp; reuse — one architecture, two entry points</div>
+    <p class="note">The same company-level architecture can be stood up from the strategic phase <i>or</i> from discovery. The <code>origin</code> flag (<code>architecture</code> | <code>discovery</code>) records which path created each component and is <b>provenance only</b> — it never scopes the component. Because every component is workspace-scoped (never tied to the discovery or case that created it), anything built in discovery is reusable by any future objective: value streams and capabilities through the objective's own selection junctions, the finer-grained components through their value streams and the objective's cases.</p>
+    <pre class="mermaid" id="origindiagram"></pre>
+  </section>
+
+  <section id="aiflow">
+    <h2>AI Assistance Flow</h2>
+    <div class="h2sub">How the AI layer adds details — without adding tables</div>
+    <p class="note">The AI layer doesn't appear in the entity-relationship diagram because it is <b>stateless and adds no tables</b>. It is a request/response flow between the browser, the FastAPI backend, and the AI provider. A suggestion populates the editable fields; only the user's <b>Save</b> writes anything to the database.</p>
+    <div class="legend">
+      <span><i class="dot" style="background:#f0abfc"></i>user action</span>
+      <span><i class="dot" style="background:#38bdf8"></i>frontend</span>
+      <span><i class="dot" style="background:#a78bfa"></i>backend · FastAPI</span>
+      <span><i class="dot" style="background:#fbbf24"></i>AI provider</span>
+      <span><i class="dot" style="background:#34d399"></i>data store</span>
+    </div>
+    <pre class="mermaid" id="aiflowdiagram"></pre>
+    <div class="diaghint">one structured call per component · cheap model for drafts, larger model only for deliverables</div>
+    <div class="grid3" style="margin-top:18px">
+      <div class="card accent" style="border-left-color:#e879f9"><div class="k" style="color:#e879f9">User-triggered only</div><p class="small muted" style="margin:8px 0 0">No calls fire on typing or focus. Every call is an explicit click — the primary cost control, and the reason there is no background spend.</p></div>
+      <div class="card accent" style="border-left-color:var(--green)"><div class="k" style="color:var(--green)">Stateless</div><p class="small muted" style="margin:8px 0 0">The suggestion lives only in the browser. Nothing is persisted until the user saves through the normal entity endpoint — which is why AI adds zero tables.</p></div>
+      <div class="card accent" style="border-left-color:var(--cyan)"><div class="k">AI never writes</div><p class="small muted" style="margin:8px 0 0">AI only pre-fills editable fields; the user edits in place, and only <b>Save</b> persists the values. The same path the deliverable <code>suggested → user_finalized</code> gate already follows.</p></div>
+    </div>
+  </section>
+
+  <section id="schema">
+    <h2>Schema</h2>
+    <div class="h2sub">Tables, columns &amp; types</div>
+    <div class="legend" id="legend"></div>
+    <div id="schemaroot"></div>
+  </section>
+
+  <section id="api">
+    <h2>API Contracts</h2>
+    <div class="h2sub">Endpoints, methods &amp; the tables they touch</div>
+    <p class="note">Routes follow the board's REST shape. JSON is camelCase at the API boundary; Postgres is snake_case (Pydantic alias mapping). <span class="sy sync" style="margin:0 4px">sync</span> returns immediately; <span class="sy async" style="margin:0 4px">async</span> kicks off a background job and returns a job id. <b>In this prototype the only async candidate is AI-assisted deliverable generation</b> — and it runs computed/sync until the AI layer is added, at which point it becomes a job.</p>
+    <div id="apiroot"></div>
+  </section>
+
+  <section id="rules" style="border-bottom:none">
+    <h2>Business Rules</h2>
+    <div class="h2sub">The rules we defined, noted against the model</div>
+    <div id="rulesroot"></div>
+  </section>
+
+  <footer>
+    Strategic Lifecycle AI Framework · architecture reference · generated for pre-implementation verification.<br>
+    Money = <span style="color:var(--muted)">double precision</span> (float, per decision) · Metrics = <span style="color:var(--muted)">integer</span> · IDs = <span style="color:var(--muted)">uuid</span> · Timestamps = <span style="color:var(--muted)">timestamptz</span>.
+  </footer>
+</div>
+
+<script>
+/* ---------- group palette ---------- */
+const GROUPS = {
+  auth:    {label:'Identity & Auth',                 color:'#a78bfa'},
+  company: {label:'Company & Organization',          color:'#22d3ee'},
+  strategy:{label:'Strategy',                        color:'#34d399'},
+  arch:    {label:'Business Architecture — Core',    color:'#38bdf8'},
+  archsup: {label:'Business Architecture — Supporting',color:'#2dd4bf'},
+  bcase:   {label:'Lean Business Case',              color:'#fbbf24'},
+  disc:    {label:'Discovery',                       color:'#f472b6'},
+  sol:     {label:'Features & Deliverables',         color:'#c084fc'},
+  impl:    {label:'Implementation',                  color:'#fb7185'},
+  ai:      {label:'AI Assistance Layer (no tables)', color:'#e879f9'},
+};
+
+/* ---------- tables ----------
+   col = [name, type, keytag, note]  keytag: '', 'PK','FK→table','UQ','NN', or combos 'FK→x,NN'
+   enum values go in note prefixed with 'enum:' */
+const T = [
+/* AUTH */
+{n:'users',grp:'auth',ph:1,cols:[
+  ['id','uuid','PK',''],['email','citext','UQ,NN',''],['full_name','text','',''],['avatar_url','text','',''],
+  ['auth_provider','text','NN','enum: password | google'],
+  ['password_hash','text','','null — only when provider = password'],
+  ['google_sub','text','','null — only when provider = google'],
+  ['email_verified','boolean','','default false'],['last_login_at','timestamptz','','']]},
+{n:'refresh_tokens',grp:'auth',ph:1,cols:[
+  ['id','uuid','PK',''],['user_id','uuid','FK→users',''],['token_hash','text','NN','store hash, never the token'],
+  ['expires_at','timestamptz','NN',''],['revoked_at','timestamptz','','null until revoked'],['created_at','timestamptz','','']]},
+/* COMPANY */
+{n:'workspaces',grp:'company',ph:1,note:'= company profile = tenant boundary',cols:[
+  ['id','uuid','PK',''],['name','text','NN','company / initiative name'],['legal_name','text','',''],
+  ['business_unit','text','','whole company or a specific business unit'],
+  ['description','text','',''],['industry','text','',''],
+  ['operating_model','text','','centralized / federated / product-led'],
+  ['business_model','text','','B2B / B2C / marketplace / platform'],
+  ['primary_customers','text','','who the company serves'],
+  ['primary_products','text','','core products / services'],
+  ['strategic_context','text','','narrative context — feeds objectives + AI drafting'],
+  ['company_size','text','','band: 1-50 / 51-200 / 201-1000 / 1000+'],
+  ['headquarters_region','text','',''],['website','text','',''],['logo_url','text','',''],
+  ['annual_revenue','double precision','','static profile context — not part of the forecast/actuals model']]},
+{n:'workspace_members',grp:'company',ph:1,cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['user_id','uuid','FK→users',''],
+  ['is_admin','boolean','','default false'],['joined_at','timestamptz','','']]},
+{n:'workspace_invites',grp:'company',ph:1,cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['invited_email','citext','NN',''],
+  ['invited_by_user_id','uuid','FK→users',''],['invite_token','text','UQ',''],
+  ['status','text','','enum: pending | accepted | expired'],['expires_at','timestamptz','',''],['accepted_at','timestamptz','','null until accepted']]},
+{n:'departments',grp:'company',ph:1,note:'trimmed — org structure only, no financial fields',cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],
+  ['parent_department_id','uuid','FK→departments','null — self-ref hierarchy'],
+  ['name','text','NN',''],['description','text','','']]},
+/* STRATEGY */
+{n:'strategic_objectives',grp:'strategy',ph:1,note:'collapsed model — holds problem + value hypothesis fields; forecast money only',cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],
+  ['strategic_initiative_name','text','NN','only field required for Draft'],
+  ['executive_objective','text','',''],
+  ['strategic_value_category','text','','enum: revenue_growth | cost_reduction | operational_efficiency | customer_experience | risk_reduction | scalability | competitive_advantage'],
+  ['expected_business_outcome','text','',''],['financial_impact','text','','qualitative forecast'],
+  ['urgency_rationale','text','',''],['target_implementation_year','text','',''],
+  ['target_implementation_start_date','date','',''],['target_implementation_end_date','date','',''],
+  ['problem_opportunity_statement','text','',''],['cost_of_inaction','text','',''],['current_limitation','text','',''],
+  ['impacted_teams','text','',''],['problem_type','text','','enum: customer | internal | both'],
+  ['value_hypothesis','text','',''],['value_measurement_approach','text','',''],
+  ['expected_value_type','text','','enum: financial | operational | mixed'],['value_realization_timeframe','text','',''],
+  ['status','text','','enum: draft | active | completed | archived · default draft']]},
+{n:'strategic_objective_metrics',grp:'strategy',ph:1,note:'the Network-2.0-style measurable goals',cols:[
+  ['id','uuid','PK',''],['strategic_objective_id','uuid','FK→strategic_objectives',''],['workspace_id','uuid','FK→workspaces',''],
+  ['name','text','NN','"Structural cost savings"'],
+  ['metric_category','text','','enum: financial | operational | customer | risk'],
+  ['baseline_value','integer','','null — whole numbers'],['target_value','integer','','null'],
+  ['unit','text','','USD | % | days | count'],['timeframe','text','','"By FY2025"']]},
+{n:'strategic_objective_value_streams',grp:'strategy',ph:1,j:true,note:'objective optionally selects existing value streams',cols:[
+  ['id','uuid','PK',''],['strategic_objective_id','uuid','FK→strategic_objectives',''],['value_stream_id','uuid','FK→value_streams',''],['','','UQ','unique(objective, value_stream)']]},
+{n:'strategic_objective_capabilities',grp:'strategy',ph:1,j:true,note:'objective optionally selects existing capabilities',cols:[
+  ['id','uuid','PK',''],['strategic_objective_id','uuid','FK→strategic_objectives',''],['capability_id','uuid','FK→business_capabilities',''],['','','UQ','unique(objective, capability)']]},
+/* ARCH CORE */
+{n:'business_architecture_components',grp:'arch',ph:1,note:'ONE per workspace — represents the company; reusable across all objectives; can be established during discovery',cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces,UQ','unique → one architecture per company'],
+  ['name','text','NN',''],['description','text','',''],['current_state_summary','text','',''],['future_state_summary','text','',''],
+  ['origin','text','','enum: architecture | discovery · default architecture'],
+  ['status','text','','enum: draft | active · default draft']]},
+{n:'value_streams',grp:'arch',ph:1,cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['business_architecture_id','uuid','FK→business_architecture_components',''],
+  ['name','text','NN',''],['description','text','',''],
+  ['value_stream_type','text','','enum: current_state | future_state | modified_existing'],
+  ['strategic_alignment','text','',''],['triggering_stakeholder','text','',''],['value_recipient','text','',''],
+  ['linked_department_id','uuid','FK→departments','null — lean org link'],
+  ['origin','text','','enum: architecture | discovery · default architecture'],
+  ['status','text','','enum: draft | active · default draft']]},
+{n:'key_activities',grp:'arch',ph:1,note:'the ordered stages of a value stream',cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['value_stream_id','uuid','FK→value_streams',''],
+  ['activity_name','text','NN',''],['activity_description','text','',''],['sequence_order','int','','stage order (no unique constraint — easy reorder)'],
+  ['current_state_issue','text','',''],['future_state_change','text','',''],['business_impact','text','','short description, not a $ value'],
+  ['origin','text','','enum: architecture | discovery · default architecture'],
+  ['status','text','','enum: draft | active · default draft']]},
+{n:'business_capabilities',grp:'arch',ph:1,note:'stable "what the business does"; current/target maturity',cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['business_architecture_id','uuid','FK→business_architecture_components',''],
+  ['capability_name','text','NN',''],['capability_description','text','',''],['current_maturity','text','',''],['target_maturity','text','',''],['capability_gap','text','',''],
+  ['owning_department_id','uuid','FK→departments','null — lean org link'],
+  ['origin','text','','enum: architecture | discovery · default architecture'],
+  ['status','text','','enum: draft | active · default draft']]},
+{n:'value_stream_capabilities',grp:'arch',ph:1,j:true,note:'traceability backbone',cols:[
+  ['id','uuid','PK',''],['value_stream_id','uuid','FK→value_streams',''],['capability_id','uuid','FK→business_capabilities',''],['','','UQ','unique(value_stream, capability)']]},
+{n:'key_activity_capabilities',grp:'arch',ph:1,j:true,note:'"Key Activity maps back to Capabilities"',cols:[
+  ['id','uuid','PK',''],['key_activity_id','uuid','FK→key_activities',''],['capability_id','uuid','FK→business_capabilities',''],['','','UQ','unique(key_activity, capability)']]},
+/* ARCH SUPPORTING */
+{n:'business_processes',grp:'archsup',ph:1,cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['business_architecture_id','uuid','FK→business_architecture_components',''],
+  ['process_name','text','NN',''],['current_state_process','text','',''],['future_state_process','text','',''],['process_gap','text','',''],['impacted_systems','text','',''],
+  ['linked_value_stream_id','uuid','FK→value_streams','null — optional'],
+  ['origin','text','','enum: architecture | discovery · default architecture'],
+  ['status','text','','enum: draft | active · default draft']]},
+{n:'stakeholders_personas',grp:'archsup',ph:1,cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['business_architecture_id','uuid','FK→business_architecture_components',''],
+  ['name','text','NN',''],['role_or_persona','text','',''],['stakeholder_type','text','','internal | external | executive | customer'],
+  ['needs','text','',''],['pain_points','text','',''],['value_received','text','',''],
+  ['linked_value_stream_id','uuid','FK→value_streams','null — optional'],
+  ['origin','text','','enum: architecture | discovery · default architecture'],
+  ['status','text','','enum: draft | active · default draft']]},
+{n:'information_concepts',grp:'archsup',ph:1,cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['business_architecture_id','uuid','FK→business_architecture_components',''],
+  ['concept_name','text','NN',''],['description','text','',''],['data_owner','text','',''],['source_system','text','',''],['target_system','text','',''],
+  ['data_quality_issue','text','',''],['business_usage','text','',''],
+  ['linked_value_stream_id','uuid','FK→value_streams','null — optional'],
+  ['origin','text','','enum: architecture | discovery · default architecture'],
+  ['status','text','','enum: draft | active · default draft']]},
+{n:'business_impacts',grp:'archsup',ph:1,note:'replaces business_impact_links',cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['business_architecture_id','uuid','FK→business_architecture_components',''],
+  ['impacted_area','text','NN',''],['impact_description','text','',''],['impact_type','text','','process | financial | customer | risk | operational'],
+  ['severity','text','','enum: low | medium | high'],['mitigation_notes','text','',''],['expected_value','text','','qualitative'],
+  ['linked_value_stream_id','uuid','FK→value_streams','null — optional'],
+  ['linked_lean_business_case_id','uuid','FK→lean_business_cases','null — the case it justifies'],
+  ['origin','text','','enum: architecture | discovery · default architecture'],
+  ['status','text','','enum: draft | active · default draft']]},
+/* BUSINESS CASE */
+{n:'lean_business_cases',grp:'bcase',ph:1,note:'granular sub-initiative of one objective; start of Phase 2; forecast money',cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['strategic_objective_id','uuid','FK→strategic_objectives','one objective per case'],
+  ['owner_user_id','uuid','FK→users','initiative owner (signed-in user)'],
+  ['title','text','NN','only field required for Draft'],['summary','text','','required at Active'],
+  ['problem_opportunity_statement','text','','required at Active'],['value_hypothesis','text','','required at Active'],
+  ['priority','text','','enum: low | medium | high · required at Active'],
+  ['forecast_cost','double precision','','null — case-level estimate'],['forecast_value','double precision','','null — case-level estimate'],
+  ['value_type','text','','enum: cost_savings | revenue | risk_reduction | efficiency'],
+  ['status','text','','enum: draft | active | completed | archived · default draft']]},
+{n:'lean_business_case_value_streams',grp:'bcase',ph:1,j:true,cols:[
+  ['id','uuid','PK',''],['lean_business_case_id','uuid','FK→lean_business_cases',''],['value_stream_id','uuid','FK→value_streams',''],['','','UQ','unique pair']]},
+{n:'lean_business_case_key_activities',grp:'bcase',ph:1,j:true,cols:[
+  ['id','uuid','PK',''],['lean_business_case_id','uuid','FK→lean_business_cases',''],['key_activity_id','uuid','FK→key_activities',''],['','','UQ','unique pair']]},
+{n:'lean_business_case_capabilities',grp:'bcase',ph:1,j:true,cols:[
+  ['id','uuid','PK',''],['lean_business_case_id','uuid','FK→lean_business_cases',''],['capability_id','uuid','FK→business_capabilities',''],['','','UQ','unique pair']]},
+/* DISCOVERY */
+{n:'discovery',grp:'disc',ph:2,note:'1:1 with a lean business case · all 10 findings as text (Option A)',cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['lean_business_case_id','uuid','FK→lean_business_cases,UQ','unique → one discovery per case'],
+  ['problem_statement','text','',''],['persona_findings','text','',''],['journey_map','text','',''],['current_state_process_map','text','',''],
+  ['bottleneck_analysis','text','',''],['data_findings','text','',''],['legacy_constraints','text','',''],['future_state_needs','text','',''],
+  ['discovery_metrics','text','',''],['governance_findings','text','',''],
+  ['status','text','','enum: draft | active | completed · default draft']]},
+{n:'discovery_stakeholders_personas',grp:'disc',ph:2,j:true,note:'reference existing personas (or create new, origin=discovery)',cols:[
+  ['id','uuid','PK',''],['discovery_id','uuid','FK→discovery',''],['stakeholder_persona_id','uuid','FK→stakeholders_personas',''],['','','UQ','unique pair']]},
+{n:'discovery_business_processes',grp:'disc',ph:2,j:true,cols:[
+  ['id','uuid','PK',''],['discovery_id','uuid','FK→discovery',''],['business_process_id','uuid','FK→business_processes',''],['','','UQ','unique pair']]},
+{n:'discovery_information_concepts',grp:'disc',ph:2,j:true,cols:[
+  ['id','uuid','PK',''],['discovery_id','uuid','FK→discovery',''],['information_concept_id','uuid','FK→information_concepts',''],['','','UQ','unique pair']]},
+/* SOLUTION */
+{n:'features',grp:'sol',ph:2,note:'solution piece that enables a capability',cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['lean_business_case_id','uuid','FK→lean_business_cases',''],
+  ['capability_id','uuid','FK→business_capabilities','null — the capability it enables'],
+  ['feature_name','text','NN',''],['description','text','',''],
+  ['feature_type','text','','enum: user_facing | operational | analytical | integration | platform'],
+  ['priority','text','','enum: low | medium | high'],
+  ['status','text','','enum: draft | active | completed · default draft']]},
+{n:'requirements',grp:'sol',ph:2,note:'detailed spec under a feature',cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['feature_id','uuid','FK→features',''],
+  ['requirement_name','text','NN',''],['description','text','',''],
+  ['requirement_type','text','','enum: functional | non_functional | data | integration | security'],
+  ['acceptance_criteria','text','','definition of done'],['priority','text','','enum: low | medium | high'],
+  ['status','text','','enum: draft | active | completed · default draft']]},
+{n:'conceptual_deliverables',grp:'sol',ph:2,note:'the 12 outputs; generated → editable → finalized',cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['lean_business_case_id','uuid','FK→lean_business_cases',''],
+  ['deliverable_type','text','','enum (12): conceptual_architecture_document | end_to_end_architecture_diagram | system_context_diagram | capability_to_component_diagram | value_stream_to_feature_map | data_flow_diagram | api_integration_view | governance_oversight_view | prioritized_epic_feature_roadmap | requirement_sets | risk_dependency_register | traceability_matrix'],
+  ['title','text','NN',''],['content','text','','authored / edited body'],
+  ['source','text','','enum: suggested | user_finalized · default suggested'],
+  ['status','text','','enum: draft | active | completed · default draft']]},
+/* IMPLEMENTATION */
+{n:'implementation',grp:'impl',ph:2,note:'1:1 with a case · where ACTUALS finally land',cols:[
+  ['id','uuid','PK',''],['workspace_id','uuid','FK→workspaces',''],['lean_business_case_id','uuid','FK→lean_business_cases,UQ','unique → one per case'],
+  ['actual_cost','double precision','','null'],['actual_value','double precision','','null'],
+  ['value_type','text','','enum: cost_savings | revenue | risk_reduction | efficiency'],
+  ['implementation_status','text','','enum: not_started | in_progress | completed | on_hold · default not_started'],
+  ['start_date','date','','null'],['completion_date','date','','null'],['outcome_notes','text','','variance from forecast, lessons']]},
+{n:'implementation_value_streams',grp:'impl',ph:2,j:true,note:'per-stream actuals entry point + objective rollup source',cols:[
+  ['id','uuid','PK',''],['implementation_id','uuid','FK→implementation',''],['value_stream_id','uuid','FK→value_streams',''],
+  ['allocated_cost','double precision','','null — final actual for this stream'],['allocated_value','double precision','','null'],['','','UQ','unique(implementation, value_stream)']]},
+];
+
+/* ---------- API contracts ---------- */
+const API = [
+ {g:'auth',label:'Auth',rows:[
+   ['POST','/auth/signup','sync','users','email + password registration'],
+   ['POST','/auth/login','sync','users · refresh_tokens','returns access JWT + refresh'],
+   ['POST','/auth/google','sync','users','Google OAuth (google_sub)'],
+   ['POST','/auth/refresh','sync','refresh_tokens','rotate refresh token'],
+   ['POST','/auth/logout','sync','refresh_tokens','revoke refresh token'],
+   ['GET','/me','sync','users','current user'],
+ ]},
+ {g:'company',label:'Workspaces · Members · Invites',rows:[
+   ['POST','/workspaces','sync','workspaces · workspace_members','creates company profile + admin member'],
+   ['GET','/workspaces','sync','workspaces',"caller's workspaces"],
+   ['GET','/workspaces/:workspaceId','sync','workspaces',''],
+   ['PATCH','/workspaces/:workspaceId','sync','workspaces',''],
+   ['DELETE','/workspaces/:workspaceId','sync','workspaces','cascade'],
+   ['GET','/workspaces/:workspaceId/members','sync','workspace_members',''],
+   ['PATCH','/workspaces/:workspaceId/members/:memberId','sync','workspace_members','toggle is_admin'],
+   ['DELETE','/workspaces/:workspaceId/members/:memberId','sync','workspace_members',''],
+   ['POST','/workspaces/:workspaceId/invites','sync','workspace_invites',''],
+   ['GET','/workspaces/:workspaceId/invites','sync','workspace_invites',''],
+   ['POST','/invites/:token/accept','sync','workspace_invites · workspace_members','consumes invite'],
+ ]},
+ {g:'company',label:'Departments',rows:[
+   ['POST','/workspaces/:workspaceId/departments','sync','departments',''],
+   ['GET','/workspaces/:workspaceId/departments','sync','departments','optional ?parentId'],
+   ['GET','/workspaces/:workspaceId/departments/:departmentId','sync','departments',''],
+   ['PATCH','/workspaces/:workspaceId/departments/:departmentId','sync','departments',''],
+   ['DELETE','/workspaces/:workspaceId/departments/:departmentId','sync','departments',''],
+ ]},
+ {g:'strategy',label:'Strategic Objectives & Metrics',rows:[
+   ['POST','/workspaces/:workspaceId/strategic-objectives','sync','strategic_objectives','max 3 per workspace'],
+   ['GET','/workspaces/:workspaceId/strategic-objectives','sync','strategic_objectives','list'],
+   ['GET','/workspaces/:workspaceId/strategic-objectives/:objectiveId','sync','strategic_objectives',''],
+   ['PATCH','/workspaces/:workspaceId/strategic-objectives/:objectiveId','sync','strategic_objectives','field edits + status (active-gate enforced)'],
+   ['POST','/workspaces/:workspaceId/strategic-objectives/:objectiveId/metrics','sync','strategic_objective_metrics',''],
+   ['GET','/workspaces/:workspaceId/strategic-objectives/:objectiveId/metrics','sync','strategic_objective_metrics',''],
+   ['PATCH','/workspaces/:workspaceId/metrics/:metricId','sync','strategic_objective_metrics',''],
+   ['DELETE','/workspaces/:workspaceId/metrics/:metricId','sync','strategic_objective_metrics',''],
+   ['POST','/workspaces/:workspaceId/strategic-objectives/:objectiveId/value-streams/:vsId','sync','strategic_objective_value_streams','link existing stream'],
+   ['POST','/workspaces/:workspaceId/strategic-objectives/:objectiveId/capabilities/:capId','sync','strategic_objective_capabilities','link existing capability'],
+   ['GET','/workspaces/:workspaceId/strategic-objectives/:objectiveId/financials','sync','computed','forecast vs rolled-up actuals'],
+   ['GET','/workspaces/:workspaceId/strategic-objectives/:objectiveId/traceability','sync','computed','traceability matrix (union across cases)'],
+ ]},
+ {g:'arch',label:'Business Architecture (company-level)',rows:[
+   ['POST','/workspaces/:workspaceId/business-architecture','sync','business_architecture_components','ONE per workspace'],
+   ['GET','/workspaces/:workspaceId/business-architecture','sync','business_architecture_components','the single component'],
+   ['PATCH','/workspaces/:workspaceId/business-architecture/:baId','sync','business_architecture_components',''],
+ ]},
+ {g:'arch',label:'Value Streams & Key Activities',rows:[
+   ['POST','/workspaces/:workspaceId/business-architecture/:baId/value-streams','sync','value_streams','max 6 per architecture'],
+   ['GET','/workspaces/:workspaceId/business-architecture/:baId/value-streams','sync','value_streams',''],
+   ['GET','/workspaces/:workspaceId/value-streams/:vsId','sync','value_streams',''],
+   ['PATCH','/workspaces/:workspaceId/value-streams/:vsId','sync','value_streams',''],
+   ['DELETE','/workspaces/:workspaceId/value-streams/:vsId','sync','value_streams',''],
+   ['POST','/workspaces/:workspaceId/value-streams/:vsId/key-activities','sync','key_activities','max 6 per stream'],
+   ['GET','/workspaces/:workspaceId/value-streams/:vsId/key-activities','sync','key_activities',''],
+   ['PATCH','/workspaces/:workspaceId/key-activities/:kaId','sync','key_activities',''],
+   ['DELETE','/workspaces/:workspaceId/key-activities/:kaId','sync','key_activities',''],
+ ]},
+ {g:'arch',label:'Capabilities & Capability Links',rows:[
+   ['POST','/workspaces/:workspaceId/business-architecture/:baId/capabilities','sync','business_capabilities',''],
+   ['GET','/workspaces/:workspaceId/business-architecture/:baId/capabilities','sync','business_capabilities',''],
+   ['PATCH','/workspaces/:workspaceId/capabilities/:capId','sync','business_capabilities',''],
+   ['DELETE','/workspaces/:workspaceId/capabilities/:capId','sync','business_capabilities',''],
+   ['POST','/workspaces/:workspaceId/value-streams/:vsId/capabilities/:capId','sync','value_stream_capabilities','link / unlink (DELETE)'],
+   ['POST','/workspaces/:workspaceId/key-activities/:kaId/capabilities/:capId','sync','key_activity_capabilities','link / unlink (DELETE)'],
+ ]},
+ {g:'archsup',label:'Supporting Architecture (Processes · Personas · Information · Impacts)',rows:[
+   ['POST','/workspaces/:workspaceId/business-architecture/:baId/processes','sync','business_processes','+ GET/PATCH/DELETE'],
+   ['POST','/workspaces/:workspaceId/business-architecture/:baId/stakeholders','sync','stakeholders_personas','+ GET/PATCH/DELETE'],
+   ['POST','/workspaces/:workspaceId/business-architecture/:baId/information-concepts','sync','information_concepts','+ GET/PATCH/DELETE'],
+   ['POST','/workspaces/:workspaceId/business-architecture/:baId/business-impacts','sync','business_impacts','+ GET/PATCH/DELETE'],
+ ]},
+ {g:'bcase',label:'Lean Business Cases & Links',rows:[
+   ['POST','/workspaces/:workspaceId/strategic-objectives/:objectiveId/lean-business-cases','sync','lean_business_cases','max 10 per objective'],
+   ['GET','/workspaces/:workspaceId/strategic-objectives/:objectiveId/lean-business-cases','sync','lean_business_cases','list · ?status= filter'],
+   ['GET','/workspaces/:workspaceId/lean-business-cases/:caseId','sync','lean_business_cases',''],
+   ['PATCH','/workspaces/:workspaceId/lean-business-cases/:caseId','sync','lean_business_cases','field edits (active-gate enforced)'],
+   ['PATCH','/workspaces/:workspaceId/lean-business-cases/:caseId/status','sync','lean_business_cases','archive / reactivate→draft'],
+   ['POST','/workspaces/:workspaceId/lean-business-cases/:caseId/value-streams/:vsId','sync','lean_business_case_value_streams','link / unlink'],
+   ['POST','/workspaces/:workspaceId/lean-business-cases/:caseId/key-activities/:kaId','sync','lean_business_case_key_activities','link / unlink'],
+   ['POST','/workspaces/:workspaceId/lean-business-cases/:caseId/capabilities/:capId','sync','lean_business_case_capabilities','link / unlink'],
+ ]},
+ {g:'disc',label:'Discovery & Links',rows:[
+   ['POST','/workspaces/:workspaceId/lean-business-cases/:caseId/discovery','sync','discovery','1:1 — fails if one exists'],
+   ['GET','/workspaces/:workspaceId/lean-business-cases/:caseId/discovery','sync','discovery',''],
+   ['PATCH','/workspaces/:workspaceId/discovery/:discoveryId','sync','discovery','edit findings'],
+   ['POST','/workspaces/:workspaceId/discovery/:discoveryId/personas/:personaId','sync','discovery_stakeholders_personas','link existing / unlink'],
+   ['POST','/workspaces/:workspaceId/discovery/:discoveryId/processes/:processId','sync','discovery_business_processes','link existing / unlink'],
+   ['POST','/workspaces/:workspaceId/discovery/:discoveryId/information-concepts/:conceptId','sync','discovery_information_concepts','link existing / unlink'],
+ ]},
+ {g:'sol',label:'Features & Requirements',rows:[
+   ['POST','/workspaces/:workspaceId/lean-business-cases/:caseId/features','sync','features',''],
+   ['GET','/workspaces/:workspaceId/lean-business-cases/:caseId/features','sync','features',''],
+   ['PATCH','/workspaces/:workspaceId/features/:featureId','sync','features',''],
+   ['DELETE','/workspaces/:workspaceId/features/:featureId','sync','features',''],
+   ['POST','/workspaces/:workspaceId/features/:featureId/requirements','sync','requirements',''],
+   ['GET','/workspaces/:workspaceId/features/:featureId/requirements','sync','requirements',''],
+   ['PATCH','/workspaces/:workspaceId/requirements/:requirementId','sync','requirements',''],
+ ]},
+ {g:'sol',label:'Conceptual Deliverables',rows:[
+   ['POST','/workspaces/:workspaceId/lean-business-cases/:caseId/deliverables/:type/draft','async','reads junctions → AI draft (not stored)','AI-backed; larger model; streamed. Returns a suggestion the user reviews'],
+   ['POST','/workspaces/:workspaceId/lean-business-cases/:caseId/deliverables','sync','conceptual_deliverables','save reviewed draft → suggested | user_finalized'],
+   ['GET','/workspaces/:workspaceId/lean-business-cases/:caseId/deliverables','sync','conceptual_deliverables',''],
+   ['PATCH','/workspaces/:workspaceId/deliverables/:deliverableId','sync','conceptual_deliverables','edit / finalize'],
+ ]},
+ {g:'impl',label:'Implementation & Actuals',rows:[
+   ['POST','/workspaces/:workspaceId/lean-business-cases/:caseId/implementation','sync','implementation','1:1'],
+   ['GET','/workspaces/:workspaceId/lean-business-cases/:caseId/implementation','sync','implementation',''],
+   ['PATCH','/workspaces/:workspaceId/implementation/:implId','sync','implementation','status / dates / notes'],
+   ['POST','/workspaces/:workspaceId/implementation/:implId/value-streams/:vsId','sync','implementation_value_streams','enter per-stream actuals'],
+   ['PATCH','/workspaces/:workspaceId/implementation/:implId/value-streams/:vsId','sync','implementation_value_streams','update allocation'],
+ ]},
+ {g:'ai',label:'AI Assistance Layer · backend-mediated, stateless, cost-aware',rows:[
+   ['POST','/workspaces/:workspaceId/ai/draft','async','reads linked records only · persists NOTHING','ONE structured call drafts a whole component (returns JSON of fields). Cheap model. Body: {targetType, contextIds, userPrompt?}'],
+   ['POST','/workspaces/:workspaceId/ai/refine','async','reads one field + minimal context · persists NOTHING','On-demand single-field rewrite/expand. Cheap model. Body: {targetType, field, currentText, instruction}'],
+   ['POST','/workspaces/:workspaceId/ai/suggest-links','async','reads architecture records · persists NOTHING','Proposes existing value streams / capabilities to link (returns ids only). Cheap model'],
+   ['GET','/workspaces/:workspaceId/ai/usage','sync','computed (provider metering)','Token / credit usage for the workspace budget guardrail'],
+ ]},
+];
+
+/* ---------- business rules ---------- */
+const RULES = [
+ {cat:'Tenancy & structure',g:'company',items:[
+   ['Workspace = company profile = tenant boundary. Every table is workspace-scoped via <code>workspace_id</code>.',['workspaces']],
+   ['One Business Architecture per workspace — it represents the company and is shared across all objectives.',['business_architecture_components']],
+   ['First artifact after a workspace is a Strategic Objective (required). Departments are an optional setup step.',['strategic_objectives','departments']],
+   ['Business Architecture is optional — a new venture may have none and build it as it goes; a user can jump Objective → Lean Business Case directly.',['lean_business_cases']],
+   ['Architecture components (value streams, capabilities, processes, personas, info concepts, impacts) are reusable across objectives and cases.',['value_streams','business_capabilities']],
+ ]},
+ {cat:'Cardinality (prototype)',g:'strategy',items:[
+   ['3 Strategic Objectives per workspace.',['strategic_objectives']],
+   ['6 Value Streams per Business Architecture.',['value_streams']],
+   ['6 Key Activities per Value Stream.',['key_activities']],
+   ['10 Lean Business Cases per Strategic Objective; a case belongs to exactly one objective.',['lean_business_cases']],
+   ['Discovery is 1:1 with a Lean Business Case (unique <code>lean_business_case_id</code>).',['discovery']],
+   ['Implementation is 1:1 with a Lean Business Case (unique <code>lean_business_case_id</code>).',['implementation']],
+ ]},
+ {cat:'Traceability spine',g:'arch',items:[
+   ['Capabilities link to Value Streams and/or Key Activities via junction tables — the backbone the app exists to preserve.',['value_stream_capabilities','key_activity_capabilities']],
+   ['A case links the value streams / key activities / capabilities it works through (optional many-to-many).',['lean_business_case_value_streams','lean_business_case_key_activities','lean_business_case_capabilities']],
+   ['Features reach value streams / key activities <b>transitively through capability</b> — no direct feature→stream link.',['features']],
+   ['An objective may optionally select existing components directly; its full footprint = the union across its cases.',['strategic_objective_value_streams','strategic_objective_capabilities']],
+   ['Discovery references existing personas / processes / info concepts, and may create new ones marked <code>origin = discovery</code>.',['discovery_stakeholders_personas','discovery_business_processes','discovery_information_concepts']],
+   ['Architecture can be established <b>during discovery</b>: as impacted business areas surface (<code>business_impacts</code>), the user creates the one-per-workspace business architecture and rolls it down — value streams → key activities, plus capabilities, processes, personas, and information concepts. Everything created this way is marked <code>origin = discovery</code> (value streams require the architecture to exist first). The whole architecture stack carries the <code>origin</code> marker, so no link tables are added.',['business_architecture_components','value_streams','business_impacts']],
+ ]},
+ {cat:'Status lifecycles',g:'bcase',items:[
+   ['Strategic Objective & Lean Business Case: draft → active → completed; archive from any state; reactivate → draft, then re-promote.',['strategic_objectives','lean_business_cases']],
+   ['Transition guard: a reactivated record cannot jump back to active until its active-gate fields are valid again.',['strategic_objectives','lean_business_cases']],
+   ['Architecture sub-entities (value streams, key activities, capabilities, processes, personas, info concepts, impacts): draft → active.',['value_streams','business_capabilities']],
+   ['Discovery, Features, Requirements, Deliverables: draft → active → completed (linear).',['discovery','features','requirements','conceptual_deliverables']],
+   ['Implementation: not_started → in_progress → completed / on_hold.',['implementation']],
+ ]},
+ {cat:'Validation gates',g:'strategy',items:[
+   ['Strategic Objective — Draft needs <code>strategic_initiative_name</code> only; Active needs name + executive_objective + strategic_value_category + problem_opportunity_statement + value_hypothesis.',['strategic_objectives']],
+   ['Lean Business Case — Draft needs <code>title</code> only; Active needs title + summary + problem_opportunity_statement + value_hypothesis + priority. Architecture links encouraged, not required.',['lean_business_cases']],
+ ]},
+ {cat:'Financial model',g:'impl',items:[
+   ['Forecast lives at three altitudes: Objective (hypothesis integers + <code>financial_impact</code>) → Case (<code>forecast_cost/value</code>) → Discovery (qualitative).',['strategic_objectives','lean_business_cases','discovery']],
+   ['Actuals are entered ONCE at Implementation, per value stream (<code>allocated_cost/value</code>).',['implementation','implementation_value_streams']],
+   ['Objective actuals are COMPUTED (rolled up from implementations via case → objective). The objective never stores actuals.',['strategic_objectives','implementation']],
+   ['Implementation actuals resolve two ways: upward to the objective and sideways to value streams. Entered once, surfaced twice.',['implementation_value_streams']],
+   ['Money = double precision (float, per decision); metrics = integer.',['lean_business_cases','strategic_objective_metrics']],
+ ]},
+ {cat:'Deliverables & governance',g:'sol',items:[
+   ['The 12 deliverables are <b>suggestions</b>: the system generates a draft from traceability data; the user edits and saves the trusted version (<code>suggested → user_finalized</code>). No auto-regeneration.',['conceptual_deliverables']],
+   ['Report-type deliverables (Traceability Matrix, Value-Stream-to-Feature Map, …) are seeded from existing data; narrative types are authored. All become user-editable.',['conceptual_deliverables']],
+   ['Human-in-the-loop by design: the AI layer produces a <code>suggested</code> deliverable that a human reviews and finalizes — and it requires no schema change.',['conceptual_deliverables']],
+ ]},
+ {cat:'Auth',g:'auth',items:[
+   ['Single auth provider per user (password OR google). <code>password_hash</code> only when password; <code>google_sub</code> only when google.',['users']],
+   ['Short-lived access JWT + rotating refresh token; only the refresh token hash is stored.',['refresh_tokens']],
+ ]},
+ {cat:'AI assistance · cost-aware & stateless',g:'ai',items:[
+   ['User-triggered only — no calls fire on typing, focus, or blur. Every AI call is an explicit action. This is the primary cost control: a token is never spent unless asked for.',['ai/draft','ai/refine']],
+   ['One structured call drafts a whole component (returns JSON populating all its fields). Per-field <code>refine</code> is on-demand only — minimizing call count over many small calls.',['ai/draft']],
+   ['Stateless: AI output is returned to the browser and never persisted. Nothing is stored until the user saves the entity through its normal endpoint — so the AI layer adds <b>zero new tables</b> to the 33-table schema.',['(no tables)']],
+   ['Human-in-the-loop preserved: AI proposes by <b>populating the editable fields</b>; the user edits any field in place before saving, and only the saved values are written — the AI never writes directly. The <code>suggested → user_finalized</code> gate still governs deliverables.',['conceptual_deliverables']],
+   ['Token controls: a cheap model for routine drafting, a larger model only for heavy synthesis (deliverables); prompt caching for the reused system prompt + workspace context; lean context — only the directly-linked records are sent, not the whole workspace.',['ai/draft','ai/usage']],
+   ['Provider keys are server-side only; the browser never calls the AI provider directly. An optional per-workspace token/credit budget + rate limit caps spend.',['ai/usage']],
+ ]},
+];
+
+/* ---------- render: pills ---------- */
+const nTables=T.length, nJ=T.filter(t=>t.j).length, nEnt=nTables-nJ;
+const nApi=API.reduce((a,x)=>a+x.rows.length,0);
+const nRules=RULES.reduce((a,x)=>a+x.items.length,0);
+document.getElementById('pills').innerHTML = [
+  ['Tables', nTables+' <span class="faint">('+nEnt+' entities · '+nJ+' link tables)</span>'],
+  ['Endpoints', nApi+''],
+  ['Business rules', nRules+''],
+  ['Phases', '1 + 2'],
+].map(p=>`<span class="pill">${p[0]} <b>${p[1]}</b></span>`).join('');
+
+/* ---------- render: legend ---------- */
+document.getElementById('legend').innerHTML = Object.entries(GROUPS)
+  .map(([k,v])=>`<span><i class="dot" style="background:${v.color}"></i>${v.label}</span>`).join('')
+  + `<span><i class="dot" style="background:transparent;border:1px dashed #27365a"></i>link / junction table</span>`;
+
+/* ---------- render: schema ---------- */
+function keyChips(tag){
+  if(!tag) return '';
+  return tag.split(',').map(s=>{
+    s=s.trim();
+    if(s==='PK') return '<span class="ck pk">PK</span>';
+    if(s==='UQ') return '<span class="ck uq">UQ</span>';
+    if(s==='NN') return '<span class="ck nn">NN</span>';
+    if(s.startsWith('FK→')) return `<span class="ck fk">FK → ${s.slice(3)}</span>`;
+    return `<span class="ck">${s}</span>`;
+  }).join(' ');
+}
+function noteHTML(note){
+  if(!note) return '';
+  if(note.startsWith('enum:')) return `<span class="cnote enum">${note}</span>`;
+  return `<span class="cnote">${note}</span>`;
+}
+let sroot='';
+for(const [gk,gv] of Object.entries(GROUPS)){
+  const ts=T.filter(t=>t.grp===gk);
+  if(!ts.length) continue;
+  sroot += `<div class="grouphead"><span class="bar" style="background:${gv.color}"></span><h3 style="color:${gv.color}">${gv.label}</h3><span class="ct">${ts.length} table${ts.length>1?'s':''}</span></div>`;
+  sroot += `<div class="tables">`;
+  for(const t of ts){
+    let cols='';
+    for(const c of t.cols){
+      const [cn,ct,tag,note]=c;
+      cols += `<div class="col">${cn?`<span class="cn">${cn}</span>`:''}${ct?`<span class="ct2">${ct}</span>`:''}${keyChips(tag)}${noteHTML(note)}</div>`;
+    }
+    sroot += `<div class="tbl" style="border-top:2px solid ${gv.color}">
+      <div class="tbl-h"><span class="name">${t.n}</span><span class="tag">
+        <span class="ph ${t.ph===1?'ph1':'ph2'}">P${t.ph}</span>
+        ${t.j?'<span class="jx">link</span>':''}
+      </span></div>
+      ${t.note?`<div style="padding:8px 13px 0;color:var(--faint);font-size:11.5px;font-family:var(--mono)">${t.note}</div>`:''}
+      <div class="cols">${cols}</div>
+    </div>`;
+  }
+  sroot += `</div>`;
+}
+document.getElementById('schemaroot').innerHTML=sroot;
+
+/* ---------- render: API ---------- */
+let aroot='';
+for(const grp of API){
+  const c=GROUPS[grp.g].color;
+  aroot += `<div class="apigroup"><div class="gh"><span class="bar" style="background:${c}"></span><h3 style="color:${c}">${grp.label}</h3></div>`;
+  aroot += `<table class="api"><thead><tr><th style="width:62px">Method</th><th>Route</th><th style="width:62px">Mode</th><th style="width:230px">Tables</th><th>Notes</th></tr></thead><tbody>`;
+  for(const r of grp.rows){
+    const [m,route,mode,tables,note]=r;
+    const routeHTML = route.replace(/:([A-Za-z]+)/g,'<span class="p">:$1</span>');
+    aroot += `<tr>
+      <td><span class="m ${m}">${m}</span></td>
+      <td><span class="route">${routeHTML}</span></td>
+      <td><span class="sy ${mode}">${mode}</span></td>
+      <td><span class="twrites">${tables}</span></td>
+      <td class="muted small">${note||''}</td>
+    </tr>`;
+  }
+  aroot += `</tbody></table></div>`;
+}
+document.getElementById('apiroot').innerHTML=aroot;
+
+/* ---------- render: rules ---------- */
+let rroot='';
+let rn=0;
+for(const rc of RULES){
+  const c=GROUPS[rc.g].color;
+  rroot += `<div class="rcat"><span class="bar" style="background:${c}"></span><h3 style="color:${c}">${rc.cat}</h3></div>`;
+  for(const it of rc.items){
+    rn++;
+    const [t,tags]=it;
+    rroot += `<div class="rule"><span class="num">R${String(rn).padStart(2,'0')}</span><div class="body"><span class="t">${t}</span><div class="tags">${tags.map(x=>`<code>${x}</code>`).join('')}</div></div></div>`;
+  }
+}
+document.getElementById('rulesroot').innerHTML=rroot;
+
+/* ---------- ER diagram ---------- */
+const ER = `erDiagram
+  users ||--o{ refresh_tokens : ""
+  users ||--o{ workspace_members : ""
+  users ||--o{ lean_business_cases : "owns"
+  workspaces ||--o{ workspace_members : ""
+  workspaces ||--o{ workspace_invites : ""
+  workspaces ||--o{ departments : "has"
+  departments ||--o{ departments : "parent"
+  workspaces ||--o{ strategic_objectives : "has (max 3)"
+  workspaces ||--|| business_architecture_components : "has one"
+  strategic_objectives ||--o{ strategic_objective_metrics : "has"
+  strategic_objectives ||--o{ strategic_objective_value_streams : "selects"
+  value_streams ||--o{ strategic_objective_value_streams : ""
+  strategic_objectives ||--o{ strategic_objective_capabilities : "selects"
+  business_capabilities ||--o{ strategic_objective_capabilities : ""
+  business_architecture_components ||--o{ value_streams : "has (max 6)"
+  value_streams ||--o{ key_activities : "has (max 6)"
+  business_architecture_components ||--o{ business_capabilities : "has"
+  departments |o--o{ value_streams : "owns"
+  departments |o--o{ business_capabilities : "owns"
+  value_streams ||--o{ value_stream_capabilities : ""
+  business_capabilities ||--o{ value_stream_capabilities : ""
+  key_activities ||--o{ key_activity_capabilities : ""
+  business_capabilities ||--o{ key_activity_capabilities : ""
+  business_architecture_components ||--o{ business_processes : "has"
+  business_architecture_components ||--o{ stakeholders_personas : "has"
+  business_architecture_components ||--o{ information_concepts : "has"
+  business_architecture_components ||--o{ business_impacts : "has"
+  value_streams |o--o{ business_processes : "linked"
+  value_streams |o--o{ stakeholders_personas : "linked"
+  value_streams |o--o{ information_concepts : "linked"
+  value_streams |o--o{ business_impacts : "linked"
+  strategic_objectives ||--o{ lean_business_cases : "has (max 10)"
+  lean_business_cases |o--o{ business_impacts : "justified by"
+  lean_business_cases ||--o{ lean_business_case_value_streams : ""
+  value_streams ||--o{ lean_business_case_value_streams : ""
+  lean_business_cases ||--o{ lean_business_case_key_activities : ""
+  key_activities ||--o{ lean_business_case_key_activities : ""
+  lean_business_cases ||--o{ lean_business_case_capabilities : ""
+  business_capabilities ||--o{ lean_business_case_capabilities : ""
+  lean_business_cases ||--|| discovery : "1:1"
+  discovery ||--o{ discovery_stakeholders_personas : ""
+  stakeholders_personas ||--o{ discovery_stakeholders_personas : ""
+  discovery ||--o{ discovery_business_processes : ""
+  business_processes ||--o{ discovery_business_processes : ""
+  discovery ||--o{ discovery_information_concepts : ""
+  information_concepts ||--o{ discovery_information_concepts : ""
+  lean_business_cases ||--o{ features : "has"
+  business_capabilities |o--o{ features : "enables"
+  features ||--o{ requirements : "has"
+  lean_business_cases ||--o{ conceptual_deliverables : "produces"
+  lean_business_cases ||--|| implementation : "1:1"
+  implementation ||--o{ implementation_value_streams : ""
+  value_streams ||--o{ implementation_value_streams : ""
+
+  workspaces {
+    uuid id PK
+    text name
+    text industry
+  }
+  users {
+    uuid id PK
+    citext email
+    text auth_provider
+  }
+  strategic_objectives {
+    uuid id PK
+    uuid workspace_id FK
+    text status
+  }
+  strategic_objective_metrics {
+    uuid id PK
+    uuid strategic_objective_id FK
+    int baseline_value
+    int target_value
+  }
+  business_architecture_components {
+    uuid id PK
+    uuid workspace_id FK
+  }
+  value_streams {
+    uuid id PK
+    uuid business_architecture_id FK
+    uuid linked_department_id FK
+  }
+  key_activities {
+    uuid id PK
+    uuid value_stream_id FK
+    text origin
+  }
+  business_capabilities {
+    uuid id PK
+    uuid business_architecture_id FK
+    uuid owning_department_id FK
+  }
+  lean_business_cases {
+    uuid id PK
+    uuid strategic_objective_id FK
+    uuid owner_user_id FK
+    float forecast_cost
+    float forecast_value
+  }
+  discovery {
+    uuid id PK
+    uuid lean_business_case_id FK
+  }
+  features {
+    uuid id PK
+    uuid lean_business_case_id FK
+    uuid capability_id FK
+  }
+  requirements {
+    uuid id PK
+    uuid feature_id FK
+  }
+  conceptual_deliverables {
+    uuid id PK
+    uuid lean_business_case_id FK
+    text source
+  }
+  implementation {
+    uuid id PK
+    uuid lean_business_case_id FK
+    float actual_cost
+    float actual_value
+  }
+  implementation_value_streams {
+    uuid id PK
+    uuid implementation_id FK
+    uuid value_stream_id FK
+    float allocated_cost
+  }
+  departments {
+    uuid id PK
+    uuid workspace_id FK
+    uuid parent_department_id FK
+  }
+`;
+document.getElementById('erdiagram').textContent = ER;
+const AIFLOW = `flowchart TB
+  classDef trig fill:#1c0b2c,stroke:#8a3bb0,color:#f0abfc;
+  classDef fe fill:#0c1a2c,stroke:#2b6c80,color:#9fd6ea;
+  classDef be fill:#160c2c,stroke:#6b2d8a,color:#e6b3f7;
+  classDef prov fill:#1a1207,stroke:#7a6420,color:#fcd34d;
+  classDef store fill:#0b2118,stroke:#1f6b3f,color:#6ee7b7;
+
+  U(["User clicks 'Draft with AI'"]):::trig
+  REQ["Frontend: POST /ai/draft"]:::fe
+  CTX["Backend: assemble lean context (linked records only)"]:::be
+  MODEL["Backend: pick model + prompt caching"]:::be
+  PROV["AI provider (keys server-side)"]:::prov
+  OUT["Structured output — all fields in one call"]:::prov
+  FIELDS["Suggestion fills the editable fields"]:::fe
+  EDIT["User edits any field in place"]:::fe
+  SAVE(["User clicks Save"]):::fe
+  EP["Backend: normal entity endpoint"]:::be
+  DB[("PostgreSQL — 33 tables, unchanged")]:::store
+  REF["ai/refine — one field, on demand"]:::be
+
+  U --> REQ --> CTX --> MODEL --> PROV --> OUT --> FIELDS --> EDIT --> SAVE --> EP --> DB
+  EDIT -. "refine one field" .-> REF
+  REF -.-> PROV`;
+document.getElementById('aiflowdiagram').textContent = AIFLOW;
+const ORIGIN = `flowchart TB
+  classDef arch fill:#08221c,stroke:#1f5a4f,color:#7fe3d0;
+  classDef disc fill:#190f26,stroke:#5a2d75,color:#e6b3f7;
+  classDef core fill:#0c1326,stroke:#27365a,color:#e6edf7;
+  classDef obj fill:#0c1a2c,stroke:#2b6c80,color:#9fd6ea;
+
+  SP["Strategic-phase entry · origin = architecture"]:::arch
+  DI["Discovery entry · origin = discovery"]:::disc
+  IMP["Impacted business areas · the discovery trigger"]:::disc
+  BA["Business Architecture · ONE per workspace"]:::core
+  VS["Value Streams"]:::core
+  KA["Key Activities"]:::core
+  CAP["Business Capabilities"]:::core
+  SUP["Processes · Personas · Information Concepts · Impacts"]:::core
+  OBJ(["Any new Strategic Objective — reuse, no copy"]):::obj
+
+  SP --> BA
+  DI --> IMP --> BA
+  BA --> VS --> KA
+  BA --> CAP
+  BA -.-> SUP
+  VS -- "select existing · strategic_objective_value_streams" --> OBJ
+  CAP -- "select existing · strategic_objective_capabilities" --> OBJ`;
+document.getElementById('origindiagram').textContent = ORIGIN;
+try{
+  mermaid.initialize({startOnLoad:true, theme:'dark', securityLevel:'loose',
+    themeVariables:{ fontFamily:'ui-monospace, Menlo, monospace', primaryColor:'#111a2e',
+      primaryBorderColor:'#27365a', lineColor:'#3b4d75', primaryTextColor:'#e2e8f0'}});
+}catch(e){
+  document.getElementById('erdiagram').innerHTML =
+   '<div style="color:#94a3b8;font-family:ui-monospace,monospace;font-size:13px">Diagram engine unavailable — every relationship is also documented in the Schema cards (FK → table) and the Business Rules below.</div>';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,926 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strategic Lifecycle AI Framework — Functional Wireframe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0f1e; --bg2:#0b1120; --sidebar:#0c1326; --panel:#111a2e; --panel2:#0f1830;
+    --line:#1e2a44; --line2:#27365a; --inputbg:#0a1124;
+    --text:#e6edf6; --muted:#93a3bd; --faint:#5d6b86;
+    --cyan:#22d3ee; --green:#34d399; --lime:#a3e635; --purple:#a78bfa; --blue:#38bdf8;
+    --amber:#fbbf24; --pink:#f472b6; --rose:#fb7185; --teal:#2dd4bf;
+    --primary:#5b7a16; --primary2:#6f9a1c;
+    --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5}
+  .app{display:flex;min-height:100vh}
+
+  /* sidebar */
+  .side{width:248px;flex:0 0 248px;background:var(--sidebar);border-right:1px solid var(--line);position:sticky;top:0;height:100vh;overflow-y:auto;padding:18px 0}
+  .wordmark{padding:0 18px 16px;border-bottom:1px solid var(--line);margin-bottom:10px}
+  .wordmark .logo{font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:.14em;color:var(--cyan);text-transform:uppercase;line-height:1.3}
+  .wordmark .tag{font-size:10.5px;color:var(--faint);font-family:var(--mono);margin-top:4px}
+  .navgroup{padding:12px 0 4px}
+  .navgroup h4{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:0;padding:6px 18px}
+  .navitem{display:flex;align-items:center;gap:9px;padding:7px 18px;font-size:13px;color:var(--muted);cursor:pointer;border-left:2px solid transparent}
+  .navitem:hover{background:rgba(255,255,255,.03);color:var(--text)}
+  .navitem.active{background:rgba(34,211,238,.08);border-left-color:var(--cyan);color:#fff}
+  .navitem .dot{width:6px;height:6px;border-radius:50%;flex:0 0 6px}
+  .navitem .num{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+
+  /* main */
+  .main{flex:1;min-width:0;display:flex;flex-direction:column}
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(10,15,30,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:11px 26px;display:flex;align-items:center;gap:14px}
+  .crumb{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .crumb b{color:var(--text)}
+  .topbar .right{margin-left:auto;display:flex;align-items:center;gap:12px}
+  .wf-badge{font-family:var(--mono);font-size:10.5px;color:var(--amber);border:1px solid #5a4a16;background:#19140a;padding:3px 9px;border-radius:999px}
+  .toggle{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
+  .switch{width:36px;height:20px;border-radius:999px;background:#26334d;position:relative;transition:.15s;border:1px solid var(--line2)}
+  .switch::after{content:"";position:absolute;width:14px;height:14px;border-radius:50%;background:#8a99b5;top:2px;left:2px;transition:.15s}
+  body.show-annot .switch{background:#5b7a16;border-color:#6f9a1c}
+  body.show-annot .switch::after{left:18px;background:#dff0b8}
+
+  .content{padding:24px 26px 80px;max-width:1180px;width:100%}
+
+  /* page header */
+  .phead{display:flex;align-items:flex-start;gap:14px;margin-bottom:6px}
+  .phead .t h1{font-family:var(--mono);font-size:22px;letter-spacing:.01em;text-transform:uppercase;color:var(--cyan);margin:0;font-weight:680}
+  .phead .t .sub{color:var(--muted);font-size:13px;margin-top:5px;max-width:680px}
+  .phead .actions{margin-left:auto;display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+  .counter{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line2);border-radius:7px;padding:6px 10px;background:var(--panel)}
+  .counter b{color:var(--text)}
+  .counter.full b{color:var(--rose)}
+  .btn{font-size:12.5px;font-weight:600;padding:8px 13px;border-radius:8px;border:1px solid transparent;cursor:default;display:inline-flex;align-items:center;gap:7px}
+  .btn.primary{background:var(--primary);color:#eaf6cf;border-color:var(--primary2)}
+  .btn.primary.disabled{background:#1a2030;color:#566;border-color:var(--line);}
+  .btn.ghost{background:transparent;border-color:var(--line2);color:var(--muted)}
+  .btn.sm{padding:5px 9px;font-size:11.5px}
+
+  /* badges */
+  .badge{font-family:var(--mono);font-size:10.5px;padding:3px 9px;border-radius:999px;border:1px solid;text-transform:lowercase;white-space:nowrap}
+  .b-draft{color:#9fb0c9;border-color:#3a486a;background:#141c30}
+  .b-active{color:#6ee7b7;border-color:#15603f;background:#0b2118}
+  .b-completed{color:#7dd3fc;border-color:#155e75;background:#082530}
+  .b-archived{color:#7c89a3;border-color:#2c3954;background:#0f1626}
+  .b-not_started{color:#9fb0c9;border-color:#3a486a;background:#141c30}
+  .b-in_progress{color:#fcd34d;border-color:#5a4a16;background:#191407}
+  .b-on_hold{color:#fda4af;border-color:#6b1f2a;background:#1f0d11}
+  .b-suggested{color:#fcd34d;border-color:#5a4a16;background:#191407}
+  .b-user_finalized{color:#6ee7b7;border-color:#15603f;background:#0b2118}
+
+  /* cards / sections */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-top:16px}
+  .card.tl{border-top:2px solid var(--cyan)}
+  .sec-title{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:2px 0 14px;display:flex;align-items:center;gap:8px}
+  .sec-title .ln{height:1px;background:var(--line);flex:1}
+  .subhead{font-size:13px;font-weight:650;color:var(--text);margin:18px 0 10px}
+
+  /* form fields */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px}
+  .grid.three{grid-template-columns:1fr 1fr 1fr}
+  .grid .full{grid-column:1/-1}
+  @media(max-width:820px){.grid,.grid.three{grid-template-columns:1fr}}
+  .field label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px;font-weight:600}
+  .field label .req{color:var(--lime);margin-left:5px;font-size:10px;font-family:var(--mono)}
+  .field label .comp{color:var(--blue);margin-left:5px;font-size:10px;font-family:var(--mono)}
+  .input{background:var(--inputbg);border:1px solid var(--line2);border-radius:8px;padding:9px 11px;font-size:13px;color:var(--text);min-height:38px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .input.area{min-height:64px;align-items:flex-start;white-space:pre-wrap;line-height:1.45}
+  .input.ph{color:var(--faint)}
+  .input.sel::after{content:"▾";color:var(--faint);font-size:11px}
+  .input.ro{background:#0b1322;border-style:dashed;color:var(--muted)}
+  .input.num{font-family:var(--mono)}
+
+  /* chips */
+  .chips{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+  .chip{font-size:11.5px;background:#0c1a2c;border:1px solid #1d3a52;color:#9fd6ea;padding:4px 9px;border-radius:7px;display:inline-flex;align-items:center;gap:6px}
+  .chip .x{color:#5d7d92;font-size:12px}
+  .chip.add{background:transparent;border-style:dashed;border-color:var(--line2);color:var(--faint);cursor:default}
+  .chip.cap{background:#160c2c;border-color:#3a1d6b;color:#c4b1f0}
+
+  /* tables */
+  table.t{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:4px}
+  table.t th{text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);padding:8px 11px;border-bottom:1px solid var(--line)}
+  table.t td{padding:9px 11px;border-bottom:1px solid #16203a;vertical-align:middle}
+  table.t tr:last-child td{border-bottom:none}
+  table.t tr.click td{cursor:default}
+  table.t tr.sel{background:rgba(34,211,238,.06)}
+  .mono{font-family:var(--mono)}
+
+  /* list rows (cards) */
+  .lrow{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);margin-bottom:9px}
+  .lrow.sel{border-color:#2b6c80;background:rgba(34,211,238,.05)}
+  .lrow .nm{font-weight:600;font-size:13.5px}
+  .lrow .meta{color:var(--muted);font-size:12px;margin-top:2px}
+  .lrow .rt{margin-left:auto;display:flex;align-items:center;gap:10px}
+
+  /* annotation */
+  .annot{display:none}
+  body.show-annot .annot{display:block;border-left:2px dashed #6f5a16;background:rgba(251,191,36,.05);color:#e7cf97;font-size:11.5px;padding:7px 11px;border-radius:0 8px 8px 0;margin:8px 0 2px}
+  body.show-annot .annot::before{content:"RULE  ";font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;color:var(--amber);font-weight:700}
+  .annot.inl{margin:6px 0 0}
+
+  /* kpi / stat */
+  .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  @media(max-width:820px){.kpis{grid-template-columns:1fr 1fr}}
+  .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:14px 16px}
+  .kpi .l{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+  .kpi .v{font-size:26px;font-weight:700;margin-top:6px;font-family:var(--mono)}
+  .kpi .d{font-size:11px;color:var(--muted);margin-top:3px}
+
+  .note{background:#0c1626;border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:9px;padding:11px 14px;font-size:12.5px;color:var(--muted);margin-top:14px}
+  .note b{color:var(--text)}
+  .flow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-top:14px}
+  .flow .s{color:var(--text);background:#0c1a2c;border:1px solid #1d3a52;padding:3px 9px;border-radius:6px}
+  .flow .ar{color:var(--faint)}
+  .twocol{display:grid;grid-template-columns:1.3fr .9fr;gap:16px}
+  @media(max-width:980px){.twocol{grid-template-columns:1fr}}
+  .status-rail{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-family:var(--mono);font-size:11px}
+  .status-rail .st{padding:3px 8px;border-radius:6px;border:1px solid var(--line2);color:var(--faint)}
+  .status-rail .st.on{color:#fff;border-color:#2b6c80;background:rgba(34,211,238,.12)}
+  .status-rail .ar{color:var(--faint)}
+  h3.dt{font-size:15px;margin:0 0 2px;font-weight:660}
+  /* AI assist */
+  .ai-btn{font-size:12.5px;font-weight:600;padding:8px 13px;border-radius:8px;cursor:default;display:inline-flex;align-items:center;gap:7px;background:linear-gradient(180deg,#2a0f3a,#1c0b2c);border:1px solid #6b2d8a;color:#f0abfc}
+  .ai-btn .sp{color:#e879f9}
+  .ai-chip{font-size:10.5px;color:#e6b3f7;border:1px solid #5a2d75;background:#190f26;border-radius:6px;padding:3px 8px;margin:6px 0 0;cursor:default;display:inline-flex;gap:5px;align-items:center;width:max-content}
+  .ai-panel{border:1px solid #5a2d75;border-left:3px solid #e879f9;background:linear-gradient(180deg,rgba(232,121,250,.07),rgba(232,121,250,.02));border-radius:11px;padding:14px 16px;margin-top:14px}
+  .ai-panel .h{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+  .ai-panel .h .ttl{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#f0abfc}
+  .ai-panel .cost{margin-left:auto;font-family:var(--mono);font-size:10px;color:#c79bdb;border:1px solid #4a2560;border-radius:999px;padding:2px 9px}
+  .ai-panel .draft{background:#0b1120;border:1px dashed #4a2560;border-radius:8px;padding:11px 13px;font-size:12.5px;color:var(--text);line-height:1.5}
+  .ai-panel .draft .row{display:flex;gap:8px;padding:3px 0}
+  .ai-panel .draft .row .fl{color:#b07fc8;font-family:var(--mono);font-size:11px;min-width:150px;flex:0 0 150px}
+  .ai-panel .acts{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap}
+  .ai-acc{font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:7px;cursor:default;border:1px solid}
+  .ai-acc.go{background:#15331f;border-color:#1f6b3f;color:#86efac}
+  .ai-acc.gh{background:transparent;border-color:var(--line2);color:var(--muted)}
+  .ai-banner{display:flex;align-items:center;gap:10px;border:1px solid #5a2d75;border-left:3px solid #e879f9;background:linear-gradient(180deg,rgba(232,121,250,.08),rgba(232,121,250,.02));border-radius:10px;padding:10px 14px;margin-top:14px;font-size:12.5px;color:#e6b3f7}
+  .ai-banner .sp{color:#e879f9;font-size:14px}
+  .field.ai-sug .input{border-color:#6b2d8a;box-shadow:inset 3px 0 0 #e879f9;background:#120c1e}
+  .field.ai-sug label .tag,.field.edited label .tag{font-size:9px;font-family:var(--mono);margin-left:7px;border-radius:4px;padding:1px 6px;letter-spacing:.04em}
+  .field.ai-sug label .tag{color:#e879f9;border:1px solid #5a2d75}
+  .field.edited label .tag{color:#86efac;border:1px solid #1f6b3f}
+  /* discovery roll-down builder */
+  .rd{margin-top:16px}
+  .rd-lvl{display:flex;gap:13px;align-items:flex-start}
+  .rd-num{flex:0 0 28px;width:28px;height:28px;border-radius:50%;background:#190f26;border:1px solid #5a2d75;color:#e6b3f7;font-family:var(--mono);font-size:12px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .rd-body{flex:1;min-width:0;padding-bottom:4px}
+  .rd-lh{display:flex;align-items:baseline;gap:9px;margin-bottom:9px}
+  .rd-lh-nm{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--text)}
+  .rd-lh-ct{font-size:11px;color:var(--faint)}
+  .rd-arrow{margin:1px 0 1px 13px;color:#6b2d8a;font-size:15px;line-height:1.15}
+  .rd-cap{font-size:11.5px;color:var(--faint);margin-top:6px}
+  /* landing / public page */
+  .land-hero{padding:4px 0 2px}
+  .land-hero h2{font-size:25px;line-height:1.22;margin:8px 0 10px;color:var(--text);max-width:880px}
+  .land-hero .tag{color:var(--muted);font-size:14px;max-width:780px;margin-bottom:16px;line-height:1.5}
+  .eyebrow-pill{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#fbbf24;border:1px solid #6b5320;background:#1a1407;border-radius:999px;padding:3px 11px}
+  a.btn.dl{color:#86efac;border-color:#1f6b3f;background:#08221c;text-decoration:none}
+  .hov{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#7dd3fc;border:1px solid #1e4a6b;background:#08182a;border-radius:999px;padding:2px 9px;white-space:nowrap}
+  .auth-card{max-width:470px;margin:6px auto}
+  .lnk{color:var(--cyan);cursor:pointer;border-bottom:1px solid transparent}
+  .lnk:hover{border-bottom-color:var(--cyan)}
+  /* ============================================================
+     STAR FOX 64 · HUD THEME   (chrome + headings only;
+     body copy, inputs, and tables stay in the readable sans/mono)
+     ============================================================ */
+  :root{
+    --pixel:"Press Start 2P", var(--mono);
+    --hud-green:#62ffae; --hud-blue:#48d6ff; --hud-amber:#ffd23f; --hud-red:#ff6b7a;
+    --hud-line:rgba(72,214,255,.22);
+    --glow-g:0 0 10px rgba(98,255,174,.5); --glow-b:0 0 10px rgba(72,214,255,.45);
+  }
+  /* deep-space backdrop + starfield (fixed) */
+  body{
+    background:
+      radial-gradient(1.5px 1.5px at 12% 22%, rgba(255,255,255,.55), transparent 60%),
+      radial-gradient(1.5px 1.5px at 68% 14%, rgba(180,220,255,.5), transparent 60%),
+      radial-gradient(1px 1px at 40% 70%, rgba(255,255,255,.4), transparent 60%),
+      radial-gradient(1px 1px at 84% 58%, rgba(180,220,255,.45), transparent 60%),
+      radial-gradient(1.5px 1.5px at 26% 86%, rgba(255,255,255,.4), transparent 60%),
+      radial-gradient(1px 1px at 92% 88%, rgba(255,255,255,.35), transparent 60%),
+      radial-gradient(1100px 620px at 88% -12%, #16244f 0%, transparent 62%),
+      radial-gradient(900px 560px at -8% 112%, #1c1340 0%, transparent 60%),
+      var(--bg);
+    background-attachment:fixed;
+  }
+  /* CRT scanline overlay (subtle, above everything, non-interactive) */
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:9998;
+    background:repeating-linear-gradient(rgba(0,0,0,0) 0 2px, rgba(0,8,16,.16) 2px 3px);opacity:.5}
+
+  /* pixel HUD typography — SHORT labels only */
+  .wordmark .logo, .navgroup h4, .sec-title, .phead .t h1,
+  .kpi .l, .eyebrow-pill, .ai-panel .h .ttl{
+    font-family:var(--pixel) !important; letter-spacing:0 !important; font-weight:400 !important;
+  }
+  .wordmark .logo{font-size:10.5px;line-height:1.7;color:var(--hud-green);text-shadow:var(--glow-g)}
+  .wordmark .tag{color:var(--hud-blue);opacity:.8}
+  .navgroup h4{font-size:7.5px;color:var(--hud-blue);opacity:.85;line-height:1.7}
+  .phead .t h1{font-size:13px;line-height:1.5;color:var(--hud-green);text-shadow:var(--glow-g)}
+  .sec-title{font-size:9px;color:var(--hud-amber);text-shadow:0 0 7px rgba(255,210,63,.35)}
+  .kpi .l{font-size:7.5px;color:var(--hud-blue)}
+  .eyebrow-pill{font-size:8px;color:var(--hud-amber);border-color:#6b5320}
+  .ai-panel .h .ttl{font-size:8.5px}
+
+  /* topbar = HUD bar with corner brackets */
+  .topbar{border-bottom:1px solid var(--hud-line);box-shadow:0 1px 0 rgba(98,255,174,.12),0 8px 24px -16px rgba(72,214,255,.5)}
+  .topbar::before,.topbar::after{content:"";position:absolute;top:6px;width:15px;height:15px;pointer-events:none}
+  .topbar::before{left:8px;border-left:2px solid var(--hud-green);border-top:2px solid var(--hud-green)}
+  .topbar::after{right:8px;border-right:2px solid var(--hud-green);border-top:2px solid var(--hud-green)}
+  .crumb{color:var(--hud-blue)} .crumb b{color:#dff6ff}
+  .hud-shields{font-family:var(--pixel);font-size:7px;color:var(--hud-green);letter-spacing:1px;display:flex;align-items:center;gap:6px;text-shadow:var(--glow-g)}
+  .hud-shields .bars{letter-spacing:-2px}
+  @media(max-width:820px){.hud-shields{display:none}}
+
+  /* sidebar = cockpit panel */
+  .side{border-right:1px solid var(--hud-line);box-shadow:inset -1px 0 0 rgba(72,214,255,.12)}
+  .wordmark{border-bottom:1px solid var(--hud-line)}
+  .navitem:hover{background:rgba(72,214,255,.06)}
+  .navitem.active{background:linear-gradient(90deg,rgba(98,255,174,.14),transparent);border-left-color:var(--hud-green);color:#eafff4;box-shadow:inset 0 0 14px rgba(98,255,174,.06)}
+  .navitem.active .dot{box-shadow:0 0 8px currentColor}
+
+  /* cards = HUD frames with a corner bracket */
+  .card{position:relative;border-color:var(--hud-line);box-shadow:0 0 0 1px rgba(72,214,255,.04),0 18px 40px -28px rgba(0,0,0,.8)}
+  .card::before{content:"";position:absolute;top:-1px;left:-1px;width:14px;height:14px;border-left:2px solid var(--hud-green);border-top:2px solid var(--hud-green);border-radius:3px 0 0 0;opacity:.55;pointer-events:none}
+  .sec-title .ln{background:linear-gradient(90deg,var(--hud-line),transparent)}
+
+  /* HUD buttons (mono, not pixel, so they stay readable) */
+  .btn{border-radius:4px;letter-spacing:.04em;text-transform:uppercase;font-family:var(--mono);font-size:11px}
+  .btn.primary{background:linear-gradient(180deg,#1c5a32,#123f22);border-color:var(--hud-green);color:#d6ffe6;box-shadow:var(--glow-g),inset 0 0 12px rgba(98,255,174,.12)}
+  .btn.ghost{border-color:var(--hud-blue);color:var(--hud-blue)}
+  a.btn.dl{border-color:var(--hud-green);color:var(--hud-green);box-shadow:var(--glow-g)}
+
+  /* HUD accents on data chrome */
+  .kpi{border-color:var(--hud-line)} .kpi .v{text-shadow:0 0 12px rgba(72,214,255,.25)}
+  .flow{border-color:var(--hud-line)} .flow .s{background:#0b1f2e;border-color:#1d4a63;color:#cdeeff}
+  .lrow{border-color:var(--hud-line)}
+  .note{border-left-color:var(--hud-blue)}
+  table.t th{color:var(--hud-blue)}
+  .hov{border-color:#1e5a7b;color:var(--hud-blue)}
+
+  /* landing hero = cockpit viewport */
+  .land-hero{background:linear-gradient(180deg,rgba(20,35,70,.55),rgba(11,17,32,.25))}
+  .land-hero h2{color:#eafff6;text-shadow:0 0 16px rgba(72,214,255,.3)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="wordmark">
+      <div class="logo">Strategic Lifecycle</div>
+      <div class="tag">functional wireframe · v1</div>
+    </div>
+    <nav id="nav"></nav>
+  </aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="crumb" id="crumb"></div>
+      <div class="right">
+        <div class="hud-shields"><span class="bars">▮▮▮▮▮▮</span> SHIELDS</div>
+        <div class="wf-badge">WIREFRAME · sample data</div>
+        <div class="toggle" id="annotToggle"><span class="switch"></span><span>Show business rules</span></div>
+      </div>
+    </div>
+    <div class="content" id="page"></div>
+  </div>
+</div>
+
+<script>
+/* =================== sample data (FedEx Network 2.0 worked example) =================== */
+const D = {
+  company:{name:'FedEx Corporation',legalName:'FedEx Corporation',description:'Global logistics and express transportation provider operating integrated Express and Ground networks.',businessUnit:'Network Transformation Office',industry:'Logistics & Transportation',operatingModel:'Federated, product-led',businessModel:'B2B, B2C',customers:'Enterprise shippers, SMB merchants, individual consumers',products:'Express, Ground, Freight, FedEx Office',strategicContext:'Network 2.0 — consolidating overlapping Express and Ground networks to reduce structural cost.',adminEmail:'tchaas@gmail.com',companySize:'1000+',headquartersRegion:'Memphis, TN, USA',website:'fedex.com',annualRevenue:90000000000},
+  departments:[{name:'Network Operations',parent:'—'},{name:'Logistics Engineering',parent:'Network Operations'},{name:'Last-Mile Delivery',parent:'Network Operations'}],
+  objective:{name:'Network 2.0 Transformation',status:'active',executiveObjective:'Consolidate Express and Ground into a unified pickup-and-delivery network to reduce structural cost.',valueCategory:'cost_reduction',outcome:'Lower cost-to-serve and higher asset utilization across the U.S. network.',financialImpact:'Targeting multi-billion structural cost savings over the program horizon.',urgency:'Margin pressure and overlapping route density between Express and Ground.',year:'FY2027',start:'2025-07-01',end:'2027-06-30',problem:'Express and Ground operate separate, overlapping pickup and delivery networks, driving redundant cost.',inaction:'Continued duplicate route cost and underutilized capacity.',limitation:'Two parallel dispatch and routing systems with no shared optimization.',teams:'Network Operations, Logistics Engineering, Last-Mile Delivery',problemType:'internal',valueHypothesis:'A unified network with shared optimization reduces total route miles and cost per stop.',measurement:'Cost per stop, total route miles, on-time delivery %.',valueType:'financial',timeframe:'18–24 months',
+    metrics:[{name:'Structural cost savings',cat:'financial',base:0,target:2000000000,unit:'USD',tf:'By FY2027'},{name:'Cost per stop',cat:'operational',base:100,target:82,unit:'index',tf:'By FY2027'},{name:'On-time delivery',cat:'customer',base:94,target:97,unit:'%',tf:'By FY2026'}],
+    streams:['Pickup-to-Delivery (Unified)'],caps:['Network Optimization','Dynamic Routing'],forecastRollup:390000000,actualRollup:160000000},
+  architecture:{name:'FedEx Enterprise Architecture',description:'Company-wide architecture anchoring the Network 2.0 program; reused across every objective.',current:'Separate Express and Ground operating models with parallel routing and dispatch.',future:'Unified pickup-and-delivery operating model with shared network optimization.',status:'active'},
+  valueStreams:[{name:'Pickup-to-Delivery (Unified)',type:'future_state',status:'active',dept:'Network Operations',align:'Network 2.0 consolidation',trigger:'Shipment booked',recipient:'Shipper & recipient',caps:['Dynamic Routing','Network Optimization']},{name:'Express Pickup (Current)',type:'current_state',status:'active',dept:'Last-Mile Delivery',align:'Baseline operations',trigger:'Express order placed',recipient:'Express customer',caps:['Dynamic Routing']}],
+  keyActivities:[{name:'Schedule pickup',seq:1,status:'active',issue:'Separate Express/Ground scheduling',change:'Single scheduling queue',impact:'Fewer trucks dispatched',caps:['Dynamic Routing']},{name:'Optimize route',seq:2,status:'active',issue:'No cross-network optimization',change:'Shared optimization engine',impact:'Reduced total route miles',caps:['Network Optimization']},{name:'Deliver & confirm',seq:3,status:'draft',issue:'Two proof-of-delivery systems',change:'Unified proof-of-delivery',impact:'Consistent tracking',caps:[]}],
+  capabilities:[{name:'Network Optimization',cur:'L2 — siloed',tgt:'L4 — shared',gap:'No cross-network optimization engine',dept:'Logistics Engineering',status:'active'},{name:'Dynamic Routing',cur:'L3',tgt:'L4',gap:'Limited real-time re-routing',dept:'Logistics Engineering',status:'active'}],
+  processes:[{name:'Route planning',cur:'Manual, per-network',fut:'Automated, shared',gap:'No shared route data',sys:'Dispatch A, Dispatch B',stream:'Pickup-to-Delivery (Unified)',status:'active'}],
+  personas:[{name:'Dispatch Manager',role:'Operations lead',type:'internal',needs:'A single dispatch view across networks',pains:'Toggling between two dispatch systems',value:'One prioritized queue',stream:'Pickup-to-Delivery (Unified)',status:'active'}],
+  information:[{name:'Route Plan',owner:'Logistics Engineering',src:'Dispatch A / B',tgt:'Unified Routing Service',quality:'Inconsistent formats across systems',usage:'Daily dispatch generation',stream:'Pickup-to-Delivery (Unified)',status:'active'}],
+  impacts:[{area:'Dispatch operations',desc:'Consolidation changes the daily dispatch workflow for operators',type:'operational',sev:'high',mit:'Phased rollout + operator training',val:'Reduced dispatch labor cost',stream:'Pickup-to-Delivery (Unified)',caseLink:'Consolidate Pickup Operations',status:'active'}],
+  cases:[{title:'Consolidate Pickup Operations',status:'active',priority:'high',owner:'tchaas@gmail.com',summary:'Merge Express and Ground pickup dispatch into a single optimized queue.',problem:'Redundant pickup routes between Express and Ground in dense metros.',valueHypothesis:'Unified pickup cuts route miles 12–18% in top metros.',fCost:300000000,fValue:800000000,valueType:'cost_savings',streams:['Pickup-to-Delivery (Unified)'],acts:['Schedule pickup','Optimize route'],caps:['Dynamic Routing','Network Optimization']},{title:'Unified Proof-of-Delivery',status:'draft',priority:'medium',owner:'tchaas@gmail.com',summary:'Single proof-of-delivery system across networks.',problem:'Two separate POD systems.',valueHypothesis:'Consistent tracking improves customer experience.',fCost:90000000,fValue:140000000,valueType:'efficiency',streams:[],acts:[],caps:[]}],
+  discovery:{caseLink:'Consolidate Pickup Operations',status:'active',problemStatement:'Express and Ground pickup networks overlap in dense metros, driving duplicate stops.',personaFindings:'Dispatch managers maintain two queues; drivers cross paths on adjacent routes.',journeyMap:'Booking → dispatch (×2) → pickup (×2) → linehaul → delivery.',currentMap:'Parallel dispatch per network; no shared optimization layer.',bottleneck:'Manual reconciliation between two dispatch systems at shift start.',dataFindings:'Route plans stored in incompatible formats across Dispatch A/B.',legacy:'Dispatch B is a 15-year-old mainframe system.',future:'Shared optimization service + a unified dispatch UI.',metrics:'Baseline duplicate-stop rate 18% across the top 20 metros.',governance:'Union agreements affect route reassignment; requires change management.',personasL:['Dispatch Manager'],processesL:['Route planning'],infoL:['Route Plan']},
+  features:[{name:'Unified Dispatch Queue',type:'operational',priority:'high',cap:'Dynamic Routing',status:'active'},{name:'Shared Optimization Service',type:'platform',priority:'high',cap:'Network Optimization',status:'active'},{name:'Cross-network Route Map',type:'analytical',priority:'medium',cap:'Network Optimization',status:'draft'}],
+  requirements:[{name:'Single queue shows Express + Ground stops',feat:'Unified Dispatch Queue',type:'functional',crit:'Both networks appear in one prioritized list.',priority:'high',status:'active'},{name:'Optimization runs < 30s for 5k stops',feat:'Shared Optimization Service',type:'non_functional',crit:'P95 latency under 30 seconds.',priority:'high',status:'active'}],
+  deliverables:[{type:'traceability_matrix',title:'Network 2.0 Traceability Matrix',source:'suggested',status:'active'},{type:'value_stream_to_feature_map',title:'Pickup Value Stream → Features',source:'user_finalized',status:'active'},{type:'conceptual_architecture_document',title:'Unified Network Conceptual Architecture',source:'suggested',status:'draft'}],
+  implementation:{caseLink:'Consolidate Pickup Operations',status:'in_progress',actualCost:160000000,actualValue:380000000,valueType:'cost_savings',start:'2025-09-01',end:'',notes:'Pilot live in top 5 metros; tracking a 14% duplicate-stop reduction so far.',allocations:[{stream:'Pickup-to-Delivery (Unified)',cost:140000000,value:340000000},{stream:'Express Pickup (Current)',cost:20000000,value:40000000}]}
+};
+const DELIV_TYPES=[['conceptual_architecture_document','Conceptual Architecture Document'],['end_to_end_architecture_diagram','End-to-End Architecture Diagram'],['system_context_diagram','System Context Diagram'],['capability_to_component_diagram','Capability-to-Component Diagram'],['value_stream_to_feature_map','Value Stream → Feature Map'],['data_flow_diagram','Data Flow Diagram'],['api_integration_view','API Integration View'],['governance_oversight_view','Governance Oversight View'],['prioritized_epic_feature_roadmap','Prioritized Feature Roadmap'],['requirement_sets','Requirement Sets'],['risk_dependency_register','Risk & Dependency Register'],['traceability_matrix','Traceability Matrix']];
+
+/* =================== helpers =================== */
+const money=n=>{if(n==null||n==='')return '—';const a=Math.abs(n);if(a>=1e9)return '$'+(n/1e9).toFixed(1)+'B';if(a>=1e6)return '$'+Math.round(n/1e6)+'M';if(a>=1e3)return '$'+Math.round(n/1e3)+'K';return '$'+n;};
+const badge=s=>`<span class="badge b-${s}">${s.replace(/_/g,' ')}</span>`;
+const annot=t=>`<div class="annot">${t}</div>`;
+const F=(label,value,o={})=>{const req=o.req?'<span class="req">required to activate</span>':'';const comp=o.comp?'<span class="comp">computed</span>':'';const cls='input'+(o.area?' area':'')+(o.ro?' ro':'')+(o.num?' num':'')+(!value&&value!==0?' ph':'');const v=(value||value===0)?value:(o.ph||'—');return `<div class="field${o.full?' full':''}"><label>${label}${req}${comp}</label><div class="${cls}">${v}</div></div>`;};
+const S=(label,value,o={})=>`<div class="field${o.full?' full':''}"><label>${label}${o.req?'<span class="req">required to activate</span>':''}</label><div class="input sel">${value||'—'}</div></div>`;
+const chips=(arr,o={})=>`<div class="chips">${(arr||[]).map(c=>`<span class="chip${o.cap?' cap':''}">${c}<span class="x">×</span></span>`).join('')}${o.add?`<span class="chip add">+ ${o.add}</span>`:''}${(!arr||!arr.length)&&!o.add?'<span style="color:var(--faint);font-size:12px">none linked</span>':''}</div>`;
+const secTitle=t=>`<div class="sec-title">${t}<span class="ln"></span></div>`;
+const statusRail=(states,cur)=>`<div class="status-rail">${states.map((s,i)=>`${i?'<span class="ar">→</span>':''}<span class="st ${s===cur?'on':''}">${s.replace(/_/g,' ')}</span>`).join('')}</div>`;
+const aiBtn=(label='Draft with AI')=>`<span class="ai-btn"><span class="sp">✦</span>${label}</span>`;
+const aiChip=(label='improve this field')=>`<div class="ai-chip">✦ ${label}</div>`;
+const aiPanel=o=>`<div class="ai-panel"><div class="h"><span class="ttl">✦ AI suggestion</span><span class="cost">${o.cost||'1 call · cheap model · nothing stored'}</span></div><div class="draft">${o.rows?o.rows.map(r=>`<div class="row"><span class="fl">${r[0]}</span><span>${r[1]}</span></div>`).join(''):o.draft}</div><div class="acts"><span class="ai-acc go">${o.accept||'Accept all fields'}</span><span class="ai-acc gh">Edit before saving</span><span class="ai-acc gh">Regenerate</span><span class="ai-acc gh">Dismiss</span></div>${o.note?annot(o.note):''}</div>`;
+const aiBanner=text=>`<div class="ai-banner"><span class="sp">✦</span><span>${text}</span></div>`;
+const Fai=(label,value,o={})=>{const tag=o.edited?'<span class="tag">edited</span>':'<span class="tag">✦ AI-suggested</span>';const cls='input'+(o.area?' area':'');return `<div class="field ai-sug${o.edited?' edited':''}${o.full?' full':''}"><label>${label}${tag}</label><div class="${cls}">${value}</div></div>`;};
+const originBadge=o=>`<span class="badge" style="${o==='discovery'?'color:#e6b3f7;border-color:#5a2d75;background:#190f26':'color:#7fe3d0;border-color:#1f5a4f;background:#08221c'}">origin: ${o}</span>`;
+
+/* =================== pages =================== */
+const PAGES={};
+
+PAGES.landing=()=>`
+  <div class="phead"><div class="t"><h1>Landing · Project Overview</h1><div class="sub">The public, unauthenticated front door — explains the project and routes visitors into the app or to the research paper. Reads no tenant data.</div></div><div class="actions"><span class="btn ghost">View live site</span></div></div>
+  ${annot('Marketing/overview surface, separate from the authenticated app. It touches no workspace data, and the paper download adds no tables and no authenticated endpoints — it is a public static asset.')}
+
+  <div class="card land-hero">
+    <span class="eyebrow-pill">Public site · unauthenticated</span>
+    <h2>AI-Augmented Framework for Product Discovery &amp; Software Lifecycle Transformation</h2>
+    <div class="tag">Translating strategic objectives into implementation-ready software outcomes through business architecture, product discovery, conceptual architecture, AI augmentation, and governance.</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <span class="btn primary" onclick="go('dashboard')">Enter the app →</span>
+      <a class="btn dl" href="assets/research-paper.pdf" download>⤓ Download the research paper (PDF)</a>
+    </div>
+  </div>
+
+  <div class="card">
+    ${secTitle('The strategy-to-implementation gap')}
+    <p class="note" style="margin-top:0">Many enterprise transformation efforts fail not because technology is unavailable, but because organizations lack a structured way to translate strategic intent into operational design, validated product direction, and implementation-ready technical outcomes.</p>
+    <div class="kpis" style="margin-top:12px">
+      <div class="kpi"><div class="l">Challenge</div><div class="v" style="font-size:15px;color:var(--rose)">Misalignment</div><div class="d">executive intent vs. execution</div></div>
+      <div class="kpi"><div class="l">Challenge</div><div class="v" style="font-size:15px;color:var(--rose)">Delays</div><div class="d">discovery &amp; requirements analysis</div></div>
+      <div class="kpi"><div class="l">Challenge</div><div class="v" style="font-size:15px;color:var(--rose)">Fragmentation</div><div class="d">business ↔ technical communication</div></div>
+      <div class="kpi"><div class="l">Challenge</div><div class="v" style="font-size:15px;color:var(--rose)">Traceability</div><div class="d">limited across lifecycle phases</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    ${secTitle('The lifecycle')}
+    <div class="flow"><span class="s">Strategy</span><span class="ar">→</span><span class="s">Business Architecture</span><span class="ar">→</span><span class="s">Discovery</span><span class="ar">→</span><span class="s">Conceptual Architecture</span><span class="ar">→</span><span class="s">Lifecycle</span><span class="ar">→</span><span class="s">Value</span></div>
+    <p class="note">Business architecture identifies where value should be created; product discovery validates what problem should be solved; conceptual architecture defines the high-level solution structure for implementation readiness.</p>
+  </div>
+
+  <div class="card">
+    ${secTitle('AI augmentation · human oversight at every stage')}
+    <div class="lrow"><div><div class="nm">Strategic initiative interpretation</div><div class="meta">summarize intent, extract objectives</div></div><div class="rt"><span class="hov">human oversight</span></div></div>
+    <div class="lrow"><div><div class="nm">Stakeholder &amp; persona analysis</div><div class="meta">draft personas from discovery inputs</div></div><div class="rt"><span class="hov">human oversight</span></div></div>
+    <div class="lrow"><div><div class="nm">Value stream &amp; journey mapping</div><div class="meta">propose streams, activities, gaps</div></div><div class="rt"><span class="hov">human oversight</span></div></div>
+    <div class="lrow"><div><div class="nm">Requirement generation</div><div class="meta">features and requirements from capabilities</div></div><div class="rt"><span class="hov">human oversight</span></div></div>
+    <div class="lrow" style="margin-bottom:0"><div><div class="nm">Documentation &amp; traceability acceleration</div><div class="meta">draft deliverables; preserve the spine</div></div><div class="rt"><span class="hov">human oversight</span></div></div>
+    ${annot('AI augments research, analysis, and workflow acceleration; human experts retain responsibility for validation and final decisions. Suggestions populate editable fields and persist only on Save — nothing is written automatically.')}
+  </div>
+
+  <div class="card">
+    ${secTitle('Representative enterprise scenarios')}
+    <div class="lrow"><div><div class="nm">FedEx Network 2.0 / DRIVE</div><div class="meta">Transform global logistics for speed and efficiency · operational efficiency, cost reduction</div></div><div class="rt" style="color:var(--green);font-size:12px">15% cost ↓ · 20% faster</div></div>
+    <div class="lrow"><div><div class="nm">Walmart next-generation supply chain</div><div class="meta">Real-time inventory and demand-driven fulfillment · customer experience, revenue</div></div><div class="rt" style="color:var(--green);font-size:12px">12% inventory ↓ · 25% faster</div></div>
+    <div class="lrow" style="margin-bottom:0"><div><div class="nm">Amazon fulfillment regionalization</div><div class="meta">Reduce delivery times via regional fulfillment · satisfaction, unit-cost</div></div><div class="rt" style="color:var(--green);font-size:12px">30% faster same-day · 18% cost ↓</div></div>
+  </div>
+
+  <div class="card">
+    ${secTitle('Governance preserves trust and integrity')}
+    <div class="chips">${['Human review checkpoints','Explainability for AI artifacts','Prompt + version tracking','Architecture review gates','Strategy-to-requirement traceability','Risk & compliance review','Data quality validation','Final stakeholder approval'].map(g=>`<span class="chip" style="cursor:default">${g}</span>`).join('')}</div>
+  </div>
+
+  <div class="card" style="border-top:2px solid #34d399">
+    ${secTitle('Research paper')}
+    <div class="lrow" style="margin-bottom:10px"><div><div class="nm">AI Adoption for Product Discovery and Software Lifecycle Management</div><div class="meta">From sequential delivery to an AI-augmented, governance-preserving lifecycle — the research underpinning this framework.</div></div><div class="rt">${badge('draft')}</div></div>
+    <a class="btn dl" href="assets/research-paper.pdf" download>⤓ Download PDF</a>
+    ${annot('Served as a public static PDF (object storage + CDN) — no login, no database row, no authenticated endpoint. Drop the final paper at /assets/research-paper.pdf to replace the placeholder; no code change required.')}
+  </div>
+
+  <div class="card">
+    ${secTitle('Project information')}
+    <div class="kpis">
+      <div class="kpi"><div class="l">Project lead</div><div class="v" style="font-size:15px;color:var(--text)">Tchaas Alexander-Wright</div><div class="d">independent research project</div></div>
+      <div class="kpi"><div class="l">Program</div><div class="v" style="font-size:15px;color:var(--cyan)">Georgia Tech · CS 8903</div><div class="d">AI-augmented lifecycle research</div></div>
+      <div class="kpi"><div class="l">Repository</div><div class="v" style="font-size:15px;color:var(--purple)">GitHub</div><div class="d">source + these documents</div></div>
+    </div>
+  </div>
+
+  <div class="note"><b>Two surfaces:</b> this is the public overview rendered in the app's clean enterprise style. The live public site keeps its own expressive identity — both offer the same factual overview and the paper download, and neither reads tenant data.</div>`;
+
+PAGES.signup=()=>`
+  <div class="phead"><div class="t"><h1>Sign Up</h1><div class="sub">Create an account to enter the framework. Phase 1 and Phase 2 unlock once you are signed in.</div></div></div>
+  <div class="card auth-card">
+    ${secTitle('Create your account')}
+    <div class="grid">
+      ${F('Full name','',{ph:'Jordan Rivera',full:true})}
+      ${F('Work email','',{ph:'you@company.com',full:true})}
+      ${F('Password','',{ph:'••••••••',full:true})}
+      ${F('Company / Workspace name','',{ph:'FedEx Corporation',full:true})}
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+      <span class="btn primary" onclick="signIn()">Create account →</span>
+      <span class="btn ghost" onclick="signIn()">Continue with Google</span>
+    </div>
+    <div class="note" style="margin-top:12px">Already have an account? <span class="lnk" onclick="go('login')">Log in</span></div>
+    ${annot('Single-provider auth on the users table (auth_provider = password | google). On success the API creates the first workspace (workspaces + an admin workspace_members row) and issues a short-lived JWT access token plus a rotating refresh token (refresh_tokens).')}
+  </div>`;
+
+PAGES.login=()=>`
+  <div class="phead"><div class="t"><h1>Log In</h1><div class="sub">Sign in to your workspace. Phase 1 and Phase 2 become available once you are in.</div></div></div>
+  <div class="card auth-card">
+    ${secTitle('Welcome back')}
+    <div class="grid">
+      ${F('Work email','',{ph:'you@company.com',full:true})}
+      ${F('Password','',{ph:'••••••••',full:true})}
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+      <span class="btn primary" onclick="signIn()">Log in →</span>
+      <span class="btn ghost" onclick="signIn()">Continue with Google</span>
+    </div>
+    <div class="note" style="margin-top:12px">New here? <span class="lnk" onclick="go('signup')">Create an account</span></div>
+    ${annot('Verifies the password hash (argon2id) or the Google identity, then issues a JWT access token + rotating refresh token. Every subsequent request is scoped to the workspace this user belongs to.')}
+  </div>`;
+
+PAGES.dashboard=()=>`
+  <div class="phead"><div class="t"><h1>Dashboard</h1><div class="sub">Company workspace overview. Create the company profile, define strategic objectives, capture the business architecture, then move into delivery.</div></div></div>
+  <div class="flow"><span class="s">Company Profile</span><span class="ar">→</span><span class="s">Departments</span><span class="ar">→</span><span class="s">Strategic Objective</span><span class="ar">→</span><span class="s">Business Architecture</span><span class="ar">⟶ Phase 2 ⟶</span><span class="s">Lean Business Case</span><span class="ar">→</span><span class="s">Discovery</span><span class="ar">→</span><span class="s">Features</span><span class="ar">→</span><span class="s">Deliverables</span><span class="ar">→</span><span class="s">Implementation</span></div>
+  ${annot('Workspace = company profile = tenant. A Strategic Objective is required before Business Architecture; Departments are optional. Every record below is scoped to this workspace.')}
+  <div class="card">
+    <div class="kpis">
+      <div class="kpi"><div class="l">Workspace</div><div class="v" style="font-size:18px;color:var(--green)">FedEx Corporation</div><div class="d">company profile · 1 admin</div></div>
+      <div class="kpi"><div class="l">Strategic Objectives</div><div class="v" style="color:var(--green)">1 <span style="color:var(--faint);font-size:15px">/ 3</span></div><div class="d">max 3 per workspace</div></div>
+      <div class="kpi"><div class="l">Business Architecture</div><div class="v" style="color:var(--cyan)">1</div><div class="d">exactly one per workspace</div></div>
+    </div>
+    ${annot('“Business Architecture” is a single company-level record — not “0 / 5”. Once it exists, the action is Open, not Create.')}
+    <div class="kpis" style="margin-top:12px">
+      <div class="kpi"><div class="l">Value Streams</div><div class="v" style="color:var(--cyan)">2 <span style="color:var(--faint);font-size:15px">/ 6</span></div><div class="d">max 6 per architecture</div></div>
+      <div class="kpi"><div class="l">Lean Business Cases</div><div class="v" style="color:var(--amber)">2 <span style="color:var(--faint);font-size:15px">/ 10</span></div><div class="d">max 10 per objective</div></div>
+      <div class="kpi"><div class="l">Impacts</div><div class="v" style="color:var(--purple)">1</div><div class="d">0 high-severity open</div></div>
+    </div>
+  </div>
+  <div class="card">
+    ${secTitle('Data model coverage · 33 tables')}
+    <p class="note" style="margin-top:0">Every screen in this wireframe maps to the finalized data architecture: <b>22 entity tables + 11 link tables = 33</b>. This is the alignment check between the UI and the schema reference.</p>
+    <table class="t" style="margin-top:12px"><thead><tr><th>Screen group</th><th>Backing tables</th></tr></thead><tbody>
+      <tr><td><b>Public Site</b> · Landing</td><td class="mono" style="color:var(--faint)">none — static overview + paper download (no tables)</td></tr>
+      <tr><td><b>Account</b> · Sign Up / Log In</td><td class="mono" style="color:var(--muted)">users · refresh_tokens</td></tr>
+      <tr><td><b>Account &amp; Setup</b></td><td class="mono" style="color:var(--muted)">workspaces · workspace_members · workspace_invites · departments</td></tr>
+      <tr><td><b>Phase 1 · Strategy</b></td><td class="mono" style="color:var(--muted)">strategic_objectives · strategic_objective_metrics · business_architecture_components · value_streams · key_activities · business_capabilities · business_processes · stakeholders_personas · information_concepts · business_impacts</td></tr>
+      <tr><td><b>Phase 2 · Delivery</b></td><td class="mono" style="color:var(--muted)">lean_business_cases · discovery · features · requirements · conceptual_deliverables · implementation</td></tr>
+      <tr><td><b>Link tables</b> (11)</td><td class="mono" style="color:var(--faint)">surfaced as the “select / link / reference” pickers across objectives, cases, discovery &amp; implementation</td></tr>
+      <tr><td><b>AI Layer</b></td><td class="mono" style="color:var(--faint)">none — stateless; persists only via the entity endpoints above</td></tr>
+    </tbody></table>
+    ${annot('Link tables (the 11 junctions) have no dedicated screen by design — they are the chips and pickers that connect records: an objective selecting value streams / capabilities, a case linking value streams / activities / capabilities, a discovery referencing personas / processes / information concepts, and implementation allocating actuals per value stream.')}
+  </div>
+  <div class="note"><b>Reading this wireframe:</b> every page is populated with one consistent example so you can see the data each screen holds. Flip <b>“Show business rules”</b> (top-right) to overlay the cardinality limits, validation gates, status lifecycles, the financial model, and the governance pattern in context.</div>`;
+
+PAGES.company=()=>`
+  <div class="phead"><div class="t"><h1>Company Profile</h1><div class="sub">The workspace that anchors every lifecycle artifact. Setup, not a lifecycle stage.</div></div><div class="actions"><span class="btn primary">Save profile</span></div></div>
+  ${annot('Singleton per workspace (one row in the workspaces table). Every field below maps directly to a workspaces column — the strategic-context fields were folded into the schema, so the UI and the data model are now aligned.')}
+  <div class="card tl">
+    ${secTitle('Identity')}
+    <div class="grid">
+      ${F('Company / Workspace Name',D.company.name,{req:false})}
+      ${F('Legal Name',D.company.legalName)}
+      ${F('Company Profile Description',D.company.description,{area:true,full:true})}
+      ${F('Company or Business Unit',D.company.businessUnit)}
+      ${S('Primary Industry',D.company.industry)}
+    </div>
+    ${secTitle('Operating context')}
+    <div class="grid">
+      ${F('Operating Model',D.company.operatingModel,{ph:'Centralized, federated, product-led'})}
+      ${F('Business Model',D.company.businessModel,{ph:'B2B, B2C, marketplace, platform'})}
+      ${F('Primary Customers / Users',D.company.customers,{area:true})}
+      ${F('Primary Products / Services',D.company.products,{area:true})}
+      ${F('Strategic Context',D.company.strategicContext,{area:true,full:true})}
+    </div>
+    ${secTitle('Profile details')}
+    <div class="grid three">
+      ${S('Company Size',D.company.companySize)}
+      ${F('Headquarters Region',D.company.headquartersRegion)}
+      ${F('Website',D.company.website)}
+      ${F('Logo URL',D.company.logoUrl,{ph:'https://…/logo.svg'})}
+      ${F('Annual Revenue',money(D.company.annualRevenue),{num:true})}
+    </div>
+    ${annot('All fields above map 1:1 to workspaces columns. Annual Revenue is static profile context only — it is not part of the forecast/actuals financial model (money lives in lean_business_cases forecasts and implementation actuals).')}
+  </div>
+
+  <div class="card">
+    ${secTitle('Team & access')}
+    <div class="subhead" style="margin-top:0">Members <span style="color:var(--faint);font-weight:400">· workspace_members</span></div>
+    <div class="lrow"><div><div class="nm">${D.company.adminEmail||'admin@fedex.com'}</div><div class="meta">created the workspace</div></div><div class="rt">${badge('active')}<span class="hov" style="color:var(--hud-amber);border-color:#6b5320">admin</span></div></div>
+    <div class="lrow" style="margin-bottom:0"><div><div class="nm">analyst@fedex.com</div><div class="meta">added by admin</div></div><div class="rt">${badge('active')}<span class="hov">member</span></div></div>
+    <div class="subhead">Pending invites <span style="color:var(--faint);font-weight:400">· workspace_invites</span></div>
+    <div class="lrow" style="margin-bottom:0"><div><div class="nm">pm@fedex.com</div><div class="meta">invited 2 days ago · expires in 5</div></div><div class="rt">${badge('draft')}<span class="hov">pending</span></div></div>
+    <div style="margin-top:10px"><span class="btn ghost sm">+ Invite teammate</span></div>
+    ${annot('The creating user becomes the admin member (workspace_members). The Default Admin Email is the email of that user — stored on users, not on workspaces. Invites (workspace_invites) carry a status: pending | accepted | expired.')}
+  </div>`;
+
+PAGES.departments=()=>`
+  <div class="phead"><div class="t"><h1>Departments</h1><div class="sub">Optional organization structure. Value streams and capabilities can link to a department.</div></div><div class="actions"><span class="btn primary">Add department</span></div></div>
+  ${annot('Optional setup step. Org structure only — no financial fields live here.')}
+  <div class="card">
+    ${secTitle('Departments')}
+    <table class="t"><thead><tr><th>Name</th><th>Parent department</th><th>Linked value streams</th><th>Owned capabilities</th></tr></thead><tbody>
+    ${D.departments.map(d=>`<tr><td><b>${d.name}</b></td><td class="mono" style="color:var(--muted)">${d.parent}</td><td style="color:var(--muted)">${d.name==='Network Operations'?'Pickup-to-Delivery (Unified)':d.name==='Last-Mile Delivery'?'Express Pickup (Current)':'—'}</td><td style="color:var(--muted)">${d.name==='Logistics Engineering'?'Network Optimization, Dynamic Routing':'—'}</td></tr>`).join('')}
+    </tbody></table>
+  </div>
+  <div class="card">
+    ${secTitle('Add / edit department')}
+    <div class="grid">${F('Name','',{ph:'e.g. Network Operations'})}${S('Parent Department','— none —')}${F('Description','',{area:true,full:true,ph:'What this department is responsible for'})}</div>
+  </div>`;
+
+PAGES.objectives=()=>{const o=D.objective;return `
+  <div class="phead"><div class="t"><h1>Strategic Objectives</h1><div class="sub">Executive intent and strategic value. The top of the lifecycle — forecast only; actuals roll up here from implementation.</div></div><div class="actions"><span class="counter">Objectives <b>1 / 3</b></span>${aiBtn()}<span class="btn primary">New objective</span></div></div>
+  ${annot('Max 3 per workspace. Draft needs only the initiative name; activating requires the five gate fields marked below.')}
+  <div class="card">
+    ${secTitle('Objectives')}
+    <div class="lrow sel"><div><div class="nm">${o.name}</div><div class="meta">Cost reduction · ${o.metrics.length} metrics · 1 business case</div></div><div class="rt">${badge(o.status)}</div></div>
+  </div>
+
+  <div class="twocol">
+    <div>
+    <div class="card tl">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px"><h3 class="dt">${o.name}</h3>${badge(o.status)}</div>
+      ${statusRail(['draft','active','completed','archived'],o.status)}
+      ${annot('draft → active → completed; archive from any state; reactivate returns to draft, then re-promote (re-promotion re-checks the gate fields).')}
+      ${aiBanner('“Draft with AI” fills the fields below in one call — edit any of them inline, then Save. Nothing is stored until you save.')}
+      ${annot('One structured call fills every empty field at once — far cheaper than assisting field-by-field. The values land in the editable fields; the user edits in place and nothing is persisted until they save through the normal endpoint.')}
+      ${secTitle('Strategic framing')}
+      <div class="grid">
+        ${F('Strategic Initiative Name',o.name,{req:true})}
+        ${S('Strategic Value Category','Cost reduction',{req:true})}
+        ${F('Executive Objective',o.executiveObjective,{area:true,full:true,req:true})}
+        ${F('Problem / Opportunity Statement',o.problem,{area:true,full:true,req:true})}
+        ${F('Value Hypothesis',o.valueHypothesis,{area:true,full:true,req:true})}
+        ${F('Expected Business Outcome',o.outcome,{area:true,full:true})}
+        ${F('Financial Impact (qualitative)',o.financialImpact,{area:true,full:true})}
+        ${F('Cost of Inaction',o.inaction,{area:true})}
+        ${F('Current Limitation',o.limitation,{area:true})}
+        ${S('Problem Type','Internal')}
+        ${F('Impacted Teams',o.teams)}
+        ${S('Expected Value Type','Financial')}
+        ${F('Value Realization Timeframe',o.timeframe)}
+        ${F('Value Measurement Approach',o.measurement,{area:true,full:true})}
+        ${F('Target Year',o.year)}${F('Target Window',o.start+'  →  '+o.end)}
+      </div>
+      ${secTitle('Success metrics · integer baseline / target')}
+      <table class="t"><thead><tr><th>Metric</th><th>Category</th><th>Baseline</th><th>Target</th><th>Unit</th><th>Timeframe</th></tr></thead><tbody>
+        ${o.metrics.map(m=>`<tr><td><b>${m.name}</b></td><td class="mono" style="color:var(--muted)">${m.cat}</td><td class="mono">${m.base.toLocaleString()}</td><td class="mono" style="color:var(--green)">${m.target.toLocaleString()}</td><td class="mono" style="color:var(--muted)">${m.unit}</td><td style="color:var(--muted)">${m.tf}</td></tr>`).join('')}
+      </tbody></table>
+      <div style="margin-top:8px"><span class="btn ghost sm">+ Add metric</span></div>
+      ${annot('Metrics are a child table; baseline/target are integers (whole numbers), not money floats.')}
+      ${secTitle('Selected architecture (optional)')}
+      <div class="subhead" style="margin-top:0">Value streams</div>${chips(o.streams,{add:'select existing'})}
+      <div class="subhead">Capabilities</div>${chips(o.caps,{cap:true,add:'select existing'})}
+      ${annot('An objective directly selects existing value streams and capabilities — the pool is the whole company architecture, including anything established during discovery (origin: discovery). Its full architecture footprint is the union across its cases.')}
+    </div>
+    </div>
+
+    <div>
+    <div class="card" style="border-top:2px solid var(--rose)">
+      ${secTitle('Financials — computed')}
+      <div class="kpi" style="margin-bottom:10px"><div class="l">Forecast value <span style="color:var(--blue)">computed</span></div><div class="v" style="color:var(--blue);font-size:22px">${money(o.forecastRollup)}</div><div class="d">Σ of this objective's case forecasts</div></div>
+      <div class="kpi" style="margin-bottom:10px"><div class="l">Actual value <span style="color:var(--blue)">computed</span></div><div class="v" style="color:var(--green);font-size:22px">${money(o.actualRollup)}</div><div class="d">rolled up from implementation allocations</div></div>
+      <div class="kpi"><div class="l">Realization</div><div class="v" style="font-size:22px">41%</div><div class="d">actual ÷ forecast</div></div>
+      ${annot('The objective NEVER stores actuals. Both numbers here are read-only: forecast = sum of case forecasts; actual = sum of implementation value-stream allocations under this objective. Actuals are entered only on the Implementation screen.')}
+    </div>
+    <div class="note"><b>Why no input here?</b> Money is entered downstream (case forecasts, implementation actuals) and surfaced upward. Keeping the objective read-only is what makes the roll-up trustworthy.</div>
+    </div>
+  </div>`;};
+
+PAGES.architecture=()=>{const a=D.architecture;return `
+  <div class="phead"><div class="t"><h1>Business Architecture</h1><div class="sub">The company's architecture — one record, reused across every objective and case.</div></div><div class="actions"><span class="btn ghost">Open</span></div></div>
+  ${annot('Exactly one per workspace. There is no “create another” and no “0 / 5”. It anchors value streams, capabilities, processes, personas, information concepts, and impacts.')}
+  <div class="card tl">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px"><h3 class="dt">${a.name}</h3>${badge(a.status)}</div>
+    <div class="grid">
+      ${F('Name',a.name)}${S('Status','Active')}
+      ${F('Description',a.description,{area:true,full:true})}
+      ${F('Current State Summary',a.current,{area:true})}
+      ${F('Future State Summary',a.future,{area:true})}
+      ${S('Origin','Architecture')}
+    </div>
+  </div>
+  <div class="card">
+    ${secTitle('What hangs off the architecture')}
+    <div class="kpis">
+      <div class="kpi"><div class="l">Value Streams</div><div class="v" style="color:var(--cyan)">2 / 6</div></div>
+      <div class="kpi"><div class="l">Capabilities</div><div class="v" style="color:var(--purple)">2</div></div>
+      <div class="kpi"><div class="l">Processes / Personas / Concepts</div><div class="v" style="font-size:18px">1 · 1 · 1</div></div>
+    </div>
+  </div>`;};
+
+const listDetail=(cfg)=>{
+  const rows=cfg.rows.map((r,i)=>`<div class="lrow ${i===0?'sel':''}"><div><div class="nm">${r.name}</div><div class="meta">${r.meta}</div></div><div class="rt">${badge(r.status)}</div></div>`).join('');
+  return `<div class="phead"><div class="t"><h1>${cfg.title}</h1><div class="sub">${cfg.sub}</div></div><div class="actions">${cfg.counter?`<span class="counter${cfg.full?' full':''}">${cfg.counter}</span>`:''}<span class="btn primary${cfg.full?' disabled':''}">${cfg.addLabel||'New'}</span></div></div>
+  ${cfg.headAnnot?annot(cfg.headAnnot):''}
+  <div class="card">${secTitle(cfg.listTitle||'Records')}${rows}</div>
+  <div class="card tl">${secTitle(cfg.formTitle||'Detail')}${cfg.form}</div>`;
+};
+
+PAGES['value-streams']=()=>{const v=D.valueStreams[0];return listDetail({title:'Value Streams',sub:'How value flows through the business. Lives under the company architecture.',counter:'Streams <b>2 / 6</b>',addLabel:'New value stream',headAnnot:'Max 6 per architecture. Capabilities link here — the traceability backbone.',
+  rows:D.valueStreams.map(s=>({name:s.name,meta:`${s.type.replace(/_/g,' ')} · ${s.dept} · ${s.caps.length} capabilities`,status:s.status})),
+  form:`<div class="grid">${F('Name',v.name)}${S('Value Stream Type','Future state')}${F('Strategic Alignment',v.align)}${S('Linked Department',v.dept)}${F('Triggering Stakeholder',v.trigger)}${F('Value Recipient',v.recipient)}${S('Origin','Architecture')}${F('Description','Unified pickup-and-delivery flow replacing parallel Express/Ground routes.',{area:true,full:true})}</div>
+  <div class="subhead">Linked capabilities</div>${chips(v.caps,{cap:true,add:'link capability'})}
+  ${annot('Capabilities are linked via a junction (value_stream_capabilities). Features reach this stream transitively through capability — there is no direct feature→stream link.')}`});};
+
+PAGES['key-activities']=()=>{const k=D.keyActivities[0];return listDetail({title:'Key Activities',sub:'The ordered stages of a value stream where value is created, delayed, or transferred.',counter:'Activities <b>3 / 6</b>',addLabel:'New activity',headAnnot:'Max 6 per value stream. Sequence is ordering only.',
+  rows:D.keyActivities.map(a=>({name:`${a.seq}. ${a.name}`,meta:`${a.caps.length} capabilities${a.impact?' · '+a.impact:''}`,status:a.status})),
+  form:`<div class="grid">${F('Activity Name',k.name)}${F('Sequence Order',k.seq,{num:true})}${F('Current State Issue',k.issue,{area:true})}${F('Future State Change',k.change,{area:true})}${F('Business Impact (description)',k.impact,{full:true})}${S('Origin','Architecture')}</div>
+  <div class="subhead">Linked capabilities</div>${chips(k.caps,{cap:true,add:'link capability'})}`});};
+
+PAGES.capabilities=()=>{const c=D.capabilities[0];return listDetail({title:'Business Capabilities',sub:'What the business does. Stable building blocks with current and target maturity.',counter:'Capabilities <b>2</b>',addLabel:'New capability',
+  rows:D.capabilities.map(x=>({name:x.name,meta:`${x.cur} → ${x.tgt} · ${x.dept}`,status:x.status})),
+  form:`<div class="grid">${F('Capability Name',c.name)}${S('Owning Department',c.dept)}${F('Current Maturity',c.cur)}${F('Target Maturity',c.tgt)}${F('Capability Gap',c.gap,{area:true,full:true})}${S('Origin','Architecture')}</div>
+  ${annot('Capabilities are company-level and reusable. They are linked to value streams and key activities, and selected by lean business cases and features.')}`});};
+
+PAGES.processes=()=>{const p=D.processes[0];return listDetail({title:'Business Processes',sub:'Current- and future-state process detail supporting the architecture.',counter:'Processes <b>1</b>',addLabel:'New process',
+  rows:D.processes.map(x=>({name:x.name,meta:`${x.sys} · linked to ${x.stream}`,status:x.status})),
+  form:`<div class="grid">${F('Process Name',p.name)}${S('Linked Value Stream',p.stream)}${F('Current State Process',p.cur,{area:true})}${F('Future State Process',p.fut,{area:true})}${F('Process Gap',p.gap)}${F('Impacted Systems',p.sys)}${S('Origin','Architecture')}</div>`});};
+
+PAGES.personas=()=>{const p=D.personas[0];return listDetail({title:'Stakeholders & Personas',sub:'The people the value streams serve or depend on.',counter:'Personas <b>1</b>',addLabel:'New persona',
+  rows:D.personas.map(x=>({name:x.name,meta:`${x.role} · ${x.type}`,status:x.status})),
+  form:`<div class="grid">${F('Name',p.name)}${F('Role / Persona',p.role)}${S('Stakeholder Type','Internal')}${S('Linked Value Stream',p.stream)}${F('Needs',p.needs,{area:true})}${F('Pain Points',p.pains,{area:true})}${F('Value Received',p.value,{full:true})}${S('Origin','Architecture')}</div>`});};
+
+PAGES.information=()=>{const c=D.information[0];return listDetail({title:'Information Concepts',sub:'The key data objects the architecture produces and consumes.',counter:'Concepts <b>1</b>',addLabel:'New concept',
+  rows:D.information.map(x=>({name:x.name,meta:`owner: ${x.owner} · ${x.src} → ${x.tgt}`,status:x.status})),
+  form:`<div class="grid">${F('Concept Name',c.name)}${F('Data Owner',c.owner)}${F('Source System',c.src)}${F('Target System',c.tgt)}${F('Data Quality Issue',c.quality,{area:true})}${F('Business Usage',c.usage,{area:true})}${S('Linked Value Stream',c.stream)}${S('Origin','Architecture')}</div>`});};
+
+PAGES.impacts=()=>{const im=D.impacts[0];return listDetail({title:'Business Impacts',sub:'Effects that will later justify lean business cases and discovery priorities.',counter:'Impacts <b>1</b>',addLabel:'New impact',
+  rows:D.impacts.map(x=>({name:x.area,meta:`${x.type} · justifies “${x.caseLink}”`,status:x.status})),
+  form:`<div class="grid">${F('Impacted Area',im.area)}${S('Severity','High')}${F('Impact Description',im.desc,{area:true,full:true})}${F('Impact Type',im.type)}${F('Mitigation Notes',im.mit,{area:true})}${F('Expected Value (qualitative)',im.val)}${S('Linked Value Stream',im.stream)}${S('Linked Lean Business Case',im.caseLink)}${S('Origin','Architecture')}</div>
+  ${annot('Impacts can point at a value stream and at the lean business case they justify (the retired business_impact_links junction is replaced by these two optional links).')}`});};
+
+PAGES.cases=()=>{const c=D.cases[0];return `
+  <div class="phead"><div class="t"><h1>Lean Business Cases</h1><div class="sub">Granular sub-initiatives of an objective — the start of Phase 2. Each carries its own forecast.</div></div><div class="actions"><span class="counter">Cases <b>2 / 10</b></span>${aiBtn()}<span class="btn primary">New business case</span></div></div>
+  ${annot('Belongs to exactly one objective; max 10 per objective. Draft needs only a title; activating requires summary, problem/opportunity, value hypothesis, and priority.')}
+  <div class="card">${secTitle('Cases under “Network 2.0 Transformation”')}
+    ${D.cases.map((x,i)=>`<div class="lrow ${i===0?'sel':''}"><div><div class="nm">${x.title}</div><div class="meta">forecast ${money(x.fCost)} cost · ${money(x.fValue)} value · ${x.priority} priority</div></div><div class="rt">${badge(x.status)}</div></div>`).join('')}
+  </div>
+  <div class="twocol">
+   <div><div class="card tl">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px"><h3 class="dt">${c.title}</h3>${badge(c.status)}</div>
+    ${statusRail(['draft','active','completed','archived'],c.status)}
+    ${secTitle('Case detail')}
+    <div class="grid">
+      ${F('Title',c.title,{req:true})}
+      ${S('Priority','High',{req:true})}
+      ${F('Summary',c.summary,{area:true,full:true,req:true})}
+      ${F('Problem / Opportunity Statement',c.problem,{area:true,full:true,req:true})}
+      ${F('Value Hypothesis',c.valueHypothesis,{area:true,full:true,req:true})}
+      ${S('Owner',c.owner)}
+    </div>
+    ${secTitle('Forecast')}
+    <div class="grid three">${F('Forecast Cost',money(c.fCost),{num:true})}${F('Forecast Value',money(c.fValue),{num:true})}${S('Value Type','Cost savings')}</div>
+    ${annot('Case-level forecast (numeric). These sum upward to the objective forecast. Actuals are NOT entered here — only at implementation.')}
+    ${secTitle('Architecture links (optional)')}
+    <div class="subhead" style="margin-top:0">Value streams</div>${chips(c.streams,{add:'link'})}
+    <div class="subhead">Key activities</div>${chips(c.acts,{add:'link'})}
+    <div class="subhead">Capabilities</div>${chips(c.caps,{cap:true,add:'link'})}
+   </div></div>
+   <div>
+    <div class="card"><div class="sec-title">Downstream<span class="ln"></span></div>
+     <div class="lrow" style="margin-bottom:9px"><div><div class="nm">Discovery</div><div class="meta">1:1 · active</div></div><div class="rt"><span class="btn ghost sm">Open</span></div></div>
+     <div class="lrow" style="margin-bottom:9px"><div><div class="nm">Features</div><div class="meta">3 features</div></div><div class="rt"><span class="btn ghost sm">Open</span></div></div>
+     <div class="lrow" style="margin-bottom:9px"><div><div class="nm">Deliverables</div><div class="meta">3 of 12 generated</div></div><div class="rt"><span class="btn ghost sm">Open</span></div></div>
+     <div class="lrow"><div><div class="nm">Implementation</div><div class="meta">1:1 · in progress</div></div><div class="rt"><span class="btn ghost sm">Open</span></div></div>
+     ${annot('Discovery and Implementation are each 1:1 with the case — once created they open rather than create a second.')}
+    </div>
+   </div>
+  </div>`;};
+
+PAGES.discovery=()=>{const d=D.discovery;return `
+  <div class="phead"><div class="t"><h1>Discovery</h1><div class="sub">Product discovery for a single business case — and where the business architecture can be established and rolled down, tagged as built in discovery.</div></div><div class="actions">${aiBtn('Draft findings with AI')}${badge(d.status)}</div></div>
+  ${annot('Exactly one discovery per business case. It can reference existing personas / processes / information concepts, or create new ones (those are marked origin = discovery).')}
+  <div class="note">Discovery for <b>${d.caseLink}</b></div>
+  ${aiBanner('“Draft findings with AI” fills the ten finding fields below in one call — edit any of them inline, then Save. Nothing is stored until you save.')}
+  <div class="card tl">
+    ${secTitle('Findings')}
+    <div class="grid">
+      ${F('Problem Statement',d.problemStatement,{area:true,full:true})}
+      ${F('Persona Findings',d.personaFindings,{area:true})}
+      ${F('Journey Map',d.journeyMap,{area:true})}
+      ${F('Current-State Process Map',d.currentMap,{area:true})}
+      ${F('Bottleneck Analysis',d.bottleneck,{area:true})}
+      ${F('Data Findings',d.dataFindings,{area:true})}
+      ${F('Legacy Constraints',d.legacy,{area:true})}
+      ${F('Future-State Needs',d.future,{area:true})}
+      ${F('Discovery Metrics',d.metrics,{area:true})}
+      ${F('Governance Findings',d.governance,{area:true})}
+    </div>
+  </div>
+  <div class="card" style="border-top:2px solid #f472b6">
+    ${secTitle('Build the business architecture · from discovery')}
+    <p class="note" style="margin-top:0">As impacted business areas surface in discovery, you can stand up the company's one-per-workspace business architecture here and roll it down. Everything created this way is tagged ${originBadge('discovery')}; anything already built in the strategic phase stays ${originBadge('architecture')}. Same schema, same architecture — just established from a different point in the flow.</p>
+    <div class="flow" style="margin-top:12px"><span class="s">1 · Impacted areas</span><span class="ar">↓</span><span class="s">2 · Architecture</span><span class="ar">↓</span><span class="s">3 · Value streams</span><span class="ar">↓</span><span class="s">4 · Key activities</span><span class="ar">↓</span><span class="s">5 · Supporting components</span></div>
+
+    <div class="rd">
+      <div class="rd-lvl"><div class="rd-num">1</div><div class="rd-body">
+        <div class="rd-lh"><span class="rd-lh-nm">Impacted business areas</span><span class="rd-lh-ct">the trigger</span></div>
+        <table class="t"><thead><tr><th>Impacted area</th><th>Severity</th><th>Origin</th></tr></thead><tbody>
+          <tr><td><b>Last-mile cost overlap</b></td><td class="mono" style="color:#fb7185">high</td><td>${originBadge('discovery')}</td></tr>
+          <tr><td><b>Linehaul scheduling gaps</b></td><td class="mono" style="color:#fbbf24">medium</td><td>${originBadge('discovery')}</td></tr>
+        </tbody></table>
+        <div style="margin-top:8px"><span class="btn ghost sm">+ Add impacted area</span></div>
+        <div class="rd-cap">Identifying impacted areas is what initiates the architecture — nothing below exists until an area is captured.</div>
+      </div></div>
+      <div class="rd-arrow">↓</div>
+
+      <div class="rd-lvl"><div class="rd-num">2</div><div class="rd-body">
+        <div class="rd-lh"><span class="rd-lh-nm">Business architecture</span><span class="rd-lh-ct">one per workspace</span></div>
+        <div class="lrow" style="margin-bottom:0"><div><div class="nm">FedEx Enterprise Architecture</div><div class="meta">unified pickup-and-delivery operating model</div></div><div class="rt">${originBadge('discovery')}<span class="btn ghost sm">Open</span></div></div>
+        <div class="rd-cap">Created here if it doesn't exist yet; if the strategic phase already built one, that same record is extended.</div>
+      </div></div>
+      <div class="rd-arrow">↓</div>
+
+      <div class="rd-lvl"><div class="rd-num">3</div><div class="rd-body">
+        <div class="rd-lh"><span class="rd-lh-nm">Value streams</span><span class="rd-lh-ct">2 / 6</span></div>
+        <div class="lrow" style="margin-bottom:0"><div><div class="nm">Pickup-to-Delivery (Unified)</div><div class="meta">future state · addresses last-mile cost overlap</div></div><div class="rt">${originBadge('discovery')}</div></div>
+        <div style="margin-top:8px"><span class="btn ghost sm">+ Add value stream</span></div>
+        <div class="rd-cap">Requires the architecture to exist first — which is why it sits one level below it in the roll-down.</div>
+      </div></div>
+      <div class="rd-arrow">↓</div>
+
+      <div class="rd-lvl"><div class="rd-num">4</div><div class="rd-body">
+        <div class="rd-lh"><span class="rd-lh-nm">Key activities</span><span class="rd-lh-ct">stages of the value stream</span></div>
+        ${chips(['1 · Schedule pickup','2 · Optimize route'],{add:'add activity'})}
+        <div class="rd-cap">The ordered stages of each value stream; each new one is tagged ${originBadge('discovery')}.</div>
+      </div></div>
+      <div class="rd-arrow">↓</div>
+
+      <div class="rd-lvl"><div class="rd-num">5</div><div class="rd-body">
+        <div class="rd-lh"><span class="rd-lh-nm">Supporting components</span><span class="rd-lh-ct">reference existing or create new</span></div>
+        <div class="subhead" style="margin-top:0">Capabilities</div>${chips(['Network Optimization','Dynamic Routing'],{cap:true,add:'reference or create'})}
+        <div class="subhead">Business processes</div>${chips(['Route planning'],{add:'reference or create'})}
+        <div class="subhead">Stakeholders / personas</div>${chips(d.personasL,{add:'reference or create'})}
+        <div class="subhead">Information concepts</div>${chips(d.infoL,{add:'reference or create'})}
+        <div class="rd-cap">Same reference-or-create pattern the findings use — capabilities, processes, personas, and information concepts all hang off the architecture, each new one tagged ${originBadge('discovery')}.</div>
+      </div></div>
+    </div>
+
+    <p class="note" style="margin-top:14px;border-left:2px solid #2dd4bf;padding-left:11px">Everything built here joins the company's one-per-workspace architecture, so it is immediately reusable. A value stream or capability created in this discovery appears in the “select existing” pool the next time the user creates a strategic objective — no copying, no re-entry. <b>Origin is provenance, not ownership:</b> an ${originBadge('discovery')} component is scoped to the workspace exactly like an ${originBadge('architecture')} one, and any objective or case can link it.</p>
+    ${annot('Every architecture entity carries an origin flag (architecture | discovery), so the whole stack can be created here with no new link tables. The roll-down order is the existing FK hierarchy: architecture → value streams → key activities, with capabilities / processes / personas / information concepts hanging off the architecture. The strategic-phase path still exists — this is the same model entered from discovery.')}
+  </div>`;};
+
+PAGES.features=()=>{const f=D.features[0];return listDetail({title:'Features',sub:'Solution pieces that enable a capability. Belong to a business case.',counter:'Features <b>3</b>',addLabel:'New feature',headAnnot:'A feature optionally enables one capability — this is how features connect back to value streams.',
+  rows:D.features.map(x=>({name:x.name,meta:`${x.type.replace(/_/g,' ')} · enables ${x.cap} · ${x.priority} priority`,status:x.status})),
+  form:`<div class="grid">${F('Feature Name',f.name)}${S('Feature Type','Operational')}${S('Priority','High')}${S('Enables Capability',f.cap)}${F('Description','Single prioritized dispatch queue spanning Express and Ground.',{area:true,full:true})}</div>
+  <div class="subhead">Requirements under this feature</div>
+  <table class="t"><thead><tr><th>Requirement</th><th>Type</th><th>Priority</th><th>Status</th></tr></thead><tbody>${D.requirements.filter(r=>r.feat===f.name).map(r=>`<tr><td><b>${r.name}</b></td><td class="mono" style="color:var(--muted)">${r.type.replace(/_/g,' ')}</td><td>${r.priority}</td><td>${badge(r.status)}</td></tr>`).join('')||'<tr><td colspan=4 style="color:var(--faint)">none yet</td></tr>'}</tbody></table>`});};
+
+PAGES.requirements=()=>{const r=D.requirements[0];return listDetail({title:'Requirements',sub:'Detailed specifications under a feature.',counter:'Requirements <b>2</b>',addLabel:'New requirement',
+  rows:D.requirements.map(x=>({name:x.name,meta:`${x.type.replace(/_/g,' ')} · under “${x.feat}”`,status:x.status})),
+  form:`<div class="grid">${F('Requirement Name',r.name)}${S('Parent Feature',r.feat)}${S('Requirement Type','Functional')}${S('Priority','High')}${F('Acceptance Criteria',r.crit,{area:true,full:true})}</div>
+  ${annot('requirement_type is one of functional, non_functional, data, integration, security.')}`});};
+
+PAGES.deliverables=()=>{const byType=Object.fromEntries(D.deliverables.map(d=>[d.type,d]));return `
+  <div class="phead"><div class="t"><h1>Conceptual Deliverables</h1><div class="sub">The 12 outputs for a business case. Generated from traceability data, edited, then saved as final.</div></div><div class="actions"><span class="counter">Generated <b>3 / 12</b></span></div></div>
+  ${annot('Governance gate: each deliverable is a SUGGESTION the system seeds from linked data. The user edits it and clicks “Save as final” (source: suggested → user_finalized). No auto-regeneration. The future AI layer plugs in here with no schema change.')}
+  <div class="card"><div class="flow"><span class="s">Generate from data</span><span class="ar">→</span><span class="s" style="color:#fcd34d">Suggested</span><span class="ar">→ edit →</span><span class="s" style="color:#6ee7b7">Finalized</span></div></div>
+  <div class="card">
+    ${secTitle('Deliverables for “Consolidate Pickup Operations”')}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px">
+    ${DELIV_TYPES.map(([t,label])=>{const d=byType[t];const right=d?`${badge(d.source)} <span class="btn ghost sm">${d.source==='suggested'?'Edit · Save final':'Open'}</span>`:`<span class="ai-btn" style="padding:5px 9px;font-size:11.5px"><span class="sp">✦</span>Generate</span>`;return `<div class="lrow" style="margin-bottom:0"><div><div class="nm" style="font-size:13px">${label}</div><div class="meta">${d?d.title:'<span style="color:var(--faint)">not generated</span>'}</div></div><div class="rt">${right}</div></div>`;}).join('')}
+    </div>
+    ${annot('Deliverables are the one place a LARGER model is used (heavier synthesis from the traceability data) — one call per deliverable, on demand. The draft returns as a suggestion; it is not stored until the user saves it.')}
+  </div>`;};
+
+PAGES.implementation=()=>{const im=D.implementation;const allocCost=im.allocations.reduce((a,x)=>a+x.cost,0);const allocVal=im.allocations.reduce((a,x)=>a+x.value,0);return `
+  <div class="phead"><div class="t"><h1>Implementation</h1><div class="sub">Where the work ships and the actual numbers are recorded — once, per value stream.</div></div><div class="actions">${badge(im.status)}</div></div>
+  ${annot('Exactly one implementation per business case. THIS is the only place actuals are entered. They resolve two ways: upward to the objective and sideways to each value stream.')}
+  <div class="note">Implementation for <b>${im.caseLink}</b></div>
+  <div class="twocol">
+   <div><div class="card tl">
+    ${secTitle('Implementation record')}
+    ${statusRail(['not_started','in_progress','completed','on_hold'],im.status)}
+    <div class="grid" style="margin-top:14px">
+      ${F('Actual Cost',money(im.actualCost),{num:true})}
+      ${F('Actual Value',money(im.actualValue),{num:true})}
+      ${S('Value Type','Cost savings')}
+      ${S('Status','In progress')}
+      ${F('Start Date',im.start)}
+      ${F('Completion Date','',{ph:'—'})}
+      ${F('Outcome Notes',im.notes,{area:true,full:true})}
+    </div>
+    ${secTitle('Actuals by value stream')}
+    <table class="t"><thead><tr><th>Value stream</th><th>Allocated cost</th><th>Allocated value</th></tr></thead><tbody>
+      ${im.allocations.map(a=>`<tr><td><b>${a.stream}</b></td><td class="mono">${money(a.cost)}</td><td class="mono" style="color:var(--green)">${money(a.value)}</td></tr>`).join('')}
+      <tr><td class="mono" style="color:var(--muted)">Total</td><td class="mono" style="color:var(--muted)">${money(allocCost)}</td><td class="mono" style="color:var(--muted)">${money(allocVal)}</td></tr>
+    </tbody></table>
+    <div style="margin-top:8px"><span class="btn ghost sm">+ Add value-stream allocation</span></div>
+    ${annot('Each row is the per-stream entry point for actuals (implementation_value_streams). These same numbers feed the per-stream view and the objective roll-up.')}
+   </div></div>
+   <div>
+    <div class="card" style="border-top:2px solid var(--rose)">
+     ${secTitle('Where these numbers go')}
+     <div class="kpi" style="margin-bottom:10px"><div class="l">↑ Objective roll-up</div><div class="v" style="font-size:18px;color:var(--green)">${money(im.actualValue)}</div><div class="d">added to Network 2.0 actuals (computed)</div></div>
+     <div class="kpi"><div class="l">↔ Per value stream</div><div class="v" style="font-size:18px;color:var(--cyan)">2 streams</div><div class="d">surfaced on each stream's actuals</div></div>
+     ${annot('Entered once here; surfaced in two places. The objective never has an editable actuals field — it reads this.')}
+    </div>
+   </div>
+  </div>`;};
+
+PAGES.ai=()=>`
+  <div class="phead"><div class="t"><h1>AI Assistance</h1><div class="sub">Helps users fill in each component. Backend-mediated, stateless, and tuned to keep API spend low.</div></div><div class="actions">${aiBtn('Draft with AI')}</div></div>
+  ${annot('The AI layer adds endpoints only — zero new tables. Suggestions live in the browser until saved through the normal entity endpoints.')}
+  <div class="card tl">
+    ${secTitle('How it works')}
+    <div class="flow"><span class="s">✦ Draft with AI</span><span class="ar">→ one structured call →</span><span class="s">AI suggestion</span><span class="ar">→ review / edit →</span><span class="s" style="color:#86efac">Save · normal endpoint</span></div>
+    <div style="margin-top:9px;color:var(--muted);font-size:13px">The backend assembles context from the linked records, calls the AI provider, and returns a draft. The provider key never reaches the browser, and nothing is persisted until the user saves.</div>
+  </div>
+  <div class="card">
+    ${secTitle('Cost design · how API spend stays low')}
+    <div class="kpis">
+      <div class="kpi"><div class="l">Calls per component</div><div class="v" style="color:#f0abfc;font-size:24px">1</div><div class="d">one structured call fills every field — not one call per field</div></div>
+      <div class="kpi"><div class="l">Automatic calls</div><div class="v" style="color:#86efac;font-size:24px">0</div><div class="d">nothing fires on typing or focus — every call is an explicit click</div></div>
+      <div class="kpi"><div class="l">Stored per suggestion</div><div class="v" style="color:#7dd3fc;font-size:24px">0 B</div><div class="d">stateless — held in the browser until the user saves</div></div>
+    </div>
+    <div class="kpis" style="margin-top:12px">
+      <div class="kpi"><div class="l">Model tiering</div><div class="v" style="font-size:15px">cheap → heavy</div><div class="d">small model for drafting; larger model only for deliverables</div></div>
+      <div class="kpi"><div class="l">Prompt caching</div><div class="v" style="font-size:15px">prompt + context</div><div class="d">reused system prompt + workspace context cached across a session</div></div>
+      <div class="kpi"><div class="l">Context sent</div><div class="v" style="font-size:15px">linked only</div><div class="d">only the directly-linked records, never the whole workspace</div></div>
+    </div>
+    ${annot('An optional per-workspace token / credit budget plus a rate limit caps spend. Usage is read from the provider via GET /ai/usage.')}
+  </div>
+  <div class="twocol">
+   <div><div class="card">
+     ${secTitle('Two interaction modes')}
+     <h3 class="dt">Component draft — the default path</h3>
+     <div style="color:var(--muted);font-size:13px;margin-bottom:8px">One call fills the editable fields from a short prompt plus the linked context. Edit anything in place; nothing is stored until you save.</div>
+     ${aiBanner('AI filled these fields — edit any of them, then Save. Nothing is stored yet.')}
+     <div class="grid" style="margin-top:12px">
+       ${Fai('Feature Name','Unified Dispatch Queue')}
+       ${Fai('Feature Type','Operational')}
+       ${Fai('Priority','High')}
+       ${Fai('Enables Capability','Dynamic Routing')}
+       ${Fai('Description','Single prioritized dispatch queue spanning Express and Ground — extended by the user to note shift-start handoff.',{area:true,full:true,edited:true})}
+     </div>
+     <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="btn primary">Save feature</span><span class="btn ghost">Clear AI fields</span><span class="mono" style="color:var(--faint);font-size:11.5px">/ai/draft fills · Save writes through the normal endpoint</span></div>
+     <div style="margin-top:7px;color:var(--faint);font-size:12px">The Description shows a user edit in place — its ✦ marker becomes <span style="color:#86efac">edited</span>.</div>
+     <h3 class="dt" style="margin-top:18px">Field refine — on demand only</h3>
+     <div style="color:var(--muted);font-size:13px">A targeted rewrite of a single field, only when asked.</div>
+     <div class="field" style="margin-top:9px"><label>Value Hypothesis</label><div class="input area">A unified network with shared optimization reduces total route miles and cost per stop.</div></div>
+     <div style="display:flex;gap:8px">${aiChip('rewrite shorter')}${aiChip('make it measurable')}</div>
+     <div style="margin-top:7px;color:var(--faint);font-size:12px" class="mono">POST /ai/refine — one field, minimal context</div>
+   </div></div>
+   <div>
+    <div class="card">
+     ${secTitle('Where it appears')}
+     ${[['Strategic Objective','draft the framing fields'],['Lean Business Case','draft summary, problem, hypothesis'],['Discovery','draft the ten findings'],['Features & Requirements','draft features and acceptance criteria'],['Conceptual Deliverables','generate · larger model']].map(r=>`<div class="lrow" style="margin-bottom:9px"><div><div class="nm" style="font-size:13px">${r[0]}</div><div class="meta">${r[1]}</div></div><div class="rt"><span class="ai-chip" style="margin:0">✦ assist</span></div></div>`).join('')}
+    </div>
+    <div class="card">
+     ${secTitle('Endpoints · stateless')}
+     <table class="t"><thead><tr><th>Method</th><th>Endpoint</th><th>Model</th><th>Stores</th></tr></thead><tbody>
+      <tr><td class="mono" style="color:#86efac">POST</td><td class="mono">/ai/draft</td><td style="color:var(--muted)">cheap</td><td style="color:var(--faint)">nothing</td></tr>
+      <tr><td class="mono" style="color:#86efac">POST</td><td class="mono">/ai/refine</td><td style="color:var(--muted)">cheap</td><td style="color:var(--faint)">nothing</td></tr>
+      <tr><td class="mono" style="color:#86efac">POST</td><td class="mono">/ai/suggest-links</td><td style="color:var(--muted)">cheap</td><td style="color:var(--faint)">nothing</td></tr>
+      <tr><td class="mono" style="color:#7dd3fc">GET</td><td class="mono">/ai/usage</td><td style="color:var(--faint)">—</td><td style="color:var(--faint)">—</td></tr>
+     </tbody></table>
+    </div>
+   </div>
+  </div>
+  <div class="note"><b>Human-in-the-loop, unchanged.</b> AI only ever proposes. The user reviews, edits, and saves — and the <span class="mono">suggested → user_finalized</span> gate still governs deliverables. The AI plugs into the gate the architecture already had.</div>`;
+
+/* =================== nav + routing =================== */
+let signedIn=false;
+const NAV=[
+  {label:'Public Site',gate:'always',color:'#fbbf24',items:[['landing','Landing · Overview']]},
+  {label:'Account',gate:'out',color:'#22d3ee',items:[['signup','Sign Up'],['login','Log In']]},
+  {label:'Account & Setup',gate:'in',color:'#22d3ee',items:[['dashboard','Dashboard'],['company','Company Profile'],['departments','Departments']]},
+  {label:'Phase 1 · Strategy',gate:'in',color:'#34d399',items:[['objectives','Strategic Objectives'],['architecture','Business Architecture'],['value-streams','Value Streams'],['key-activities','Key Activities'],['capabilities','Capabilities'],['processes','Business Processes'],['personas','Stakeholders & Personas'],['information','Information Concepts'],['impacts','Business Impacts']]},
+  {label:'Phase 2 · Delivery',gate:'in',color:'#a78bfa',items:[['cases','Lean Business Cases'],['discovery','Discovery'],['features','Features'],['requirements','Requirements'],['deliverables','Conceptual Deliverables'],['implementation','Implementation']]},
+  {label:'AI Layer',gate:'in',color:'#e879f9',items:[['ai','AI Assistance']]},
+  {label:'Session',gate:'in',color:'#fb7185',items:[['logout','Log Out']]},
+];
+const TITLES=Object.fromEntries(NAV.flatMap(g=>g.items));
+const GROUPOF=Object.fromEntries(NAV.flatMap(g=>g.items.map(it=>[it[0],g.label])));
+const GATEOF=Object.fromEntries(NAV.flatMap(g=>g.items.map(it=>[it[0],g.gate])));
+
+function visibleNav(){return NAV.filter(g=>g.gate==='always'||(signedIn?g.gate==='in':g.gate==='out'));}
+function renderNav(){
+  document.getElementById('nav').innerHTML=visibleNav().map(g=>`<div class="navgroup"><h4>${g.label}</h4>${g.items.map(([id,label])=>`<div class="navitem" data-id="${id}"><span class="dot" style="background:${g.color}"></span>${label}</div>`).join('')}</div>`).join('');
+  document.querySelectorAll('.navitem').forEach(el=>el.addEventListener('click',()=>go(el.dataset.id)));
+}
+function signIn(){ signedIn=true; renderNav(); go('dashboard'); }
+function signOut(){ signedIn=false; renderNav(); go('landing'); }
+function go(id){
+  if(id==='logout'){ signOut(); return; }
+  // route guard: gated pages require the matching auth state
+  if(GATEOF[id]==='in' && !signedIn){ id='login'; }
+  else if(GATEOF[id]==='out' && signedIn){ id='dashboard'; }
+  document.querySelectorAll('.navitem').forEach(el=>el.classList.toggle('active',el.dataset.id===id));
+  document.getElementById('crumb').innerHTML=`${GROUPOF[id]} <span style="color:var(--faint)">/</span> <b>${TITLES[id]}</b>`;
+  const page=document.getElementById('page');
+  page.innerHTML=(PAGES[id]||(()=>'<div class="card">Coming soon</div>'))();
+  page.scrollIntoView({block:'start'});
+  window.scrollTo(0,0);
+  location.hash=id;
+}
+document.getElementById('annotToggle').addEventListener('click',()=>document.body.classList.toggle('show-annot'));
+renderNav();
+go((location.hash&&location.hash.slice(1))||'landing');
+</script>
+</body>
+</html>

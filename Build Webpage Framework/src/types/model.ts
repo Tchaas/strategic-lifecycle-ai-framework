@@ -75,13 +75,40 @@ export type Workspace = AuditFields & {
   id: UUID;
   name: string;
   legalName: string;
+  businessUnit: string;
   description: string;
   industry: string;
+  operatingModel: string;
+  businessModel: string;
+  primaryCustomers: string;
+  primaryProducts: string;
+  strategicContext: string;
   companySize: CompanySize | '';
   headquartersRegion: string;
   website: string;
   logoUrl: string;
   annualRevenue: number | null;
+};
+
+export type WorkspaceMember = {
+  id: UUID;
+  workspaceId: UUID;
+  userId: UUID;
+  isAdmin: boolean;
+  joinedAt: ISODateTime;
+};
+
+export type WorkspaceInviteStatus = 'pending' | 'accepted' | 'expired';
+
+export type WorkspaceInvite = {
+  id: UUID;
+  workspaceId: UUID;
+  invitedEmail: string;
+  invitedByUserId: UUID;
+  inviteToken: string;
+  status: WorkspaceInviteStatus;
+  expiresAt: ISODateTime;
+  acceptedAt: ISODateTime | null;
 };
 
 export type Department = AuditFields & {
@@ -135,6 +162,7 @@ export type BusinessArchitecture = AuditFields & {
   description: string;
   currentStateSummary: string;
   futureStateSummary: string;
+  origin: ArchitectureOrigin;
   status: ArchitectureStatus;
 };
 
@@ -149,6 +177,7 @@ export type ValueStream = AuditFields & {
   triggeringStakeholder: string;
   valueRecipient: string;
   linkedDepartmentId: UUID | null;
+  origin: ArchitectureOrigin;
   status: ArchitectureStatus;
 };
 
@@ -237,6 +266,7 @@ export type BusinessImpact = AuditFields & {
   expectedValue: string;
   linkedValueStreamId: UUID | null;
   linkedLeanBusinessCaseId: UUID | null;
+  origin: ArchitectureOrigin;
   status: ArchitectureStatus;
 };
 
@@ -344,6 +374,8 @@ export type StrategicLifecycleMockState = {
   users: User[];
   refreshTokens: RefreshToken[];
   workspaces: Workspace[];
+  workspaceMembers: WorkspaceMember[];
+  workspaceInvites: WorkspaceInvite[];
   departments: Department[];
   strategicObjectives: StrategicObjective[];
   strategicObjectiveMetrics: StrategicObjectiveMetric[];
