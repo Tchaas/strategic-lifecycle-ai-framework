@@ -1,0 +1,26 @@
+{
+  "name": "AI-Augmented Lifecycle Framework",
+  "short_name": "AI Lifecycle",
+  "description": "Interactive research framework for product discovery and software lifecycle transformation.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#020617",
+  "theme_color": "#00ffff",
+  "categories": ["education", "productivity", "business"],
+  "icons": [
+    {
+      "src": "pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "pwa-maskable-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
