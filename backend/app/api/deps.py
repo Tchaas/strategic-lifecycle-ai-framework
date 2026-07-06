@@ -12,6 +12,7 @@ from app.core.errors import AppError
 from app.core.security import decode_access_token
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
+from app.services.architecture_supporting_service import ArchitectureSupportingService
 from app.services.auth_service import AuthService
 from app.services.business_architecture_service import BusinessArchitectureService
 from app.services.capability_service import CapabilityService
@@ -69,6 +70,10 @@ def get_key_activity_service(db: DbSession) -> Generator[KeyActivityService, Non
 
 def get_capability_service(db: DbSession) -> Generator[CapabilityService, None, None]:
     yield CapabilityService(db)
+
+
+def get_architecture_supporting_service(db: DbSession) -> Generator[ArchitectureSupportingService, None, None]:
+    yield ArchitectureSupportingService(db)
 
 
 def get_workspace_member(
