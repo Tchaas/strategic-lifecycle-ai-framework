@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth_router, departments_router, invites_router, workspaces_router
+from app.api import architecture_core_router, auth_router, departments_router, invites_router, workspaces_router
 from app.core.config import settings
 from app.core.errors import install_exception_handlers
 
@@ -21,6 +21,7 @@ def create_app() -> FastAPI:
     app.include_router(workspaces_router)
     app.include_router(invites_router)
     app.include_router(departments_router)
+    app.include_router(architecture_core_router)
     return app
 
 
