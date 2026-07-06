@@ -1,19 +1,10 @@
 from __future__ import annotations
 
-import os
-import subprocess
 import uuid
-from pathlib import Path
 
 import sqlalchemy as sa
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-
-
-def run_alembic(*args: str) -> None:
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
-    subprocess.run(["alembic", *args], cwd=Path(__file__).resolve().parents[1], env=env, check=True)
 
 
 def expect_integrity_error(conn: sa.Connection, statement: str, params: dict[str, object]) -> None:
@@ -27,14 +18,7 @@ def expect_integrity_error(conn: sa.Connection, statement: str, params: dict[str
     raise AssertionError(f"Expected IntegrityError for: {statement}")
 
 
-def main() -> None:
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        raise RuntimeError("DATABASE_URL must point at a disposable Postgres database")
-
-    run_alembic("upgrade", "head")
-
-    engine = sa.create_engine(database_url)
+def test_schema_constraints_and_cascade(engine: sa.Engine) -> None:
     with engine.begin() as conn:
         table_count = conn.scalar(
             text(
@@ -201,9 +185,3 @@ def main() -> None:
             text("SELECT count(*) FROM lean_business_cases WHERE id = :case_id"), {"case_id": case_id}
         )
         assert remaining == 0, remaining
-
-    run_alembic("downgrade", "base")
-
-
-if __name__ == "__main__":
-    main()

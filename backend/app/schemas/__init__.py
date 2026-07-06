@@ -12,6 +12,20 @@ from app.schemas.auth import (
     WorkspaceResponse,
 )
 from app.schemas.base import ApiModel
+from app.schemas.workspaces import (
+    InviteCreateRequest,
+    InviteCreateResponse,
+    InviteListItem,
+    WorkspaceCreateRequest,
+    WorkspaceListItem,
+    WorkspaceMemberResponse,
+    WorkspaceMemberUpdateRequest,
+    WorkspaceProvisionResponse,
+    WorkspaceUpdateRequest,
+)
+from app.schemas.workspaces import (
+    WorkspaceResponse as WorkspaceProfileResponse,
+)
 
 __all__ = [
     "ApiModel",
@@ -26,4 +40,14 @@ __all__ = [
     "SignupResponse",
     "UserResponse",
     "WorkspaceResponse",
+    "InviteCreateRequest",
+    "InviteCreateResponse",
+    "InviteListItem",
+    "WorkspaceCreateRequest",
+    "WorkspaceListItem",
+    "WorkspaceMemberResponse",
+    "WorkspaceMemberUpdateRequest",
+    "WorkspaceProfileResponse",
+    "WorkspaceProvisionResponse",
+    "WorkspaceUpdateRequest",
 ]

@@ -37,4 +37,4 @@ exclude = ["migrations/versions"]
 
 [tool.ruff.lint.per-file-ignores]
 "migrations/versions/*.py" = ["E501"]
-"tests/smoke_schema.py" = ["E501"]
+"tests/test_smoke_schema.py" = ["E501"]

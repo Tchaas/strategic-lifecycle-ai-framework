@@ -21,11 +21,21 @@ from app.core.security import (
 )
 from app.models.refresh_tokens import RefreshToken
 from app.models.users import User
-from app.models.workspace_members import WorkspaceMember
 from app.models.workspaces import Workspace
 from app.schemas.auth import GoogleLoginRequest, LoginRequest, LogoutRequest, RefreshRequest, SignupRequest
+from app.schemas.workspaces import WorkspaceCreateRequest
+from app.services.workspace_service import provision_workspace_for_user
 
 INVALID_CREDENTIALS_MESSAGE = "Invalid email or password"
+
+__all__ = [
+    "AuthService",
+    "GoogleLoginResult",
+    "LoginResult",
+    "SignupResult",
+    "TokenPair",
+    "provision_workspace_for_user",
+]
 
 
 @dataclass(frozen=True)
@@ -66,26 +76,18 @@ class AuthService:
         self.db.add(user)
         try:
             self.db.flush()
-            workspace = Workspace(
-                name=payload.workspace_name,
-                created_by_user_id=user.id,
+            provisioned = provision_workspace_for_user(
+                self.db,
+                user,
+                WorkspaceCreateRequest(name=payload.workspace_name),
+                commit=False,
             )
-            self.db.add(workspace)
-            self.db.flush()
-            membership = WorkspaceMember(
-                workspace_id=workspace.id,
-                user_id=user.id,
-                is_admin=True,
-                joined_at=utc_now(),
-                created_by_user_id=user.id,
-            )
-            self.db.add(membership)
             tokens = self._issue_tokens(user)
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
             raise AppError("email_taken", "An account with this email already exists", 409) from exc
-        return SignupResult(user=user, workspace=workspace, **tokens.__dict__)
+        return SignupResult(user=user, workspace=provisioned.workspace, **tokens.__dict__)
 
     def login(self, payload: LoginRequest) -> LoginResult:
         user = self._get_user_by_email(payload.email)
