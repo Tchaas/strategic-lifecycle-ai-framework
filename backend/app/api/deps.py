@@ -13,8 +13,12 @@ from app.core.security import decode_access_token
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
 from app.services.auth_service import AuthService
+from app.services.business_architecture_service import BusinessArchitectureService
+from app.services.capability_service import CapabilityService
 from app.services.department_service import DepartmentService
 from app.services.invite_service import InviteService
+from app.services.key_activity_service import KeyActivityService
+from app.services.value_stream_service import ValueStreamService
 from app.services.workspace_service import WorkspaceService
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -49,6 +53,22 @@ def get_invite_service(db: DbSession) -> Generator[InviteService, None, None]:
 
 def get_department_service(db: DbSession) -> Generator[DepartmentService, None, None]:
     yield DepartmentService(db)
+
+
+def get_business_architecture_service(db: DbSession) -> Generator[BusinessArchitectureService, None, None]:
+    yield BusinessArchitectureService(db)
+
+
+def get_value_stream_service(db: DbSession) -> Generator[ValueStreamService, None, None]:
+    yield ValueStreamService(db)
+
+
+def get_key_activity_service(db: DbSession) -> Generator[KeyActivityService, None, None]:
+    yield KeyActivityService(db)
+
+
+def get_capability_service(db: DbSession) -> Generator[CapabilityService, None, None]:
+    yield CapabilityService(db)
 
 
 def get_workspace_member(
