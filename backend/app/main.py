@@ -7,6 +7,7 @@ from app.api import (
     auth_router,
     departments_router,
     invites_router,
+    strategy_router,
     workspaces_router,
 )
 from app.core.config import settings
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(departments_router)
     app.include_router(architecture_core_router)
     app.include_router(architecture_supporting_router)
+    app.include_router(strategy_router)
     return app
 
 
