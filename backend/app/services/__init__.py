@@ -1,3 +1,4 @@
+from app.services.architecture_supporting_service import ArchitectureSupportingService
 from app.services.auth_service import AuthService
 from app.services.business_architecture_service import BusinessArchitectureService
 from app.services.capability_service import CapabilityService
@@ -9,6 +10,7 @@ from app.services.workspace_service import WorkspaceService, provision_workspace
 
 __all__ = [
     "AuthService",
+    "ArchitectureSupportingService",
     "BusinessArchitectureService",
     "CapabilityService",
     "DepartmentService",
