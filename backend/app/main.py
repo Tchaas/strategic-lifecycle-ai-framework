@@ -5,6 +5,7 @@ from app.api import (
     architecture_core_router,
     architecture_supporting_router,
     auth_router,
+    business_cases_router,
     departments_router,
     invites_router,
     strategy_router,
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     app.include_router(architecture_core_router)
     app.include_router(architecture_supporting_router)
     app.include_router(strategy_router)
+    app.include_router(business_cases_router)
     return app
 
 

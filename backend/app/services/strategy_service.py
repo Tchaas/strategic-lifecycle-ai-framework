@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
 
-from pydantic.alias_generators import to_camel
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -35,6 +33,7 @@ from app.schemas.strategy import (
     StrategicObjectiveUpdateRequest,
     TraceabilityItem,
 )
+from app.services.lifecycle import GateConfig, ensure_active_gate_maintenance, transition_status
 
 OBJECTIVE_LIMIT = 3
 GATE_FIELDS = (
@@ -44,14 +43,7 @@ GATE_FIELDS = (
     "problem_opportunity_statement",
     "value_hypothesis",
 )
-ALLOWED_TRANSITIONS = {
-    ("draft", "active"),
-    ("active", "completed"),
-    ("draft", "archived"),
-    ("active", "archived"),
-    ("completed", "archived"),
-    ("archived", "draft"),
-}
+OBJECTIVE_GATE = GateConfig(GATE_FIELDS, "Objective is missing required active fields")
 
 
 @dataclass(frozen=True)
@@ -144,8 +136,9 @@ class StrategyService:
         requested_status = values.pop("status", None)
         for key, value in values.items():
             setattr(objective, key, value)
+        ensure_active_gate_maintenance(objective, OBJECTIVE_GATE)
         if requested_status is not None and requested_status != objective.status:
-            self._transition_objective(objective, requested_status)
+            transition_status(objective, requested_status, OBJECTIVE_GATE)
         self.db.commit()
         return objective
 
@@ -364,23 +357,6 @@ class StrategyService:
             capabilities=[self._trace_item_response(item) for item in capabilities.values()],
         )
 
-    def _transition_objective(self, objective: StrategicObjective, to_status: str) -> None:
-        from_status = objective.status or "draft"
-        if (from_status, to_status) not in ALLOWED_TRANSITIONS:
-            raise AppError(
-                "invalid_transition",
-                "Invalid objective status transition",
-                409,
-                {"from": from_status, "to": to_status},
-            )
-        if to_status == "active":
-            missing = [to_camel(field) for field in GATE_FIELDS if not _has_value(getattr(objective, field))]
-            if missing:
-                raise AppError(
-                    "activation_gate", "Objective is missing required active fields", 409, {"missing": missing}
-                )
-        objective.status = to_status
-
     def _get_objective(self, workspace_id: uuid.UUID, objective_id: uuid.UUID) -> StrategicObjective:
         objective = self.db.get(StrategicObjective, objective_id)
         if objective is None or objective.workspace_id != workspace_id:
@@ -412,7 +388,3 @@ class StrategyService:
             via_objective=item.via_objective,
             via_case_ids=sorted(item.via_case_ids),
         )
-
-
-def _has_value(value: Any) -> bool:
-    return value is not None and (not isinstance(value, str) or value.strip() != "")
