@@ -32,5 +32,5 @@ class StakeholderPersona(OriginStatusMixin, AuditMixin, Base):
     pain_points: Mapped[str | None]
     value_received: Mapped[str | None]
     linked_value_stream_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("value_streams.id", ondelete="CASCADE"), index=True
+        UUID(as_uuid=True), ForeignKey("value_streams.id", ondelete="SET NULL"), index=True
     )

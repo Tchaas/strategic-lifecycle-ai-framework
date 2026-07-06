@@ -33,8 +33,8 @@ class BusinessImpact(OriginStatusMixin, AuditMixin, Base):
     mitigation_notes: Mapped[str | None]
     expected_value: Mapped[str | None]
     linked_value_stream_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("value_streams.id", ondelete="CASCADE"), index=True
+        UUID(as_uuid=True), ForeignKey("value_streams.id", ondelete="SET NULL"), index=True
     )
     linked_lean_business_case_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("lean_business_cases.id", ondelete="CASCADE"), index=True
+        UUID(as_uuid=True), ForeignKey("lean_business_cases.id", ondelete="SET NULL"), index=True
     )

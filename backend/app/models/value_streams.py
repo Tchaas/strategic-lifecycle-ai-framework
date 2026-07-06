@@ -34,5 +34,5 @@ class ValueStream(OriginStatusMixin, AuditMixin, Base):
     triggering_stakeholder: Mapped[str | None]
     value_recipient: Mapped[str | None]
     linked_department_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("departments.id", ondelete="CASCADE"), index=True
+        UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL"), index=True
     )
