@@ -41,6 +41,13 @@ from app.schemas.auth import (
     WorkspaceResponse,
 )
 from app.schemas.base import ApiModel
+from app.schemas.business_cases import (
+    LeanBusinessCaseCreateRequest,
+    LeanBusinessCaseLinkResponse,
+    LeanBusinessCaseResponse,
+    LeanBusinessCaseStatusRequest,
+    LeanBusinessCaseUpdateRequest,
+)
 from app.schemas.departments import DepartmentCreateRequest, DepartmentResponse, DepartmentUpdateRequest
 from app.schemas.strategy import (
     FinancialByValueStream,
@@ -114,6 +121,11 @@ __all__ = [
     "KeyActivityCreateRequest",
     "KeyActivityResponse",
     "KeyActivityUpdateRequest",
+    "LeanBusinessCaseCreateRequest",
+    "LeanBusinessCaseLinkResponse",
+    "LeanBusinessCaseResponse",
+    "LeanBusinessCaseStatusRequest",
+    "LeanBusinessCaseUpdateRequest",
     "StakeholderPersonaCreateRequest",
     "StakeholderPersonaResponse",
     "StakeholderPersonaUpdateRequest",

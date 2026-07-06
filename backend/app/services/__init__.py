@@ -1,6 +1,7 @@
 from app.services.architecture_supporting_service import ArchitectureSupportingService
 from app.services.auth_service import AuthService
 from app.services.business_architecture_service import BusinessArchitectureService
+from app.services.business_case_service import BusinessCaseService
 from app.services.capability_service import CapabilityService
 from app.services.department_service import DepartmentService
 from app.services.invite_service import InviteService
@@ -13,6 +14,7 @@ __all__ = [
     "AuthService",
     "ArchitectureSupportingService",
     "BusinessArchitectureService",
+    "BusinessCaseService",
     "CapabilityService",
     "DepartmentService",
     "InviteService",

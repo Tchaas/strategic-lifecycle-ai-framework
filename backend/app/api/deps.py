@@ -15,6 +15,7 @@ from app.models.workspace_members import WorkspaceMember
 from app.services.architecture_supporting_service import ArchitectureSupportingService
 from app.services.auth_service import AuthService
 from app.services.business_architecture_service import BusinessArchitectureService
+from app.services.business_case_service import BusinessCaseService
 from app.services.capability_service import CapabilityService
 from app.services.department_service import DepartmentService
 from app.services.invite_service import InviteService
@@ -79,6 +80,10 @@ def get_architecture_supporting_service(db: DbSession) -> Generator[Architecture
 
 def get_strategy_service(db: DbSession) -> Generator[StrategyService, None, None]:
     yield StrategyService(db)
+
+
+def get_business_case_service(db: DbSession) -> Generator[BusinessCaseService, None, None]:
+    yield BusinessCaseService(db)
 
 
 def get_workspace_member(
