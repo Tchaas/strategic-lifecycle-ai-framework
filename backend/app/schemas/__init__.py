@@ -12,6 +12,7 @@ from app.schemas.auth import (
     WorkspaceResponse,
 )
 from app.schemas.base import ApiModel
+from app.schemas.departments import DepartmentCreateRequest, DepartmentResponse, DepartmentUpdateRequest
 from app.schemas.workspaces import (
     InviteCreateRequest,
     InviteCreateResponse,
@@ -30,6 +31,9 @@ from app.schemas.workspaces import (
 __all__ = [
     "ApiModel",
     "AuthTokens",
+    "DepartmentCreateRequest",
+    "DepartmentResponse",
+    "DepartmentUpdateRequest",
     "GoogleAuthResponse",
     "GoogleLoginRequest",
     "LoginRequest",

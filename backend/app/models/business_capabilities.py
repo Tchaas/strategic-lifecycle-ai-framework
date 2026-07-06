@@ -29,5 +29,5 @@ class BusinessCapability(OriginStatusMixin, AuditMixin, Base):
     target_maturity: Mapped[str | None]
     capability_gap: Mapped[str | None]
     owning_department_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("departments.id", ondelete="CASCADE"), index=True
+        UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL"), index=True
     )

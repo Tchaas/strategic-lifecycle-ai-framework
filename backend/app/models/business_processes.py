@@ -29,5 +29,5 @@ class BusinessProcess(OriginStatusMixin, AuditMixin, Base):
     process_gap: Mapped[str | None]
     impacted_systems: Mapped[str | None]
     linked_value_stream_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("value_streams.id", ondelete="CASCADE"), index=True
+        UUID(as_uuid=True), ForeignKey("value_streams.id", ondelete="SET NULL"), index=True
     )

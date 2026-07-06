@@ -18,7 +18,7 @@ class Department(AuditMixin, Base):
         UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
     )
     parent_department_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("departments.id", ondelete="CASCADE"), index=True
+        UUID(as_uuid=True), ForeignKey("departments.id", ondelete="SET NULL"), index=True
     )
     name: Mapped[str] = mapped_column(nullable=False)
     description: Mapped[str | None]

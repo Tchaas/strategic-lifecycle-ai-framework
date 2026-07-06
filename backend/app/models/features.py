@@ -27,7 +27,7 @@ class Feature(AuditMixin, Base):
         UUID(as_uuid=True), ForeignKey("lean_business_cases.id", ondelete="CASCADE"), nullable=False, index=True
     )
     capability_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("business_capabilities.id", ondelete="CASCADE"), index=True
+        UUID(as_uuid=True), ForeignKey("business_capabilities.id", ondelete="SET NULL"), index=True
     )
     feature_name: Mapped[str] = mapped_column(nullable=False)
     description: Mapped[str | None]

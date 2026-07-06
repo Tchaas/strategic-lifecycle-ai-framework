@@ -13,6 +13,7 @@ from app.core.security import decode_access_token
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
 from app.services.auth_service import AuthService
+from app.services.department_service import DepartmentService
 from app.services.invite_service import InviteService
 from app.services.workspace_service import WorkspaceService
 
@@ -44,6 +45,10 @@ def get_workspace_service(db: DbSession) -> Generator[WorkspaceService, None, No
 
 def get_invite_service(db: DbSession) -> Generator[InviteService, None, None]:
     yield InviteService(db)
+
+
+def get_department_service(db: DbSession) -> Generator[DepartmentService, None, None]:
+    yield DepartmentService(db)
 
 
 def get_workspace_member(
