@@ -1,0 +1,40 @@
+[project]
+name = "strategic-lifecycle-backend"
+version = "0.1.0"
+description = "Backend schema for the Strategic Lifecycle AI Framework"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic==1.16.2",
+    "argon2-cffi==25.1.0",
+    "black==25.1.0",
+    "google-auth==2.49.0",
+    "mypy==1.16.1",
+    "psycopg[binary]==3.2.9",
+    "pydantic-settings==2.10.1",
+    "pyjwt==2.10.1",
+    "requests==2.32.5",
+    "ruff==0.12.2",
+    "sqlalchemy==2.0.41",
+]
+
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["sqlalchemy.ext.mypy.plugin"]
+strict = true
+exclude = ["migrations/versions"]
+
+[tool.ruff.lint.per-file-ignores]
+"migrations/versions/*.py" = ["E501"]
+"tests/test_smoke_schema.py" = ["E501"]
