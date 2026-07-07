@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from app.api.deps import get_auth_service, get_current_user
+from app.api.dependencies import get_auth_service, get_current_user
 from app.core.config import settings
 from app.core.rate_limit import RateLimit, rate_limit_dependency
 from app.models.users import User

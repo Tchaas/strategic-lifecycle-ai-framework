@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.api.deps import get_business_case_service, get_current_user, get_workspace_member
+from app.api.dependencies import get_business_case_service, get_current_user, get_workspace_member
 from app.core.pagination import Page, PaginationParams, paginate_items
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
