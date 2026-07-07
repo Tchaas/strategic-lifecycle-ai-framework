@@ -7,6 +7,7 @@ from app.api import (
     auth_router,
     business_cases_router,
     departments_router,
+    discovery_router,
     invites_router,
     strategy_router,
     workspaces_router,
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
     app.include_router(architecture_supporting_router)
     app.include_router(strategy_router)
     app.include_router(business_cases_router)
+    app.include_router(discovery_router)
     return app
 
 

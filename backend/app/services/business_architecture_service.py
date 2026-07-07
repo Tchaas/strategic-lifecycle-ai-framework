@@ -20,6 +20,7 @@ class BusinessArchitectureService:
         workspace_id: uuid.UUID,
         user: User,
         payload: BusinessArchitectureCreateRequest,
+        origin: str = "architecture",
     ) -> BusinessArchitectureComponent:
         architecture = BusinessArchitectureComponent(
             workspace_id=workspace_id,
@@ -27,7 +28,7 @@ class BusinessArchitectureService:
             description=payload.description,
             current_state_summary=payload.current_state_summary,
             future_state_summary=payload.future_state_summary,
-            origin="architecture",
+            origin=origin,
             status="draft",
             created_by_user_id=user.id,
         )

@@ -37,6 +37,7 @@ class ValueStreamService:
         architecture_id: uuid.UUID,
         user: User,
         payload: ValueStreamCreateRequest,
+        origin: str = "architecture",
     ) -> ValueStream:
         self._get_architecture(workspace_id, architecture_id)
         current = self._count_for_architecture(architecture_id)
@@ -59,7 +60,7 @@ class ValueStreamService:
             triggering_stakeholder=payload.triggering_stakeholder,
             value_recipient=payload.value_recipient,
             linked_department_id=payload.linked_department_id,
-            origin="architecture",
+            origin=origin,
             status="draft",
             created_by_user_id=user.id,
         )

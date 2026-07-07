@@ -49,6 +49,13 @@ from app.schemas.business_cases import (
     LeanBusinessCaseUpdateRequest,
 )
 from app.schemas.departments import DepartmentCreateRequest, DepartmentResponse, DepartmentUpdateRequest
+from app.schemas.discovery import (
+    DiscoveryCreateRequest,
+    DiscoveryKeyActivityCreateRequest,
+    DiscoveryLinkResponse,
+    DiscoveryResponse,
+    DiscoveryUpdateRequest,
+)
 from app.schemas.strategy import (
     FinancialByValueStream,
     FinancialSummary,
@@ -97,6 +104,11 @@ __all__ = [
     "DepartmentCreateRequest",
     "DepartmentResponse",
     "DepartmentUpdateRequest",
+    "DiscoveryCreateRequest",
+    "DiscoveryKeyActivityCreateRequest",
+    "DiscoveryLinkResponse",
+    "DiscoveryResponse",
+    "DiscoveryUpdateRequest",
     "FinancialByValueStream",
     "FinancialSummary",
     "GoogleAuthResponse",

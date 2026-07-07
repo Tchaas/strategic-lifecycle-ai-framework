@@ -27,6 +27,7 @@ class KeyActivityService:
         stream_id: uuid.UUID,
         user: User,
         payload: KeyActivityCreateRequest,
+        origin: str = "architecture",
     ) -> KeyActivity:
         self._get_stream(workspace_id, stream_id)
         current = self._count_for_stream(stream_id)
@@ -52,7 +53,7 @@ class KeyActivityService:
             current_state_issue=payload.current_state_issue,
             future_state_change=payload.future_state_change,
             business_impact=payload.business_impact,
-            origin="architecture",
+            origin=origin,
             status="draft",
             created_by_user_id=user.id,
         )
