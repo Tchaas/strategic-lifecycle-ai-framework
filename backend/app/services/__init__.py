@@ -5,6 +5,7 @@ from app.services.business_case_service import BusinessCaseService
 from app.services.capability_service import CapabilityService
 from app.services.department_service import DepartmentService
 from app.services.discovery_service import DiscoveryService
+from app.services.implementation_service import ImplementationService
 from app.services.invite_service import InviteService
 from app.services.key_activity_service import KeyActivityService
 from app.services.solution_service import SolutionService
@@ -20,6 +21,7 @@ __all__ = [
     "CapabilityService",
     "DepartmentService",
     "DiscoveryService",
+    "ImplementationService",
     "InviteService",
     "KeyActivityService",
     "SolutionService",

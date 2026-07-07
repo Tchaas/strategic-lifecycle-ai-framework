@@ -8,6 +8,7 @@ from app.api import (
     business_cases_router,
     departments_router,
     discovery_router,
+    implementation_router,
     invites_router,
     solution_router,
     strategy_router,
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     app.include_router(business_cases_router)
     app.include_router(discovery_router)
     app.include_router(solution_router)
+    app.include_router(implementation_router)
     return app
 
 
