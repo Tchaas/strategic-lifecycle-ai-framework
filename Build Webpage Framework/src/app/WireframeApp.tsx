@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { landingCaseStudies, seededStrategicLifecycleState } from '../mock/strategicLifecycleMock';
 import { calculateObjectiveFinancialRollup, cardinalityLimits, getMissingLeanBusinessCaseActiveFields, getMissingObjectiveActiveFields } from '../rules/lifecycleRules';
+import { TableScroller } from './components/TableScroller';
 import type {
   ArchitectureOrigin,
   BusinessCapability,
@@ -759,12 +760,47 @@ function ReferenceOrCreate({ label, items }: { label: string; items: { id: strin
 
 function DataTable({ headers, rows }: { headers: string[]; rows: ReactNode[][] }) {
   return (
-    <div className="hud-table-wrap">
+    <TableScroller className="hud-table-wrap">
       <table className="hud-table">
         <thead><tr>{headers.map((header) => <th key={header}>{header}</th>)}</tr></thead>
         <tbody>{rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody>
       </table>
-    </div>
+    </TableScroller>
+  );
+}
+
+function MobileRecordCard({
+  title,
+  summary,
+  badge,
+  rows,
+  action,
+}: {
+  title: string;
+  summary?: string;
+  badge: ReactNode;
+  rows: { label: string; value: ReactNode }[];
+  action: ReactNode;
+}) {
+  return (
+    <article className="hud-mobile-record-card">
+      <div className="hud-mobile-record-head">
+        <div>
+          <h2>{title}</h2>
+          {summary && <p>{summary}</p>}
+        </div>
+        {badge}
+      </div>
+      <dl className="hud-mobile-record-fields">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <dt>{row.label}</dt>
+            <dd>{row.value || 'Not entered'}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="hud-mobile-record-actions">{action}</div>
+    </article>
   );
 }
 
@@ -1235,6 +1271,31 @@ function ObjectivesPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
     <div className="hud-page">
       <SectionTitle eyebrow="Phase 1 · Strategy" title="Strategic Objectives" subtitle="Executive intent and strategic value. Forecast only; actuals roll up from implementation." />
       <RuleNote>Cardinality: objectives {tenant.objectives.length} / {cardinalityLimits.strategicObjectivesPerWorkspace}. Active requires name, executive objective, value category, problem/opportunity statement, and value hypothesis.</RuleNote>
+      <div className="hud-primary-list-mobile">
+        {tenant.objectives.map((objective) => {
+          const pending = ai.pending.objectives[objective.id];
+          const saved = ai.saved.objectives[objective.id];
+          const displayObjective = { ...objective, ...saved, ...pending };
+          const rollup = calculateObjectiveFinancialRollup(objective.id, tenant.cases, tenant.implementations, tenant.implementationValueStreams);
+
+          return (
+            <MobileRecordCard
+              key={objective.id}
+              title={displayObjective.strategicInitiativeName}
+              summary={displayObjective.executiveObjective}
+              badge={<StatusBadge status={displayObjective.status} />}
+              rows={[
+                { label: 'Category', value: displayObjective.strategicValueCategory },
+                { label: 'Target dates', value: `${displayObjective.targetImplementationStartDate} to ${displayObjective.targetImplementationEndDate}` },
+                { label: 'Forecast cost', value: formatCurrency(rollup.forecastCost) },
+                { label: 'Computed actual value', value: formatCurrency(rollup.actualValue) },
+              ]}
+              action={<HudButton variant="ghost" onClick={() => ai.draftObjective(tenant.workspace.name, objective)}><Sparkles size={16} /> Draft with AI</HudButton>}
+            />
+          );
+        })}
+      </div>
+      <div className="hud-primary-list-desktop">
       {tenant.objectives.map((objective) => {
         const pending = ai.pending.objectives[objective.id];
         const saved = ai.saved.objectives[objective.id];
@@ -1308,6 +1369,7 @@ function ObjectivesPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
           </HudPanel>
         );
       })}
+      </div>
     </div>
   );
 }
@@ -1523,6 +1585,32 @@ function CasesPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
     <div className="hud-page">
       <SectionTitle eyebrow="Phase 2 · Delivery" title="Lean Business Cases" subtitle="Granular sub-initiatives of one objective. Each carries its own forecast." />
       <RuleNote>Cardinality: max {cardinalityLimits.leanBusinessCasesPerObjective} lean business cases per strategic objective. Active requires title, summary, problem/opportunity statement, value hypothesis, and priority.</RuleNote>
+      <div className="hud-primary-list-mobile">
+        {tenant.cases.map((businessCase: LeanBusinessCase) => {
+          const pending = ai.pending.cases[businessCase.id];
+          const saved = ai.saved.cases[businessCase.id];
+          const displayCase = { ...businessCase, ...saved, ...pending };
+          const objective = tenant.objectives.find((candidate) => candidate.id === businessCase.strategicObjectiveId);
+          const implementation = tenant.implementations.find((candidate) => candidate.leanBusinessCaseId === businessCase.id);
+
+          return (
+            <MobileRecordCard
+              key={businessCase.id}
+              title={displayCase.title}
+              summary={displayCase.summary}
+              badge={<StatusBadge status={displayCase.status} />}
+              rows={[
+                { label: 'Strategic objective', value: objective?.strategicInitiativeName },
+                { label: 'Priority', value: displayCase.priority },
+                { label: 'Forecast cost', value: formatCurrency(displayCase.forecastCost) },
+                { label: 'Implementation', value: implementation ? `1:1 · ${implementation.implementationStatus}` : 'Not created' },
+              ]}
+              action={<HudButton variant="ghost" onClick={() => ai.draftCase(tenant.workspace.name, businessCase)}><Sparkles size={16} /> Draft with AI</HudButton>}
+            />
+          );
+        })}
+      </div>
+      <div className="hud-primary-list-desktop">
       {tenant.cases.map((businessCase: LeanBusinessCase) => {
         const pending = ai.pending.cases[businessCase.id];
         const saved = ai.saved.cases[businessCase.id];
@@ -1586,6 +1674,7 @@ function CasesPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
           </HudPanel>
         );
       })}
+      </div>
     </div>
   );
 }
