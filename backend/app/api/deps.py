@@ -19,6 +19,7 @@ from app.services.business_case_service import BusinessCaseService
 from app.services.capability_service import CapabilityService
 from app.services.department_service import DepartmentService
 from app.services.discovery_service import DiscoveryService
+from app.services.implementation_service import ImplementationService
 from app.services.invite_service import InviteService
 from app.services.key_activity_service import KeyActivityService
 from app.services.solution_service import SolutionService
@@ -94,6 +95,10 @@ def get_discovery_service(db: DbSession) -> Generator[DiscoveryService, None, No
 
 def get_solution_service(db: DbSession) -> Generator[SolutionService, None, None]:
     yield SolutionService(db)
+
+
+def get_implementation_service(db: DbSession) -> Generator[ImplementationService, None, None]:
+    yield ImplementationService(db)
 
 
 def get_workspace_member(

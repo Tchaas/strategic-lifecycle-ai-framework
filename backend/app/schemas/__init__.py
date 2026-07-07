@@ -56,6 +56,13 @@ from app.schemas.discovery import (
     DiscoveryResponse,
     DiscoveryUpdateRequest,
 )
+from app.schemas.implementation import (
+    ImplementationAllocationRequest,
+    ImplementationAllocationResponse,
+    ImplementationCreateRequest,
+    ImplementationResponse,
+    ImplementationUpdateRequest,
+)
 from app.schemas.solution import (
     DeliverableCreateRequest,
     DeliverableResponse,
@@ -150,6 +157,11 @@ __all__ = [
     "InformationConceptCreateRequest",
     "InformationConceptResponse",
     "InformationConceptUpdateRequest",
+    "ImplementationAllocationRequest",
+    "ImplementationAllocationResponse",
+    "ImplementationCreateRequest",
+    "ImplementationResponse",
+    "ImplementationUpdateRequest",
     "KeyActivityCreateRequest",
     "KeyActivityResponse",
     "KeyActivityUpdateRequest",
