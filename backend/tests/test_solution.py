@@ -528,6 +528,30 @@ def test_solution_tenancy_and_non_admin_writes(client: TestClient, engine: sa.En
         ).status_code
         == 200
     )
+    deletable_feature = create_feature(client, owner["workspace"]["id"], case["id"], member_token)
+    deletable_requirement = create_requirement(client, owner["workspace"]["id"], feature["id"], member_token)
+    deletable_deliverable = create_deliverable(client, owner["workspace"]["id"], case["id"], member_token)
+    assert (
+        client.delete(
+            f"/workspaces/{owner['workspace']['id']}/requirements/{deletable_requirement['id']}",
+            headers=auth_headers(member_token),
+        ).status_code
+        == 204
+    )
+    assert (
+        client.delete(
+            f"/workspaces/{owner['workspace']['id']}/features/{deletable_feature['id']}",
+            headers=auth_headers(member_token),
+        ).status_code
+        == 204
+    )
+    assert (
+        client.delete(
+            f"/workspaces/{owner['workspace']['id']}/deliverables/{deletable_deliverable['id']}",
+            headers=auth_headers(member_token),
+        ).status_code
+        == 204
+    )
     nonexistent = client.get(
         f"/workspaces/{uuid.uuid4()}/lean-business-cases/{case['id']}/features",
         headers=auth_headers(outsider["accessToken"]),
