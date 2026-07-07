@@ -330,6 +330,15 @@ def test_roll_down_guard_origin_and_normal_visibility(client: TestClient) -> Non
         409,
         "architecture_exists",
     )
+    assert_error(
+        client.post(
+            f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/business-architecture",
+            headers=auth_headers(owner["accessToken"]),
+            json={"name": "Duplicate"},
+        ),
+        409,
+        "architecture_exists",
+    )
     stream = client.post(
         f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/value-streams",
         headers=auth_headers(owner["accessToken"]),
@@ -391,6 +400,9 @@ def test_roll_down_atomic_create_and_link(client: TestClient) -> None:
         headers=auth_headers(owner["accessToken"]),
         json={"conceptName": "Discovery Concept"},
     ).json()
+    assert stakeholder["origin"] == "discovery"
+    assert process["origin"] == "discovery"
+    assert concept["origin"] == "discovery"
     detail = client.get(
         f"/workspaces/{owner['workspace']['id']}/lean-business-cases/{case['id']}/discovery",
         headers=auth_headers(owner["accessToken"]),
@@ -464,6 +476,65 @@ def test_discovery_tenancy_and_non_admin_writes(client: TestClient, engine: sa.E
         ).status_code
         == 200
     )
+    architecture = client.post(
+        f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/business-architecture",
+        headers=auth_headers(member_token),
+        json={"name": "Member architecture"},
+    ).json()
+    stream = client.post(
+        f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/value-streams",
+        headers=auth_headers(member_token),
+        json={"name": "Member stream"},
+    ).json()
+    assert architecture["origin"] == "discovery"
+    assert stream["origin"] == "discovery"
+    assert (
+        client.post(
+            f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/key-activities",
+            headers=auth_headers(member_token),
+            json={"valueStreamId": stream["id"], "activityName": "Member activity"},
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/capabilities",
+            headers=auth_headers(member_token),
+            json={"capabilityName": "Member capability"},
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/business-impacts",
+            headers=auth_headers(member_token),
+            json={"impactedArea": "Member impact"},
+        ).status_code
+        == 201
+    )
+    stakeholder = client.post(
+        f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/personas",
+        headers=auth_headers(member_token),
+        json={"name": "Member persona"},
+    ).json()
+    process = client.post(
+        f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/processes",
+        headers=auth_headers(member_token),
+        json={"processName": "Member process"},
+    ).json()
+    concept = client.post(
+        f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/information-concepts",
+        headers=auth_headers(member_token),
+        json={"conceptName": "Member concept"},
+    ).json()
+    member_link_paths = [
+        f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/personas/{stakeholder['id']}",
+        f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/processes/{process['id']}",
+        f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/information-concepts/{concept['id']}",
+    ]
+    for path in member_link_paths:
+        assert client.delete(path, headers=auth_headers(member_token)).status_code == 204
+        assert client.post(path, headers=auth_headers(member_token)).status_code == 201
     nonexistent = client.get(
         f"/workspaces/{uuid.uuid4()}/lean-business-cases/{case['id']}/discovery",
         headers=auth_headers(outsider["accessToken"]),
@@ -476,7 +547,42 @@ def test_discovery_tenancy_and_non_admin_writes(client: TestClient, engine: sa.E
     assert cross_tenant.status_code == 404
     assert nonexistent.content == cross_tenant.content
     routes = [
+        (
+            "post",
+            f"/workspaces/{owner['workspace']['id']}/lean-business-cases/{case['id']}/discovery",
+            {"problemStatement": "No"},
+        ),
         ("patch", f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}", {"problemStatement": "No"}),
+        (
+            "post",
+            f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/personas/{stakeholder['id']}",
+            None,
+        ),
+        (
+            "delete",
+            f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/personas/{stakeholder['id']}",
+            None,
+        ),
+        (
+            "post",
+            f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/processes/{process['id']}",
+            None,
+        ),
+        (
+            "delete",
+            f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/processes/{process['id']}",
+            None,
+        ),
+        (
+            "post",
+            f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/information-concepts/{concept['id']}",
+            None,
+        ),
+        (
+            "delete",
+            f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/information-concepts/{concept['id']}",
+            None,
+        ),
         (
             "post",
             f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/business-architecture",
@@ -511,8 +617,12 @@ def test_discovery_tenancy_and_non_admin_writes(client: TestClient, engine: sa.E
         ),
     ]
     for method, path, payload in routes:
+        if payload is None:
+            response = getattr(client, method)(path, headers=auth_headers(outsider["accessToken"]))
+        else:
+            response = getattr(client, method)(path, headers=auth_headers(outsider["accessToken"]), json=payload)
         assert_error(
-            getattr(client, method)(path, headers=auth_headers(outsider["accessToken"]), json=payload),
+            response,
             404,
             "not_found",
         )
