@@ -35,13 +35,11 @@ def create_password_user(engine: sa.Engine, email: str, full_name: str = "User")
         return cast(
             uuid.UUID,
             conn.scalar(
-                text(
-                    """
+                text("""
                     INSERT INTO users (email, full_name, auth_provider, password_hash)
                     VALUES (:email, :full_name, 'password', :password_hash)
                     RETURNING id
-                    """
-                ),
+                    """),
                 {"email": email, "full_name": full_name, "password_hash": hash_password("correct-horse")},
             ),
         )
@@ -52,13 +50,11 @@ def create_google_user(engine: sa.Engine, email: str) -> tuple[uuid.UUID, str]:
         user_id = cast(
             uuid.UUID,
             conn.scalar(
-                text(
-                    """
+                text("""
                     INSERT INTO users (email, full_name, auth_provider, google_sub, email_verified)
                     VALUES (:email, 'Google User', 'google', :google_sub, true)
                     RETURNING id
-                    """
-                ),
+                    """),
                 {"email": email, "google_sub": f"sub-{uuid.uuid4()}"},
             ),
         )
@@ -78,13 +74,11 @@ def member_id(engine: sa.Engine, workspace_id: str, user_id: str) -> str:
 def set_admin(engine: sa.Engine, workspace_id: str, user_id: str, is_admin: bool) -> None:
     with engine.begin() as conn:
         conn.execute(
-            text(
-                """
+            text("""
                 UPDATE workspace_members
                 SET is_admin = :is_admin
                 WHERE workspace_id = :workspace_id AND user_id = :user_id
-                """
-            ),
+                """),
             {"workspace_id": workspace_id, "user_id": user_id, "is_admin": is_admin},
         )
 
@@ -93,14 +87,12 @@ def add_member(engine: sa.Engine, workspace_id: str, user_id: uuid.UUID, created
     with engine.begin() as conn:
         return str(
             conn.scalar(
-                text(
-                    """
+                text("""
                     INSERT INTO workspace_members
                       (workspace_id, user_id, is_admin, joined_at, created_by_user_id)
                     VALUES (:workspace_id, :user_id, false, now(), :created_by_user_id)
                     RETURNING id
-                    """
-                ),
+                    """),
                 {"workspace_id": workspace_id, "user_id": user_id, "created_by_user_id": created_by_user_id},
             )
         )
@@ -148,16 +140,12 @@ def test_signup_and_post_workspaces_share_provisioning_function(client: TestClie
     post_body = client.post("/workspaces", headers=auth_headers(token), json={"name": "Post Workspace"}).json()
 
     with engine.begin() as conn:
-        rows = conn.execute(
-            text(
-                """
+        rows = conn.execute(text("""
                 SELECT w.name, w.created_by_user_id, m.user_id, m.is_admin
                 FROM workspaces w
                 JOIN workspace_members m ON m.workspace_id = w.id
                 ORDER BY w.name
-                """
-            )
-        ).all()
+                """)).all()
     assert ("Post Workspace", user_id, user_id, True) in rows
     assert (
         "Signup Workspace",
@@ -210,24 +198,20 @@ def test_delete_workspace_cascades_and_requires_admin(client: TestClient, engine
     member_token = create_access_token(member_user)
     with engine.begin() as conn:
         objective_id = conn.scalar(
-            text(
-                """
+            text("""
                 INSERT INTO strategic_objectives (workspace_id, strategic_initiative_name, created_by_user_id)
                 VALUES (:workspace_id, 'Delete objective', :user_id)
                 RETURNING id
-                """
-            ),
+                """),
             {"workspace_id": admin["workspace"]["id"], "user_id": admin["user"]["id"]},
         )
         case_id = conn.scalar(
-            text(
-                """
+            text("""
                 INSERT INTO lean_business_cases
                   (workspace_id, strategic_objective_id, owner_user_id, title, created_by_user_id)
                 VALUES (:workspace_id, :objective_id, :user_id, 'Delete case', :user_id)
                 RETURNING id
-                """
-            ),
+                """),
             {"workspace_id": admin["workspace"]["id"], "objective_id": objective_id, "user_id": admin["user"]["id"]},
         )
 
@@ -251,8 +235,8 @@ def test_members_list_joins_display_fields_and_non_member_404(client: TestClient
 
     response = client.get(f"/workspaces/{admin['workspace']['id']}/members", headers=auth_headers(admin["accessToken"]))
     assert response.status_code == 200
-    assert {item["email"] for item in response.json()} == {"members-admin@example.com", "display@example.com"}
-    assert any(item["fullName"] == "Display User" and item["isAdmin"] is False for item in response.json())
+    assert {item["email"] for item in response.json()["items"]} == {"members-admin@example.com", "display@example.com"}
+    assert any(item["fullName"] == "Display User" and item["isAdmin"] is False for item in response.json()["items"])
     assert_error(
         client.get(f"/workspaces/{admin['workspace']['id']}/members", headers=auth_headers(outsider["accessToken"])),
         404,
@@ -386,7 +370,7 @@ def test_invite_list_excludes_tokens_and_lazily_expires(client: TestClient, engi
     response = client.get(f"/workspaces/{admin['workspace']['id']}/invites", headers=auth_headers(admin["accessToken"]))
 
     assert response.status_code == 200
-    assert response.json()[0]["status"] == "expired"
+    assert response.json()["items"][0]["status"] == "expired"
     assert "inviteToken" not in response.text
 
 
@@ -501,14 +485,12 @@ def test_invite_accept_already_member_keeps_invite_pending(client: TestClient, e
     token = f"manual-{uuid.uuid4().hex}"
     with engine.begin() as conn:
         conn.execute(
-            text(
-                """
+            text("""
                 INSERT INTO workspace_invites
                   (workspace_id, invited_email, invited_by_user_id, invite_token,
                    status, expires_at, created_by_user_id)
                 VALUES (:workspace_id, 'already-member@example.com', :user_id, :token, 'pending', :expires_at, :user_id)
-                """
-            ),
+                """),
             {
                 "workspace_id": admin["workspace"]["id"],
                 "user_id": admin["user"]["id"],

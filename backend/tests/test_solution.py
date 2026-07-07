@@ -47,13 +47,11 @@ def create_password_user(engine: sa.Engine, email: str) -> uuid.UUID:
         return cast(
             uuid.UUID,
             conn.scalar(
-                text(
-                    """
+                text("""
                     INSERT INTO users (email, full_name, auth_provider, password_hash)
                     VALUES (:email, 'Member', 'password', :password_hash)
                     RETURNING id
-                    """
-                ),
+                    """),
                 {"email": email, "password_hash": hash_password("correct-horse")},
             ),
         )
@@ -62,13 +60,11 @@ def create_password_user(engine: sa.Engine, email: str) -> uuid.UUID:
 def add_member(engine: sa.Engine, workspace_id: str, user_id: uuid.UUID, created_by_user_id: str) -> None:
     with engine.begin() as conn:
         conn.execute(
-            text(
-                """
+            text("""
                 INSERT INTO workspace_members
                   (workspace_id, user_id, is_admin, joined_at, created_by_user_id)
                 VALUES (:workspace_id, :user_id, false, now(), :created_by_user_id)
-                """
-            ),
+                """),
             {"workspace_id": workspace_id, "user_id": user_id, "created_by_user_id": created_by_user_id},
         )
 
@@ -222,7 +218,7 @@ def test_features_crud_and_capability_set_null(client: TestClient) -> None:
             client.get(
                 f"/workspaces/{owner['workspace']['id']}/lean-business-cases/{case['id']}/features",
                 headers=auth_headers(owner["accessToken"]),
-            ).json()
+            ).json()["items"]
         )
         == 1
     )
@@ -236,7 +232,7 @@ def test_features_crud_and_capability_set_null(client: TestClient) -> None:
     listed = client.get(
         f"/workspaces/{owner['workspace']['id']}/lean-business-cases/{case['id']}/features",
         headers=auth_headers(owner["accessToken"]),
-    ).json()
+    ).json()["items"]
     assert listed[0]["capabilityId"] is None
     assert (
         client.delete(
@@ -292,7 +288,7 @@ def test_requirements_crud_delete_and_feature_cascade(client: TestClient, engine
             client.get(
                 f"/workspaces/{owner['workspace']['id']}/features/{feature['id']}/requirements",
                 headers=auth_headers(owner["accessToken"]),
-            ).json()
+            ).json()["items"]
         )
         == 1
     )
@@ -460,7 +456,7 @@ def test_deliverable_creation_and_finalization(client: TestClient) -> None:
             client.get(
                 f"/workspaces/{owner['workspace']['id']}/lean-business-cases/{case['id']}/deliverables",
                 headers=auth_headers(owner["accessToken"]),
-            ).json()
+            ).json()["items"]
         )
         == 3
     )

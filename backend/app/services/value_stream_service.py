@@ -77,7 +77,7 @@ class ValueStreamService:
                     ValueStream.workspace_id == workspace_id,
                     ValueStream.business_architecture_id == architecture_id,
                 )
-                .order_by(ValueStream.created_at, ValueStream.name)
+                .order_by(ValueStream.created_at, ValueStream.id)
             ).all()
         )
 
@@ -87,7 +87,7 @@ class ValueStreamService:
             self.db.scalars(
                 select(KeyActivity)
                 .where(KeyActivity.value_stream_id == stream.id)
-                .order_by(KeyActivity.sequence_order, KeyActivity.created_at)
+                .order_by(KeyActivity.sequence_order, KeyActivity.id)
             ).all()
         )
         capability_ids = list(

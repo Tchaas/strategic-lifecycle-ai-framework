@@ -64,7 +64,7 @@ class CapabilityService:
                     BusinessCapability.workspace_id == workspace_id,
                     BusinessCapability.business_architecture_id == architecture_id,
                 )
-                .order_by(BusinessCapability.capability_name)
+                .order_by(BusinessCapability.created_at, BusinessCapability.id)
             ).all()
         )
         return [self._detail(capability) for capability in capabilities]

@@ -4,6 +4,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 
 from app.api.deps import get_current_user, get_invite_service, require_workspace_admin
+from app.core.config import settings
+from app.core.pagination import Page, PaginationParams, paginate_items
+from app.core.rate_limit import RateLimit, rate_limit_dependency
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
 from app.schemas.workspaces import (
@@ -47,16 +50,23 @@ def create_invite(
     )
 
 
-@router.get("/workspaces/{workspace_id}/invites", response_model=list[InviteListItem])
+@router.get("/workspaces/{workspace_id}/invites", response_model=Page[InviteListItem])
 def list_invites(
     workspace_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceAdminDep,
     invite_service: InviteServiceDep,
-) -> list[InviteListItem]:
-    return [InviteListItem.model_validate(invite) for invite in invite_service.list_invites(workspace_id)]
+) -> Page[InviteListItem]:
+    return paginate_items(invite_service.list_invites(workspace_id), pagination, InviteListItem.model_validate)
 
 
-@router.post("/invites/{token}/accept", response_model=WorkspaceProvisionResponse)
+@router.post(
+    "/invites/{token}/accept",
+    response_model=WorkspaceProvisionResponse,
+    dependencies=[
+        Depends(rate_limit_dependency(lambda: RateLimit("invite_accept", settings.rate_limit_invite_accept_per_minute)))
+    ],
+)
 def accept_invite(
     token: str,
     current_user: CurrentUserDep,

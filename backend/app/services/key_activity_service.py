@@ -67,7 +67,7 @@ class KeyActivityService:
             self.db.scalars(
                 select(KeyActivity)
                 .where(KeyActivity.workspace_id == workspace_id, KeyActivity.value_stream_id == stream_id)
-                .order_by(KeyActivity.sequence_order, KeyActivity.created_at)
+                .order_by(KeyActivity.sequence_order, KeyActivity.id)
             ).all()
         )
 

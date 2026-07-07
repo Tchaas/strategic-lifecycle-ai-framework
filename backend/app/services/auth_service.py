@@ -27,6 +27,7 @@ from app.schemas.workspaces import WorkspaceCreateRequest
 from app.services.workspace_service import provision_workspace_for_user
 
 INVALID_CREDENTIALS_MESSAGE = "Invalid email or password"
+DUMMY_PASSWORD_HASH = hash_password("stage16-dummy-password")
 
 __all__ = [
     "AuthService",
@@ -92,6 +93,7 @@ class AuthService:
     def login(self, payload: LoginRequest) -> LoginResult:
         user = self._get_user_by_email(payload.email)
         if user is None:
+            verify_password(payload.password, DUMMY_PASSWORD_HASH)
             raise AppError("invalid_credentials", INVALID_CREDENTIALS_MESSAGE, 401)
         if user.auth_provider == "google":
             raise AppError("provider_conflict", "This account signs in with Google", 409)

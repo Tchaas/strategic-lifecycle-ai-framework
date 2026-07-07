@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import get_current_user, get_department_service, get_workspace_member, require_workspace_admin
+from app.core.pagination import Page, PaginationParams, paginate_items
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
 from app.schemas.departments import DepartmentCreateRequest, DepartmentResponse, DepartmentUpdateRequest
@@ -33,17 +34,19 @@ def create_department(
     return DepartmentResponse.model_validate(department_service.create_department(workspace_id, current_user, payload))
 
 
-@router.get("/workspaces/{workspace_id}/departments", response_model=list[DepartmentResponse])
+@router.get("/workspaces/{workspace_id}/departments", response_model=Page[DepartmentResponse])
 def list_departments(
     workspace_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     department_service: DepartmentServiceDep,
     parent_id: ParentIdQuery = None,
-) -> list[DepartmentResponse]:
-    return [
-        DepartmentResponse.model_validate(department)
-        for department in department_service.list_departments(workspace_id, parent_id)
-    ]
+) -> Page[DepartmentResponse]:
+    return paginate_items(
+        department_service.list_departments(workspace_id, parent_id),
+        pagination,
+        DepartmentResponse.model_validate,
+    )
 
 
 @router.get("/workspaces/{workspace_id}/departments/{department_id}", response_model=DepartmentResponse)

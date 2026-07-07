@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import get_business_case_service, get_current_user, get_workspace_member
+from app.core.pagination import Page, PaginationParams, paginate_items
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
 from app.schemas.business_cases import (
@@ -42,19 +43,21 @@ def create_case(
 
 @router.get(
     "/workspaces/{workspace_id}/strategic-objectives/{objective_id}/lean-business-cases",
-    response_model=list[LeanBusinessCaseResponse],
+    response_model=Page[LeanBusinessCaseResponse],
 )
 def list_cases(
     workspace_id: uuid.UUID,
     objective_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     business_case_service: BusinessCaseServiceDep,
     status: StatusFilter = None,
-) -> list[LeanBusinessCaseResponse]:
-    return [
-        case_response(business_case_service.get_detail(workspace_id, case.id))
-        for case in business_case_service.list_for_objective(workspace_id, objective_id, status)
-    ]
+) -> Page[LeanBusinessCaseResponse]:
+    return paginate_items(
+        business_case_service.list_for_objective(workspace_id, objective_id, status),
+        pagination,
+        lambda case: case_response(business_case_service.get_detail(workspace_id, case.id)),
+    )
 
 
 @router.get("/workspaces/{workspace_id}/lean-business-cases/{case_id}", response_model=LeanBusinessCaseResponse)

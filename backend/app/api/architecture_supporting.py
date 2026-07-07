@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Response, status
 
 from app.api.deps import get_architecture_supporting_service, get_current_user, get_workspace_member
+from app.core.pagination import Page, PaginationParams, paginate_items
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
 from app.schemas.architecture_supporting import (
@@ -52,18 +53,20 @@ def create_process(
 
 @router.get(
     "/workspaces/{workspace_id}/business-architecture/{ba_id}/processes",
-    response_model=list[BusinessProcessResponse],
+    response_model=Page[BusinessProcessResponse],
 )
 def list_processes(
     workspace_id: uuid.UUID,
     ba_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     supporting_service: ArchitectureSupportingServiceDep,
-) -> list[BusinessProcessResponse]:
-    return [
-        BusinessProcessResponse.model_validate(process)
-        for process in supporting_service.list_processes(workspace_id, ba_id)
-    ]
+) -> Page[BusinessProcessResponse]:
+    return paginate_items(
+        supporting_service.list_processes(workspace_id, ba_id),
+        pagination,
+        BusinessProcessResponse.model_validate,
+    )
 
 
 @router.patch("/workspaces/{workspace_id}/processes/{process_id}", response_model=BusinessProcessResponse)
@@ -110,18 +113,20 @@ def create_stakeholder(
 
 @router.get(
     "/workspaces/{workspace_id}/business-architecture/{ba_id}/stakeholders",
-    response_model=list[StakeholderPersonaResponse],
+    response_model=Page[StakeholderPersonaResponse],
 )
 def list_stakeholders(
     workspace_id: uuid.UUID,
     ba_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     supporting_service: ArchitectureSupportingServiceDep,
-) -> list[StakeholderPersonaResponse]:
-    return [
-        StakeholderPersonaResponse.model_validate(stakeholder)
-        for stakeholder in supporting_service.list_stakeholders(workspace_id, ba_id)
-    ]
+) -> Page[StakeholderPersonaResponse]:
+    return paginate_items(
+        supporting_service.list_stakeholders(workspace_id, ba_id),
+        pagination,
+        StakeholderPersonaResponse.model_validate,
+    )
 
 
 @router.patch("/workspaces/{workspace_id}/stakeholders/{stakeholder_id}", response_model=StakeholderPersonaResponse)
@@ -170,18 +175,20 @@ def create_information_concept(
 
 @router.get(
     "/workspaces/{workspace_id}/business-architecture/{ba_id}/information-concepts",
-    response_model=list[InformationConceptResponse],
+    response_model=Page[InformationConceptResponse],
 )
 def list_information_concepts(
     workspace_id: uuid.UUID,
     ba_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     supporting_service: ArchitectureSupportingServiceDep,
-) -> list[InformationConceptResponse]:
-    return [
-        InformationConceptResponse.model_validate(concept)
-        for concept in supporting_service.list_information_concepts(workspace_id, ba_id)
-    ]
+) -> Page[InformationConceptResponse]:
+    return paginate_items(
+        supporting_service.list_information_concepts(workspace_id, ba_id),
+        pagination,
+        InformationConceptResponse.model_validate,
+    )
 
 
 @router.patch(
@@ -233,18 +240,20 @@ def create_business_impact(
 
 @router.get(
     "/workspaces/{workspace_id}/business-architecture/{ba_id}/business-impacts",
-    response_model=list[BusinessImpactResponse],
+    response_model=Page[BusinessImpactResponse],
 )
 def list_business_impacts(
     workspace_id: uuid.UUID,
     ba_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     supporting_service: ArchitectureSupportingServiceDep,
-) -> list[BusinessImpactResponse]:
-    return [
-        BusinessImpactResponse.model_validate(impact)
-        for impact in supporting_service.list_business_impacts(workspace_id, ba_id)
-    ]
+) -> Page[BusinessImpactResponse]:
+    return paginate_items(
+        supporting_service.list_business_impacts(workspace_id, ba_id),
+        pagination,
+        BusinessImpactResponse.model_validate,
+    )
 
 
 @router.patch("/workspaces/{workspace_id}/business-impacts/{impact_id}", response_model=BusinessImpactResponse)

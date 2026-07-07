@@ -3,6 +3,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Response, status
 
 from app.api.deps import get_auth_service, get_current_user
+from app.core.config import settings
+from app.core.rate_limit import RateLimit, rate_limit_dependency
 from app.models.users import User
 from app.schemas.auth import (
     AuthTokens,
@@ -23,10 +25,15 @@ router = APIRouter(tags=["auth"])
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 
-# TODO: Add shared rate limiting for auth endpoints in the hardening stage.
 
-
-@router.post("/auth/signup", response_model=SignupResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/auth/signup",
+    response_model=SignupResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(rate_limit_dependency(lambda: RateLimit("auth_signup", settings.rate_limit_signup_per_minute))),
+    ],
+)
 def signup(payload: SignupRequest, auth_service: AuthServiceDep) -> SignupResponse:
     result = auth_service.signup(payload)
     return SignupResponse(
@@ -38,7 +45,13 @@ def signup(payload: SignupRequest, auth_service: AuthServiceDep) -> SignupRespon
     )
 
 
-@router.post("/auth/login", response_model=LoginResponse)
+@router.post(
+    "/auth/login",
+    response_model=LoginResponse,
+    dependencies=[
+        Depends(rate_limit_dependency(lambda: RateLimit("auth_login", settings.rate_limit_login_per_minute))),
+    ],
+)
 def login(payload: LoginRequest, auth_service: AuthServiceDep) -> LoginResponse:
     result = auth_service.login(payload)
     return LoginResponse(
@@ -49,7 +62,13 @@ def login(payload: LoginRequest, auth_service: AuthServiceDep) -> LoginResponse:
     )
 
 
-@router.post("/auth/google", response_model=GoogleAuthResponse)
+@router.post(
+    "/auth/google",
+    response_model=GoogleAuthResponse,
+    dependencies=[
+        Depends(rate_limit_dependency(lambda: RateLimit("auth_google", settings.rate_limit_google_per_minute))),
+    ],
+)
 def google_login(
     payload: GoogleLoginRequest,
     auth_service: AuthServiceDep,
@@ -64,7 +83,13 @@ def google_login(
     )
 
 
-@router.post("/auth/refresh", response_model=AuthTokens)
+@router.post(
+    "/auth/refresh",
+    response_model=AuthTokens,
+    dependencies=[
+        Depends(rate_limit_dependency(lambda: RateLimit("auth_refresh", settings.rate_limit_refresh_per_minute))),
+    ],
+)
 def refresh(payload: RefreshRequest, auth_service: AuthServiceDep) -> AuthTokens:
     result = auth_service.refresh(payload)
     return AuthTokens(

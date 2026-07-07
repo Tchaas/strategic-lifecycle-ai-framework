@@ -72,7 +72,7 @@ class InviteService:
             self.db.scalars(
                 select(WorkspaceInvite)
                 .where(WorkspaceInvite.workspace_id == workspace_id)
-                .order_by(WorkspaceInvite.created_at)
+                .order_by(WorkspaceInvite.created_at, WorkspaceInvite.id)
             )
         )
         now = utc_now()

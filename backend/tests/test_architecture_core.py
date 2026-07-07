@@ -32,13 +32,11 @@ def create_password_user(engine: sa.Engine, email: str, full_name: str = "User")
         return cast(
             uuid.UUID,
             conn.scalar(
-                text(
-                    """
+                text("""
                     INSERT INTO users (email, full_name, auth_provider, password_hash)
                     VALUES (:email, :full_name, 'password', :password_hash)
                     RETURNING id
-                    """
-                ),
+                    """),
                 {"email": email, "full_name": full_name, "password_hash": hash_password("correct-horse")},
             ),
         )
@@ -47,13 +45,11 @@ def create_password_user(engine: sa.Engine, email: str, full_name: str = "User")
 def add_member(engine: sa.Engine, workspace_id: str, user_id: uuid.UUID, created_by_user_id: str) -> None:
     with engine.begin() as conn:
         conn.execute(
-            text(
-                """
+            text("""
                 INSERT INTO workspace_members
                   (workspace_id, user_id, is_admin, joined_at, created_by_user_id)
                 VALUES (:workspace_id, :user_id, false, now(), :created_by_user_id)
-                """
-            ),
+                """),
             {"workspace_id": workspace_id, "user_id": user_id, "created_by_user_id": created_by_user_id},
         )
 
@@ -328,7 +324,7 @@ def test_sequence_order_defaults_explicit_values_and_duplicates(client: TestClie
         headers=auth_headers(owner["accessToken"]),
     )
     assert response.status_code == 200
-    assert [item["sequenceOrder"] for item in response.json()] == [1, 2, 10, 10]
+    assert [item["sequenceOrder"] for item in response.json()["items"]] == [1, 2, 10, 10]
 
 
 def test_department_references_validate_and_set_null(client: TestClient) -> None:
@@ -383,7 +379,7 @@ def test_department_references_validate_and_set_null(client: TestClient) -> None
     capabilities = client.get(
         f"/workspaces/{owner['workspace']['id']}/business-architecture/{architecture['id']}/capabilities",
         headers=auth_headers(owner["accessToken"]),
-    ).json()
+    ).json()["items"]
     assert [item for item in capabilities if item["id"] == capability["id"]][0]["owningDepartmentId"] is None
 
 

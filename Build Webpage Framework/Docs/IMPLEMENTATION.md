@@ -430,6 +430,7 @@ standard the code must meet and the posture that scales to production.
 
 ### Dependency & supply-chain security
 - Automated dependency scanning (e.g., Dependabot / `pip-audit` / `npm audit`) in CI; patch promptly.
+  Backend validation order is `black` → `ruff` → `mypy` → `pip-audit` → `pytest`.
 - Pin versions; review transitive additions.
 
 ---
