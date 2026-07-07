@@ -6,13 +6,14 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic==1.16.2",
     "argon2-cffi==25.1.0",
-    "black==25.1.0",
+    "black==26.3.1",
     "google-auth==2.49.0",
     "mypy==1.16.1",
+    "pip-audit==2.9.0",
     "psycopg[binary]==3.2.9",
     "pydantic-settings==2.10.1",
-    "pyjwt==2.10.1",
-    "requests==2.32.5",
+    "pyjwt==2.13.0",
+    "requests==2.33.0",
     "ruff==0.12.2",
     "sqlalchemy==2.0.41",
 ]
@@ -20,6 +21,7 @@ dependencies = [
 [tool.black]
 line-length = 120
 target-version = ["py312"]
+extend-exclude = "migrations/versions"
 
 [tool.ruff]
 line-length = 120

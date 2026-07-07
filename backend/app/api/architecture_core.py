@@ -12,6 +12,7 @@ from app.api.deps import (
     get_value_stream_service,
     get_workspace_member,
 )
+from app.core.pagination import Page, PaginationParams, paginate_items
 from app.models.key_activities import KeyActivity
 from app.models.key_activity_capabilities import KeyActivityCapability
 from app.models.users import User
@@ -103,18 +104,20 @@ def create_value_stream(
 
 @router.get(
     "/workspaces/{workspace_id}/business-architecture/{ba_id}/value-streams",
-    response_model=list[ValueStreamResponse],
+    response_model=Page[ValueStreamResponse],
 )
 def list_value_streams(
     workspace_id: uuid.UUID,
     ba_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     value_stream_service: ValueStreamServiceDep,
-) -> list[ValueStreamResponse]:
-    return [
-        value_stream_response(ValueStreamDetail(stream, [], []), value_stream_service)
-        for stream in value_stream_service.list_for_architecture(workspace_id, ba_id)
-    ]
+) -> Page[ValueStreamResponse]:
+    return paginate_items(
+        value_stream_service.list_for_architecture(workspace_id, ba_id),
+        pagination,
+        lambda stream: value_stream_response(ValueStreamDetail(stream, [], []), value_stream_service),
+    )
 
 
 @router.get("/workspaces/{workspace_id}/value-streams/{vs_id}", response_model=ValueStreamResponse)
@@ -171,18 +174,20 @@ def create_key_activity(
 
 @router.get(
     "/workspaces/{workspace_id}/value-streams/{vs_id}/key-activities",
-    response_model=list[KeyActivityResponse],
+    response_model=Page[KeyActivityResponse],
 )
 def list_key_activities(
     workspace_id: uuid.UUID,
     vs_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     key_activity_service: KeyActivityServiceDep,
-) -> list[KeyActivityResponse]:
-    return [
-        key_activity_response(activity, key_activity_service)
-        for activity in key_activity_service.list_for_stream(workspace_id, vs_id)
-    ]
+) -> Page[KeyActivityResponse]:
+    return paginate_items(
+        key_activity_service.list_for_stream(workspace_id, vs_id),
+        pagination,
+        lambda activity: key_activity_response(activity, key_activity_service),
+    )
 
 
 @router.patch("/workspaces/{workspace_id}/key-activities/{ka_id}", response_model=KeyActivityResponse)
@@ -228,15 +233,20 @@ def create_capability(
 
 @router.get(
     "/workspaces/{workspace_id}/business-architecture/{ba_id}/capabilities",
-    response_model=list[CapabilityResponse],
+    response_model=Page[CapabilityResponse],
 )
 def list_capabilities(
     workspace_id: uuid.UUID,
     ba_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     capability_service: CapabilityServiceDep,
-) -> list[CapabilityResponse]:
-    return [capability_response(detail) for detail in capability_service.list_for_architecture(workspace_id, ba_id)]
+) -> Page[CapabilityResponse]:
+    return paginate_items(
+        capability_service.list_for_architecture(workspace_id, ba_id),
+        pagination,
+        capability_response,
+    )
 
 
 @router.patch("/workspaces/{workspace_id}/capabilities/{cap_id}", response_model=CapabilityResponse)

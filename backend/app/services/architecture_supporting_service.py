@@ -183,7 +183,7 @@ class ArchitectureSupportingService:
         model: type[SupportingModel],
         workspace_id: uuid.UUID,
         architecture_id: uuid.UUID,
-        order_column: Any,
+        order_column: object,
     ) -> list[SupportingModel]:
         self._get_architecture(workspace_id, architecture_id)
         return list(
@@ -193,7 +193,7 @@ class ArchitectureSupportingService:
                     model.workspace_id == workspace_id,
                     model.business_architecture_id == architecture_id,
                 )
-                .order_by(order_column)
+                .order_by(model.created_at, model.id)
             ).all()
         )
 

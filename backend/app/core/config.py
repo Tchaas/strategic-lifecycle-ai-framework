@@ -11,6 +11,13 @@ class Settings(BaseSettings):
     cors_allowed_origins: str = ""
     invite_ttl: int = 604_800
     frontend_base_url: str = ""
+    rate_limit_enabled: bool = False
+    rate_limit_login_per_minute: int = 10
+    rate_limit_signup_per_minute: int = 5
+    rate_limit_google_per_minute: int = 10
+    rate_limit_refresh_per_minute: int = 30
+    rate_limit_invite_accept_per_minute: int = 10
+    max_request_body_bytes: int = 1_048_576
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

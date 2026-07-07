@@ -102,7 +102,7 @@ class StrategyService:
             self.db.scalars(
                 select(StrategicObjective)
                 .where(StrategicObjective.workspace_id == workspace_id)
-                .order_by(StrategicObjective.created_at)
+                .order_by(StrategicObjective.created_at, StrategicObjective.id)
             ).all()
         )
 
@@ -169,7 +169,7 @@ class StrategyService:
                     StrategicObjectiveMetric.workspace_id == workspace_id,
                     StrategicObjectiveMetric.strategic_objective_id == objective_id,
                 )
-                .order_by(StrategicObjectiveMetric.created_at)
+                .order_by(StrategicObjectiveMetric.created_at, StrategicObjectiveMetric.id)
             ).all()
         )
 

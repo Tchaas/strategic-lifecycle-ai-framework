@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Response, status
 
 from app.api.deps import get_current_user, get_strategy_service, get_workspace_member
+from app.core.pagination import Page, PaginationParams, paginate_items
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
 from app.schemas.strategy import (
@@ -42,16 +43,18 @@ def create_objective(
     return objective_response(ObjectiveDetail(objective, [], [], []))
 
 
-@router.get("/workspaces/{workspace_id}/strategic-objectives", response_model=list[StrategicObjectiveResponse])
+@router.get("/workspaces/{workspace_id}/strategic-objectives", response_model=Page[StrategicObjectiveResponse])
 def list_objectives(
     workspace_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     strategy_service: StrategyServiceDep,
-) -> list[StrategicObjectiveResponse]:
-    return [
-        objective_response(ObjectiveDetail(objective, [], [], []))
-        for objective in strategy_service.list_objectives(workspace_id)
-    ]
+) -> Page[StrategicObjectiveResponse]:
+    return paginate_items(
+        strategy_service.list_objectives(workspace_id),
+        pagination,
+        lambda objective: objective_response(ObjectiveDetail(objective, [], [], [])),
+    )
 
 
 @router.get(
@@ -102,18 +105,20 @@ def create_metric(
 
 @router.get(
     "/workspaces/{workspace_id}/strategic-objectives/{objective_id}/metrics",
-    response_model=list[StrategicObjectiveMetricResponse],
+    response_model=Page[StrategicObjectiveMetricResponse],
 )
 def list_metrics(
     workspace_id: uuid.UUID,
     objective_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     strategy_service: StrategyServiceDep,
-) -> list[StrategicObjectiveMetricResponse]:
-    return [
-        StrategicObjectiveMetricResponse.model_validate(metric)
-        for metric in strategy_service.list_metrics(workspace_id, objective_id)
-    ]
+) -> Page[StrategicObjectiveMetricResponse]:
+    return paginate_items(
+        strategy_service.list_metrics(workspace_id, objective_id),
+        pagination,
+        StrategicObjectiveMetricResponse.model_validate,
+    )
 
 
 @router.patch("/workspaces/{workspace_id}/metrics/{metric_id}", response_model=StrategicObjectiveMetricResponse)

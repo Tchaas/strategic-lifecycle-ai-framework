@@ -56,7 +56,7 @@ class SolutionService:
             self.db.scalars(
                 select(Feature)
                 .where(Feature.workspace_id == workspace_id, Feature.lean_business_case_id == case_id)
-                .order_by(Feature.created_at, Feature.feature_name)
+                .order_by(Feature.created_at, Feature.id)
             ).all()
         )
 
@@ -108,7 +108,7 @@ class SolutionService:
             self.db.scalars(
                 select(Requirement)
                 .where(Requirement.workspace_id == workspace_id, Requirement.feature_id == feature_id)
-                .order_by(Requirement.created_at, Requirement.requirement_name)
+                .order_by(Requirement.created_at, Requirement.id)
             ).all()
         )
 
@@ -162,7 +162,7 @@ class SolutionService:
                     ConceptualDeliverable.workspace_id == workspace_id,
                     ConceptualDeliverable.lean_business_case_id == case_id,
                 )
-                .order_by(ConceptualDeliverable.created_at, ConceptualDeliverable.title)
+                .order_by(ConceptualDeliverable.created_at, ConceptualDeliverable.id)
             ).all()
         )
 

@@ -39,7 +39,14 @@ class DepartmentService:
         workspace_id: uuid.UUID,
         parent_id: uuid.UUID | None,
     ) -> list[Department]:
-        statement = select(Department).where(Department.workspace_id == workspace_id).order_by(Department.name)
+        statement = (
+            select(Department)
+            .where(Department.workspace_id == workspace_id)
+            .order_by(
+                Department.created_at,
+                Department.id,
+            )
+        )
         if parent_id is not None:
             self._get_department(workspace_id, parent_id)
             statement = statement.where(Department.parent_department_id == parent_id)

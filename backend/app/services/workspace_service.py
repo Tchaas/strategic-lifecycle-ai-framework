@@ -90,7 +90,7 @@ class WorkspaceService:
             select(Workspace, WorkspaceMember)
             .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
             .where(WorkspaceMember.user_id == user.id)
-            .order_by(Workspace.created_at)
+            .order_by(Workspace.created_at, Workspace.id)
         ).all()
         return [WorkspaceListResult(workspace=workspace, member=member) for workspace, member in rows]
 
@@ -119,7 +119,7 @@ class WorkspaceService:
             select(WorkspaceMember, User)
             .join(User, User.id == WorkspaceMember.user_id)
             .where(WorkspaceMember.workspace_id == workspace_id)
-            .order_by(WorkspaceMember.joined_at, User.email)
+            .order_by(WorkspaceMember.joined_at, WorkspaceMember.id)
         ).all()
         return [MemberDisplay(member=member, user=user) for member, user in rows]
 

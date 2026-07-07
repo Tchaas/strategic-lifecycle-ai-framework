@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Response, status
 
 from app.api.deps import get_current_user, get_workspace_member, get_workspace_service, require_workspace_admin
+from app.core.pagination import Page, PaginationParams, paginate_items
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
 from app.schemas.workspaces import (
@@ -15,7 +16,7 @@ from app.schemas.workspaces import (
     WorkspaceResponse,
     WorkspaceUpdateRequest,
 )
-from app.services.workspace_service import MemberDisplay, WorkspaceService
+from app.services.workspace_service import MemberDisplay, WorkspaceListResult, WorkspaceService
 
 router = APIRouter(tags=["workspaces"])
 
@@ -46,19 +47,20 @@ def create_workspace(
     )
 
 
-@router.get("/workspaces", response_model=list[WorkspaceListItem])
+@router.get("/workspaces", response_model=Page[WorkspaceListItem])
 def list_workspaces(
     current_user: CurrentUserDep,
+    pagination: Annotated[PaginationParams, Depends()],
     workspace_service: WorkspaceServiceDep,
-) -> list[WorkspaceListItem]:
-    return [
-        WorkspaceListItem(
+) -> Page[WorkspaceListItem]:
+    def mapper(result: WorkspaceListResult) -> WorkspaceListItem:
+        return WorkspaceListItem(
             **WorkspaceResponse.model_validate(result.workspace).model_dump(),
             is_admin=result.member.is_admin,
             joined_at=result.member.joined_at,
         )
-        for result in workspace_service.list_workspaces(current_user)
-    ]
+
+    return paginate_items(workspace_service.list_workspaces(current_user), pagination, mapper)
 
 
 @router.get("/workspaces/{workspace_id}", response_model=WorkspaceResponse)
@@ -92,13 +94,14 @@ def delete_workspace(
     return response
 
 
-@router.get("/workspaces/{workspace_id}/members", response_model=list[WorkspaceMemberResponse])
+@router.get("/workspaces/{workspace_id}/members", response_model=Page[WorkspaceMemberResponse])
 def list_members(
     workspace_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     workspace_service: WorkspaceServiceDep,
-) -> list[WorkspaceMemberResponse]:
-    return [member_display_response(row) for row in workspace_service.list_members(workspace_id)]
+) -> Page[WorkspaceMemberResponse]:
+    return paginate_items(workspace_service.list_members(workspace_id), pagination, member_display_response)
 
 
 @router.patch("/workspaces/{workspace_id}/members/{member_id}", response_model=WorkspaceMemberResponse)

@@ -102,7 +102,7 @@ class BusinessCaseService:
         )
         if status_filter is not None:
             query = query.where(LeanBusinessCase.status == status_filter)
-        return list(self.db.scalars(query.order_by(LeanBusinessCase.created_at, LeanBusinessCase.title)).all())
+        return list(self.db.scalars(query.order_by(LeanBusinessCase.created_at, LeanBusinessCase.id)).all())
 
     def get_detail(self, workspace_id: uuid.UUID, case_id: uuid.UUID) -> LeanBusinessCaseDetail:
         case = self._get_case(workspace_id, case_id)

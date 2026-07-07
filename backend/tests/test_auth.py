@@ -40,13 +40,11 @@ def create_password_user(
         return cast(
             uuid.UUID,
             conn.scalar(
-                text(
-                    """
+                text("""
                     INSERT INTO users (email, full_name, auth_provider, password_hash)
                     VALUES (:email, 'Existing User', 'password', :password_hash)
                     RETURNING id
-                    """
-                ),
+                    """),
                 {"email": email, "password_hash": hash_password(password)},
             ),
         )
@@ -61,13 +59,11 @@ def create_google_user(
         return cast(
             uuid.UUID,
             conn.scalar(
-                text(
-                    """
+                text("""
                     INSERT INTO users (email, full_name, auth_provider, google_sub, email_verified)
                     VALUES (:email, 'Google User', 'google', :google_sub, true)
                     RETURNING id
-                    """
-                ),
+                    """),
                 {"email": email, "google_sub": google_sub},
             ),
         )
@@ -88,16 +84,12 @@ def test_signup_happy_path_creates_user_workspace_member_and_tokens(client: Test
     user_id = body["user"]["id"]
     workspace_id = body["workspace"]["id"]
     with engine.begin() as conn:
-        counts = conn.execute(
-            text(
-                """
+        counts = conn.execute(text("""
                 SELECT
                   (SELECT count(*) FROM users) AS users_count,
                   (SELECT count(*) FROM workspaces) AS workspaces_count,
                   (SELECT count(*) FROM workspace_members) AS members_count
-                """
-            )
-        ).one()
+                """)).one()
         member = conn.execute(
             text("SELECT is_admin FROM workspace_members WHERE user_id = :user_id"), {"user_id": user_id}
         ).one()
@@ -249,12 +241,10 @@ def test_expired_refresh_token(client: TestClient, engine: sa.Engine) -> None:
     refresh = "expired-refresh"
     with engine.begin() as conn:
         conn.execute(
-            text(
-                """
+            text("""
                 INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
                 VALUES (:user_id, :token_hash, :expires_at)
-                """
-            ),
+                """),
             {
                 "user_id": user_id,
                 "token_hash": hash_refresh_token(refresh),

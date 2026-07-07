@@ -47,13 +47,11 @@ def create_password_user(engine: sa.Engine, email: str, full_name: str = "User")
         return cast(
             uuid.UUID,
             conn.scalar(
-                text(
-                    """
+                text("""
                     INSERT INTO users (email, full_name, auth_provider, password_hash)
                     VALUES (:email, :full_name, 'password', :password_hash)
                     RETURNING id
-                    """
-                ),
+                    """),
                 {"email": email, "full_name": full_name, "password_hash": hash_password("correct-horse")},
             ),
         )
@@ -63,14 +61,12 @@ def add_member(engine: sa.Engine, workspace_id: str, user_id: uuid.UUID, created
     with engine.begin() as conn:
         return str(
             conn.scalar(
-                text(
-                    """
+                text("""
                     INSERT INTO workspace_members
                       (workspace_id, user_id, is_admin, joined_at, created_by_user_id)
                     VALUES (:workspace_id, :user_id, false, now(), :created_by_user_id)
                     RETURNING id
-                    """
-                ),
+                    """),
                 {"workspace_id": workspace_id, "user_id": user_id, "created_by_user_id": created_by_user_id},
             )
         )
@@ -112,24 +108,20 @@ def test_workspace_delete_still_cascades_owned_rows(client: TestClient, engine: 
     admin = signup(client, "dept-cascade-admin@example.com", "Cascade Co")
     with engine.begin() as conn:
         objective_id = conn.scalar(
-            text(
-                """
+            text("""
                 INSERT INTO strategic_objectives (workspace_id, strategic_initiative_name, created_by_user_id)
                 VALUES (:workspace_id, 'Cascade objective', :user_id)
                 RETURNING id
-                """
-            ),
+                """),
             {"workspace_id": admin["workspace"]["id"], "user_id": admin["user"]["id"]},
         )
         case_id = conn.scalar(
-            text(
-                """
+            text("""
                 INSERT INTO lean_business_cases
                   (workspace_id, strategic_objective_id, owner_user_id, title, created_by_user_id)
                 VALUES (:workspace_id, :objective_id, :user_id, 'Cascade case', :user_id)
                 RETURNING id
-                """
-            ),
+                """),
             {"workspace_id": admin["workspace"]["id"], "objective_id": objective_id, "user_id": admin["user"]["id"]},
         )
 
@@ -269,14 +261,19 @@ def test_parent_filter_returns_direct_children_only(client: TestClient) -> None:
         params={"parentId": root["id"]},
     )
     assert children.status_code == 200
-    assert {row["id"] for row in children.json()} == {child["id"], sibling["id"]}
+    assert {row["id"] for row in children.json()["items"]} == {child["id"], sibling["id"]}
 
     all_departments = client.get(
         f"/workspaces/{admin['workspace']['id']}/departments",
         headers=auth_headers(admin["accessToken"]),
     )
     assert all_departments.status_code == 200
-    assert {row["id"] for row in all_departments.json()} == {root["id"], child["id"], grandchild["id"], sibling["id"]}
+    assert {row["id"] for row in all_departments.json()["items"]} == {
+        root["id"],
+        child["id"],
+        grandchild["id"],
+        sibling["id"],
+    }
 
     assert_error(
         client.get(
@@ -311,25 +308,21 @@ def test_delete_nulls_department_references(client: TestClient, engine: sa.Engin
     department = create_department(client, admin["workspace"]["id"], admin["accessToken"], "Linked Department")
     with engine.begin() as conn:
         architecture_id = conn.scalar(
-            text(
-                """
+            text("""
                 INSERT INTO business_architecture_components
                   (workspace_id, name, created_by_user_id)
                 VALUES (:workspace_id, 'Architecture', :user_id)
                 RETURNING id
-                """
-            ),
+                """),
             {"workspace_id": admin["workspace"]["id"], "user_id": admin["user"]["id"]},
         )
         value_stream_id = conn.scalar(
-            text(
-                """
+            text("""
                 INSERT INTO value_streams
                   (workspace_id, business_architecture_id, name, linked_department_id, created_by_user_id)
                 VALUES (:workspace_id, :architecture_id, 'Stream', :department_id, :user_id)
                 RETURNING id
-                """
-            ),
+                """),
             {
                 "workspace_id": admin["workspace"]["id"],
                 "architecture_id": architecture_id,
@@ -338,14 +331,12 @@ def test_delete_nulls_department_references(client: TestClient, engine: sa.Engin
             },
         )
         capability_id = conn.scalar(
-            text(
-                """
+            text("""
                 INSERT INTO business_capabilities
                   (workspace_id, business_architecture_id, capability_name, owning_department_id, created_by_user_id)
                 VALUES (:workspace_id, :architecture_id, 'Capability', :department_id, :user_id)
                 RETURNING id
-                """
-            ),
+                """),
             {
                 "workspace_id": admin["workspace"]["id"],
                 "architecture_id": architecture_id,
@@ -392,8 +383,7 @@ def test_patch_rejects_unknown_columns(client: TestClient) -> None:
 
 
 def _delete_rules(database_url: str) -> dict[tuple[str, str], str]:
-    query = text(
-        """
+    query = text("""
         SELECT kcu.table_name, kcu.column_name, rc.delete_rule
         FROM information_schema.referential_constraints rc
         JOIN information_schema.key_column_usage kcu
@@ -410,8 +400,7 @@ def _delete_rules(database_url: str) -> dict[tuple[str, str], str]:
           ('business_impacts', 'linked_lean_business_case_id'),
           ('features', 'capability_id')
         )
-        """
-    )
+        """)
     engine = sa.create_engine(database_url)
     try:
         with engine.begin() as conn:

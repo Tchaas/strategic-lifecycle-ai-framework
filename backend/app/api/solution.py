@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Response, status
 
 from app.api.deps import get_current_user, get_solution_service, get_workspace_member
+from app.core.pagination import Page, PaginationParams, paginate_items
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
 from app.schemas.solution import (
@@ -42,16 +43,19 @@ def create_feature(
     return FeatureResponse.model_validate(solution_service.create_feature(workspace_id, case_id, current_user, payload))
 
 
-@router.get("/workspaces/{workspace_id}/lean-business-cases/{case_id}/features", response_model=list[FeatureResponse])
+@router.get("/workspaces/{workspace_id}/lean-business-cases/{case_id}/features", response_model=Page[FeatureResponse])
 def list_features(
     workspace_id: uuid.UUID,
     case_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     solution_service: SolutionServiceDep,
-) -> list[FeatureResponse]:
-    return [
-        FeatureResponse.model_validate(feature) for feature in solution_service.list_features(workspace_id, case_id)
-    ]
+) -> Page[FeatureResponse]:
+    return paginate_items(
+        solution_service.list_features(workspace_id, case_id),
+        pagination,
+        FeatureResponse.model_validate,
+    )
 
 
 @router.patch("/workspaces/{workspace_id}/features/{feature_id}", response_model=FeatureResponse)
@@ -98,18 +102,20 @@ def create_requirement(
 
 @router.get(
     "/workspaces/{workspace_id}/features/{feature_id}/requirements",
-    response_model=list[RequirementResponse],
+    response_model=Page[RequirementResponse],
 )
 def list_requirements(
     workspace_id: uuid.UUID,
     feature_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     solution_service: SolutionServiceDep,
-) -> list[RequirementResponse]:
-    return [
-        RequirementResponse.model_validate(requirement)
-        for requirement in solution_service.list_requirements(workspace_id, feature_id)
-    ]
+) -> Page[RequirementResponse]:
+    return paginate_items(
+        solution_service.list_requirements(workspace_id, feature_id),
+        pagination,
+        RequirementResponse.model_validate,
+    )
 
 
 @router.patch("/workspaces/{workspace_id}/requirements/{requirement_id}", response_model=RequirementResponse)
@@ -158,18 +164,20 @@ def create_deliverable(
 
 @router.get(
     "/workspaces/{workspace_id}/lean-business-cases/{case_id}/deliverables",
-    response_model=list[DeliverableResponse],
+    response_model=Page[DeliverableResponse],
 )
 def list_deliverables(
     workspace_id: uuid.UUID,
     case_id: uuid.UUID,
+    pagination: Annotated[PaginationParams, Depends()],
     _: WorkspaceMemberDep,
     solution_service: SolutionServiceDep,
-) -> list[DeliverableResponse]:
-    return [
-        DeliverableResponse.model_validate(deliverable)
-        for deliverable in solution_service.list_deliverables(workspace_id, case_id)
-    ]
+) -> Page[DeliverableResponse]:
+    return paginate_items(
+        solution_service.list_deliverables(workspace_id, case_id),
+        pagination,
+        DeliverableResponse.model_validate,
+    )
 
 
 @router.patch("/workspaces/{workspace_id}/deliverables/{deliverable_id}", response_model=DeliverableResponse)

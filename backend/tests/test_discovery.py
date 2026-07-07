@@ -32,13 +32,11 @@ def create_password_user(engine: sa.Engine, email: str) -> uuid.UUID:
         return cast(
             uuid.UUID,
             conn.scalar(
-                text(
-                    """
+                text("""
                     INSERT INTO users (email, full_name, auth_provider, password_hash)
                     VALUES (:email, 'Member', 'password', :password_hash)
                     RETURNING id
-                    """
-                ),
+                    """),
                 {"email": email, "password_hash": hash_password("correct-horse")},
             ),
         )
@@ -47,13 +45,11 @@ def create_password_user(engine: sa.Engine, email: str) -> uuid.UUID:
 def add_member(engine: sa.Engine, workspace_id: str, user_id: uuid.UUID, created_by_user_id: str) -> None:
     with engine.begin() as conn:
         conn.execute(
-            text(
-                """
+            text("""
                 INSERT INTO workspace_members
                   (workspace_id, user_id, is_admin, joined_at, created_by_user_id)
                 VALUES (:workspace_id, :user_id, false, now(), :created_by_user_id)
-                """
-            ),
+                """),
             {"workspace_id": workspace_id, "user_id": user_id, "created_by_user_id": created_by_user_id},
         )
 
@@ -363,7 +359,7 @@ def test_roll_down_guard_origin_and_normal_visibility(client: TestClient) -> Non
     normal_streams = client.get(
         f"/workspaces/{owner['workspace']['id']}/business-architecture/{architecture.json()['id']}/value-streams",
         headers=auth_headers(owner["accessToken"]),
-    ).json()
+    ).json()["items"]
     assert normal_streams[0]["id"] == stream["id"]
     assert_error(
         client.patch(
