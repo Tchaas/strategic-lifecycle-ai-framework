@@ -942,6 +942,8 @@ function Shell({
   );
 }
 
+// Note: Public landing page for the research artifact. It explains the lifecycle framework, governance model,
+// case studies, and downloadable project deliverables before a user enters the authenticated workspace shell.
 function LandingPage() {
   const [selectedStage, setSelectedStage] = useState(frameworkStages[0].id);
   const activeStage = frameworkStages.find((stage) => stage.id === selectedStage) || frameworkStages[0];
@@ -1121,6 +1123,8 @@ function LandingPage() {
   );
 }
 
+// Note: Mock sign-up/login page that flips the prototype into authenticated workspace mode. It demonstrates
+// the account entry flow without real tokens, backend calls, or OAuth redirects.
 function AuthPage({ mode, onSignIn }: { mode: 'signup' | 'login'; onSignIn: (session: AuthSession) => void }) {
   const [email, setEmail] = useState(mode === 'login' ? 'network.transformation@example.com' : '');
   const [password, setPassword] = useState('');
@@ -1164,6 +1168,8 @@ function AuthPage({ mode, onSignIn }: { mode: 'signup' | 'login'; onSignIn: (ses
   );
 }
 
+// Note: Authenticated workspace overview scoped to the selected tenant. It summarizes company context,
+// lifecycle progress, and the 33-table data model coverage.
 function DashboardPage({ tenant }: { tenant: TenantData }) {
   return (
     <div className="hud-page">
@@ -1194,6 +1200,8 @@ function DashboardPage({ tenant }: { tenant: TenantData }) {
   );
 }
 
+// Note: Company profile and team-access page for the active workspace. It shows the tenant boundary,
+// member roles, and invite status while keeping invite tokens hidden.
 function CompanyPage({ tenant }: { tenant: TenantData }) {
   const members = tenant.workspaceMembers.map((member) => {
     const user = state.users.find((candidate) => candidate.id === member.userId);
@@ -1245,6 +1253,8 @@ function CompanyPage({ tenant }: { tenant: TenantData }) {
   );
 }
 
+// Note: Department hierarchy page for optional org-structure metadata. Departments support references from
+// value streams and capabilities without owning or deleting lifecycle work.
 function DepartmentsPage({ tenant }: { tenant: TenantData }) {
   return (
     <ListPage
@@ -1266,6 +1276,8 @@ function DepartmentsPage({ tenant }: { tenant: TenantData }) {
   );
 }
 
+// Note: Strategic objectives page for executive intent, activation-gate fields, metrics, traceability links,
+// and computed financial rollups. Mobile uses summary cards while desktop shows the full working record.
 function ObjectivesPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
   return (
     <div className="hud-page">
@@ -1374,6 +1386,8 @@ function ObjectivesPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
   );
 }
 
+// Note: Business architecture singleton page for the workspace-level architecture record. It anchors reusable
+// value streams, activities, capabilities, and supporting architecture content.
 function ArchitecturePage({ tenant }: { tenant: TenantData }) {
   const architecture = tenant.architecture;
   if (!architecture) {
@@ -1408,6 +1422,8 @@ type ListRecord = {
   references?: ReactNode;
 };
 
+// Note: Shared list-page renderer used by several lifecycle resources with the same HUD record layout. It keeps
+// badges, field grids, reference blocks, and rule notes consistent across pages.
 function ListPage({ eyebrow, title, subtitle, rule, rows }: { eyebrow: string; title: string; subtitle: string; rule: string; rows: ListRecord[] }) {
   return (
     <div className="hud-page">
@@ -1439,6 +1455,8 @@ function ListPage({ eyebrow, title, subtitle, rule, rows }: { eyebrow: string; t
   );
 }
 
+// Note: Value streams page showing how business value flows through the workspace architecture. Each stream
+// can reference linked capabilities and linked departments.
 function ValueStreamsPage({ tenant }: { tenant: TenantData }) {
   return (
     <ListPage
@@ -1464,6 +1482,8 @@ function ValueStreamsPage({ tenant }: { tenant: TenantData }) {
   );
 }
 
+// Note: Key activities page for ordered stages inside value streams. It shows sequence, current/future changes,
+// business impact text, and capability traceability.
 function KeyActivitiesPage({ tenant }: { tenant: TenantData }) {
   return (
     <ListPage
@@ -1489,6 +1509,8 @@ function KeyActivitiesPage({ tenant }: { tenant: TenantData }) {
   );
 }
 
+// Note: Capabilities page for stable business building blocks and maturity gaps. Capabilities are reusable
+// across streams, activities, objectives, cases, and solution features.
 function CapabilitiesPage({ tenant }: { tenant: TenantData }) {
   return (
     <ListPage
@@ -1512,18 +1534,26 @@ function CapabilitiesPage({ tenant }: { tenant: TenantData }) {
   );
 }
 
+// Note: Business processes route for supporting process records. It delegates to the shared supporting
+// component page because processes, personas, and information concepts follow the same interaction pattern.
 function ProcessesPage({ tenant }: { tenant: TenantData }) {
   return <SupportingComponentPage tenant={tenant} type="processes" title="Business Processes" subtitle="Current- and future-state process detail supporting the architecture." />;
 }
 
+// Note: Stakeholders/personas route for internal, external, executive, and customer participants. It uses the
+// shared supporting component layout while preserving persona-specific display fields.
 function PersonasPage({ tenant }: { tenant: TenantData }) {
   return <SupportingComponentPage tenant={tenant} type="personas" title="Stakeholders & Personas" subtitle="The people the value streams serve or depend on." />;
 }
 
+// Note: Information concepts route for source/target data, ownership, quality issues, and business usage.
+// It shares the supporting component renderer with processes and personas.
 function InformationPage({ tenant }: { tenant: TenantData }) {
   return <SupportingComponentPage tenant={tenant} type="information" title="Information Concepts" subtitle="The key data objects the architecture produces and consumes." />;
 }
 
+// Note: Shared page for supporting architecture resources. It normalizes common fields, linked value streams,
+// origin badges, and reference/create affordances across process, persona, and information records.
 function SupportingComponentPage({ tenant, type, title, subtitle }: { tenant: TenantData; type: 'processes' | 'personas' | 'information'; title: string; subtitle: string }) {
   const records = type === 'processes' ? tenant.processes : type === 'personas' ? tenant.personas : tenant.informationConcepts;
   return (
@@ -1555,6 +1585,8 @@ function SupportingComponentPage({ tenant, type, title, subtitle }: { tenant: Te
   );
 }
 
+// Note: Business impacts page for qualitative process, financial, customer, risk, and operational impacts.
+// These records help justify later cases and discovery priorities without storing actual financials.
 function ImpactsPage({ tenant }: { tenant: TenantData }) {
   return (
     <ListPage
@@ -1580,6 +1612,8 @@ function ImpactsPage({ tenant }: { tenant: TenantData }) {
   );
 }
 
+// Note: Lean business cases page for granular initiatives under strategic objectives. It shows forecast fields,
+// lifecycle readiness, architecture links, and downstream discovery/implementation status.
 function CasesPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
   return (
     <div className="hud-page">
@@ -1679,6 +1713,8 @@ function CasesPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
   );
 }
 
+// Note: Discovery page for the 1:1 case discovery record and its ten qualitative finding areas. It also exposes
+// the roll-down builder and links to personas, processes, and information concepts.
 function DiscoveryPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
   return (
     <div className="hud-page">
@@ -1764,6 +1800,8 @@ function DiscoveryPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
   );
 }
 
+// Note: Discovery roll-down helper showing how discovery-origin architecture components are created and reused.
+// On small screens the flow stacks vertically to avoid clipped process-map content.
 function RollDownBuilder({ tenant }: { tenant: TenantData }) {
   const discoveryOriginItems = [
     ...tenant.valueStreams.filter((item) => item.origin === 'discovery').map((item) => item.name),
@@ -1789,6 +1827,8 @@ function RollDownBuilder({ tenant }: { tenant: TenantData }) {
   );
 }
 
+// Note: Features page for solution pieces that enable capabilities and belong to a lean business case. It makes
+// the capability-to-feature bridge visible before requirements are detailed.
 function FeaturesPage({ tenant }: { tenant: TenantData }) {
   return (
     <ListPage
@@ -1819,6 +1859,8 @@ function FeaturesPage({ tenant }: { tenant: TenantData }) {
   );
 }
 
+// Note: Requirements page for detailed specifications under features. It shows requirement type, acceptance
+// criteria, priority, and feature ownership without linking requirements directly to streams.
 function RequirementsPage({ tenant }: { tenant: TenantData }) {
   return (
     <ListPage
@@ -1845,6 +1887,8 @@ function RequirementsPage({ tenant }: { tenant: TenantData }) {
   );
 }
 
+// Note: Conceptual deliverables page for the twelve solution outputs and their suggested/finalized trust marker.
+// It demonstrates that finalized deliverables remain editable but retain their governance source.
 function DeliverablesPage({ tenant }: { tenant: TenantData }) {
   return (
     <ListPage
@@ -1871,6 +1915,8 @@ function DeliverablesPage({ tenant }: { tenant: TenantData }) {
   );
 }
 
+// Note: Implementation page for shipment tracking and actuals entered once per value stream. The allocation
+// table feeds objective financial rollups while direct actual fields remain read-only.
 function ImplementationPage({ tenant }: { tenant: TenantData }) {
   return (
     <div className="hud-page">
@@ -1913,6 +1959,8 @@ function ImplementationPage({ tenant }: { tenant: TenantData }) {
   );
 }
 
+// Note: AI assistance page explaining the stateless draft/refine/suggest workflow. It documents human review,
+// endpoint shape, and cost controls without persisting suggestions automatically.
 function AiAssistancePage({ tenant }: { tenant: TenantData }) {
   const usageSeed = tenant.workspace.name.includes('Walmart') ? [18400, 50000] : tenant.workspace.name.includes('Amazon') ? [9600, 50000] : [23100, 50000];
   return (
@@ -1977,6 +2025,8 @@ function AiAssistancePage({ tenant }: { tenant: TenantData }) {
   );
 }
 
+// Note: Placeholder page for routes intentionally deferred by scope. It keeps navigation complete while making
+// clear that no behavior is implemented yet.
 function StageLaterPage({ route }: { route: RouteId }) {
   const label = navGroups.flatMap((group) => group.items).find((item) => item.route === route)?.label || 'Later stage';
   return (
@@ -1989,6 +2039,8 @@ function StageLaterPage({ route }: { route: RouteId }) {
   );
 }
 
+// Note: Generic empty state for resources that require prerequisite data. It gives users a clear, non-error
+// explanation when a workspace has no records for a page.
 function EmptyPage({ title, message }: { title: string; message: string }) {
   return (
     <div className="hud-page">
@@ -1998,6 +2050,8 @@ function EmptyPage({ title, message }: { title: string; message: string }) {
   );
 }
 
+// Note: Central route switch for implemented authenticated pages. It maps each hash route to its page component
+// so navigation behavior stays easy to audit in one place.
 function ImplementedPage({ route, tenant, ai }: { route: RouteId; tenant: TenantData; ai: AiActions }) {
   if (route === 'dashboard') return <DashboardPage tenant={tenant} />;
   if (route === 'company') return <CompanyPage tenant={tenant} />;
