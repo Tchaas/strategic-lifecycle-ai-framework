@@ -22,6 +22,10 @@ REACTIVATE_TRANSITIONS = {
     ("archived", "draft"),
 }
 ALLOWED_TRANSITIONS = FORWARD_TRANSITIONS | ARCHIVE_TRANSITIONS | REACTIVATE_TRANSITIONS
+LINEAR_TRANSITIONS = {
+    ("draft", "active"),
+    ("active", "completed"),
+}
 
 
 @dataclass(frozen=True)

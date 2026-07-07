@@ -39,11 +39,16 @@ class ArchitectureSupportingService:
         architecture_id: uuid.UUID,
         user: User,
         payload: BusinessProcessCreateRequest,
+        origin: str = "architecture",
+        commit: bool = True,
     ) -> BusinessProcess:
-        values = self._create_values(workspace_id, architecture_id, user, payload.model_dump())
+        values = self._create_values(workspace_id, architecture_id, user, payload.model_dump(), origin)
         process = BusinessProcess(**values)
         self.db.add(process)
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         return process
 
     def list_processes(self, workspace_id: uuid.UUID, architecture_id: uuid.UUID) -> list[BusinessProcess]:
@@ -66,11 +71,16 @@ class ArchitectureSupportingService:
         architecture_id: uuid.UUID,
         user: User,
         payload: StakeholderPersonaCreateRequest,
+        origin: str = "architecture",
+        commit: bool = True,
     ) -> StakeholderPersona:
-        values = self._create_values(workspace_id, architecture_id, user, payload.model_dump())
+        values = self._create_values(workspace_id, architecture_id, user, payload.model_dump(), origin)
         stakeholder = StakeholderPersona(**values)
         self.db.add(stakeholder)
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         return stakeholder
 
     def list_stakeholders(self, workspace_id: uuid.UUID, architecture_id: uuid.UUID) -> list[StakeholderPersona]:
@@ -93,11 +103,16 @@ class ArchitectureSupportingService:
         architecture_id: uuid.UUID,
         user: User,
         payload: InformationConceptCreateRequest,
+        origin: str = "architecture",
+        commit: bool = True,
     ) -> InformationConcept:
-        values = self._create_values(workspace_id, architecture_id, user, payload.model_dump())
+        values = self._create_values(workspace_id, architecture_id, user, payload.model_dump(), origin)
         concept = InformationConcept(**values)
         self.db.add(concept)
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         return concept
 
     def list_information_concepts(
@@ -124,8 +139,9 @@ class ArchitectureSupportingService:
         architecture_id: uuid.UUID,
         user: User,
         payload: BusinessImpactCreateRequest,
+        origin: str = "architecture",
     ) -> BusinessImpact:
-        values = self._create_values(workspace_id, architecture_id, user, payload.model_dump())
+        values = self._create_values(workspace_id, architecture_id, user, payload.model_dump(), origin)
         impact = BusinessImpact(**values)
         self.db.add(impact)
         self.db.commit()
@@ -151,12 +167,13 @@ class ArchitectureSupportingService:
         architecture_id: uuid.UUID,
         user: User,
         values: dict[str, Any],
+        origin: str,
     ) -> dict[str, Any]:
         self._get_architecture(workspace_id, architecture_id)
         self._validate_references(workspace_id, values)
         values["workspace_id"] = workspace_id
         values["business_architecture_id"] = architecture_id
-        values["origin"] = "architecture"
+        values["origin"] = origin
         values["status"] = "draft"
         values["created_by_user_id"] = user.id
         return values

@@ -33,6 +33,7 @@ class CapabilityService:
         architecture_id: uuid.UUID,
         user: User,
         payload: CapabilityCreateRequest,
+        origin: str = "architecture",
     ) -> BusinessCapability:
         self._get_architecture(workspace_id, architecture_id)
         if payload.owning_department_id is not None:
@@ -46,7 +47,7 @@ class CapabilityService:
             target_maturity=payload.target_maturity,
             capability_gap=payload.capability_gap,
             owning_department_id=payload.owning_department_id,
-            origin="architecture",
+            origin=origin,
             status="draft",
             created_by_user_id=user.id,
         )
