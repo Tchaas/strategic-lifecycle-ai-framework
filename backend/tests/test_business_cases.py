@@ -510,6 +510,18 @@ def test_case_tenancy_and_non_admin_writes(client: TestClient, engine: sa.Engine
         ).status_code
         == 200
     )
+    architecture = create_architecture(client, owner["workspace"]["id"], member_token)
+    stream = create_stream(client, owner["workspace"]["id"], architecture["id"], member_token, "Member stream")
+    activity = create_activity(client, owner["workspace"]["id"], stream["id"], member_token, "Member activity")
+    capability = create_capability(client, owner["workspace"]["id"], architecture["id"], member_token, "Member cap")
+    member_link_paths = [
+        f"/workspaces/{owner['workspace']['id']}/lean-business-cases/{case['id']}/value-streams/{stream['id']}",
+        f"/workspaces/{owner['workspace']['id']}/lean-business-cases/{case['id']}/key-activities/{activity['id']}",
+        f"/workspaces/{owner['workspace']['id']}/lean-business-cases/{case['id']}/capabilities/{capability['id']}",
+    ]
+    for path in member_link_paths:
+        assert client.post(path, headers=auth_headers(member_token)).status_code == 201
+        assert client.delete(path, headers=auth_headers(member_token)).status_code == 204
     assert archive_case(client, owner["workspace"]["id"], case["id"], member_token)["status"] == "archived"
 
     nonexistent = client.get(
