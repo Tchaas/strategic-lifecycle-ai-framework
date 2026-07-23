@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="AI lifecycle framework maskable icon">
+  <rect width="512" height="512" fill="#020617"/>
+  <circle cx="256" cy="256" r="192" fill="#0f172a" stroke="#00ffff" stroke-width="24"/>
+  <path d="M160 208h192M160 256h128M160 304h192" stroke="#a3e635" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="352" cy="256" r="52" fill="#d946ef"/>
+  <path d="M352 222v68M318 256h68" stroke="#020617" stroke-width="18" stroke-linecap="round"/>
+</svg>
