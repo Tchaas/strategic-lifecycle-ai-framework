@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from app.api.deps import get_current_user, get_implementation_service, get_workspace_member
+from app.api.dependencies import get_current_user, get_implementation_service, get_workspace_member
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
 from app.schemas.implementation import (

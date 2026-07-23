@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.deps import get_current_user, get_invite_service, require_workspace_admin
+from app.api.dependencies import get_current_user, get_invite_service, require_workspace_admin
 from app.core.config import settings
 from app.core.pagination import Page, PaginationParams, paginate_items
 from app.core.rate_limit import RateLimit, rate_limit_dependency

@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy import select
 
-from app.api.deps import (
+from app.api.dependencies import (
     get_business_architecture_service,
     get_capability_service,
     get_current_user,
