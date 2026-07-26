@@ -38,6 +38,7 @@ import type {
   StrategicObjective,
   ValueStream,
 } from '../types/model';
+import { api, getList, setTokens, clearTokens, getRefreshToken, ApiError } from '../api/client';
 
 type RouteId =
   | 'landing'
@@ -112,7 +113,6 @@ type AiActions = {
 };
 
 const state: StrategicLifecycleMockState = seededStrategicLifecycleState;
-const authStorageKey = 'slaf.wireframe.authSession';
 const activeWorkspaceStorageKey = 'slaf.wireframe.activeWorkspaceId';
 const emptyAiDraftState = (): AiDraftState => ({ objectives: {}, cases: {}, discoveries: {} });
 
@@ -527,15 +527,6 @@ const mockDiscoveryDraft = (workspaceName: string): Partial<Discovery> => {
 };
 
 const refinedText = (value: string) => `${value.trim()} Refined for clearer outcome, traceability, and implementation governance.`;
-
-const loadSession = (): AuthSession | null => {
-  try {
-    const raw = localStorage.getItem(authStorageKey);
-    return raw ? JSON.parse(raw) as AuthSession : null;
-  } catch {
-    return null;
-  }
-};
 
 const loadWorkspaceId = () => {
   try {
@@ -1123,23 +1114,55 @@ function LandingPage() {
   );
 }
 
-// Note: Mock sign-up/login page that flips the prototype into authenticated workspace mode. It demonstrates
-// the account entry flow without real tokens, backend calls, or OAuth redirects.
-function AuthPage({ mode, onSignIn }: { mode: 'signup' | 'login'; onSignIn: (session: AuthSession) => void }) {
-  const [email, setEmail] = useState(mode === 'login' ? 'network.transformation@example.com' : '');
+// Sign-up/login page that authenticates against the backend and flips the shell into
+// authenticated workspace mode. Session state lives in the top-level WireframeApp; this
+// page only reports the resolved session + active workspace id back up via onAuthenticated.
+function AuthPage({ mode, onAuthenticated }: {
+  mode: 'signup' | 'login';
+  onAuthenticated: (session: AuthSession, workspaceId: string | null) => void;
+}) {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [companyName, setCompanyName] = useState('FedEx Corporation');
+  const [companyName, setCompanyName] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const submit = (event: FormEvent, authProvider: AuthSession['authProvider'] = 'password') => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const session = {
-      email: email.trim() || 'network.transformation@example.com',
-      authProvider,
-      signedInAt: new Date().toISOString(),
-    };
-    localStorage.setItem(authStorageKey, JSON.stringify(session));
-    onSignIn(session);
-    navigateTo('dashboard');
+    setError(null);
+    setSubmitting(true);
+    try {
+      let userEmail: string;
+      let workspaceId: string | null;
+      if (mode === 'signup') {
+        const res = await api.post<{ accessToken: string; refreshToken: string; user: { email: string }; workspace: { id: string } }>(
+          '/auth/signup',
+          { email, password, fullName, workspaceName: companyName },
+        );
+        setTokens(res.accessToken, res.refreshToken);
+        userEmail = res.user.email;
+        workspaceId = res.workspace.id; // signup returns the workspace directly
+      } else {
+        const res = await api.post<{ accessToken: string; refreshToken: string; user: { email: string } }>(
+          '/auth/login',
+          { email, password },
+        );
+        setTokens(res.accessToken, res.refreshToken);
+        const ws = await getList<{ id: string }>('/workspaces'); // login response has no workspace
+        userEmail = res.user.email;
+        workspaceId = ws.items[0]?.id ?? null;
+      }
+      onAuthenticated(
+        { email: userEmail, authProvider: 'password', signedInAt: new Date().toISOString() },
+        workspaceId,
+      );
+      navigateTo('dashboard');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -1148,18 +1171,20 @@ function AuthPage({ mode, onSignIn }: { mode: 'signup' | 'login'; onSignIn: (ses
         <SectionTitle
           eyebrow="Account"
           title={mode === 'signup' ? 'Sign Up' : 'Log In'}
-          subtitle="Mock authentication only. A successful sign-in flips the shell into authenticated workspace mode."
+          subtitle="A successful sign-in flips the shell into authenticated workspace mode."
         />
-        <RuleNote>Route guard redirects gated lifecycle routes here while signed out. No real tokens, backend calls, or OAuth handoffs occur in this UI pass.</RuleNote>
+        <RuleNote>Route guard redirects gated lifecycle routes here while signed out. Credentials are verified against the backend and the session is restored on refresh.</RuleNote>
       </HudPanel>
 
       <HudPanel className="hud-auth-card">
-        <form onSubmit={(event) => submit(event)} className="hud-form">
+        <form onSubmit={submit} className="hud-form">
           {mode === 'signup' && <TextInput label="Company / Workspace name" value={companyName} onChange={setCompanyName} />}
+          {mode === 'signup' && <TextInput label="Full name" value={fullName} onChange={setFullName} />}
           <TextInput label="Email" value={email} onChange={setEmail} type="email" />
           <TextInput label="Password" value={password} onChange={setPassword} type="password" />
-          <HudButton type="submit">{mode === 'signup' ? <UserPlus size={16} /> : <LogIn size={16} />} {mode === 'signup' ? 'Create mock account' : 'Log in'}</HudButton>
-          <HudButton variant="ghost" onClick={() => submit({ preventDefault: () => undefined } as FormEvent, 'google')}>
+          {error && <p className="hud-form-error" role="alert">{error}</p>}
+          <HudButton type="submit" disabled={submitting}>{mode === 'signup' ? <UserPlus size={16} /> : <LogIn size={16} />} {mode === 'signup' ? 'Create account' : 'Log in'}</HudButton>
+          <HudButton variant="ghost" disabled>
             <Sparkles size={16} /> Continue with Google
           </HudButton>
         </form>
@@ -2077,7 +2102,9 @@ function ImplementedPage({ route, tenant, ai }: { route: RouteId; tenant: Tenant
 
 export default function WireframeApp() {
   const [route, setRoute] = useState<RouteId>(getRoute);
-  const [session, setSession] = useState<AuthSession | null>(loadSession);
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [apiWorkspaceId, setApiWorkspaceId] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(() => Boolean(getRefreshToken()));
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(loadWorkspaceId);
   const [pendingAi, setPendingAi] = useState<AiDraftState>(emptyAiDraftState);
   const [savedAi, setSavedAi] = useState<AiDraftState>(emptyAiDraftState);
@@ -2131,27 +2158,67 @@ export default function WireframeApp() {
   }, []);
 
   useEffect(() => {
+    if (!getRefreshToken()) return; // authLoading is already false — nothing to restore
+    let cancelled = false;
+    (async () => {
+      try {
+        const user = await api.get<{ email: string }>('/me'); // client auto-refreshes on 401
+        const ws = await getList<{ id: string }>('/workspaces');
+        if (cancelled) return;
+        setSession({ email: user.email, authProvider: 'password', signedInAt: new Date().toISOString() });
+        setApiWorkspaceId(ws.items[0]?.id ?? null);
+      } catch {
+        clearTokens(); // dead/invalid session
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (authLoading) return; // don't redirect mid-restore, or a signed-in user flashes the login screen
     if (!session && gatedRoutes.has(route)) navigateTo('login');
     if (session && (route === 'login' || route === 'signup')) navigateTo('dashboard');
-  }, [route, session]);
+  }, [route, session, authLoading]);
 
   const handleWorkspaceChange = (workspaceId: string) => {
     localStorage.setItem(activeWorkspaceStorageKey, workspaceId);
     setActiveWorkspaceId(workspaceId);
   };
 
+  const handleAuthenticated = (s: AuthSession, workspaceId: string | null) => {
+    setSession(s);
+    setApiWorkspaceId(workspaceId);
+  };
+
   const content = useMemo(() => {
     if (route === 'landing') return <LandingPage />;
-    if (route === 'signup') return <AuthPage mode="signup" onSignIn={setSession} />;
-    if (route === 'login') return <AuthPage mode="login" onSignIn={setSession} />;
+    if (route === 'signup') return <AuthPage mode="signup" onAuthenticated={handleAuthenticated} />;
+    if (route === 'login') return <AuthPage mode="login" onAuthenticated={handleAuthenticated} />;
     return implementedRoutes.has(route) ? <ImplementedPage route={route} tenant={tenant} ai={aiActions} /> : <StageLaterPage route={route} />;
   }, [route, tenant, aiActions]);
 
-  const signOut = () => {
-    localStorage.removeItem(authStorageKey);
+  const signOut = async () => {
+    const refreshToken = getRefreshToken();
+    try {
+      if (refreshToken) await api.post('/auth/logout', { refreshToken }); // 204 -> null, fine
+    } catch {
+      // ignore network/logout errors — still clear the session locally
+    }
+    clearTokens();
     setSession(null);
+    setApiWorkspaceId(null);
     navigateTo('landing');
   };
+
+  if (authLoading) {
+    return (
+      <div className="hud-page hud-auth-page">
+        <HudPanel>Restoring your session…</HudPanel>
+      </div>
+    );
+  }
 
   return (
     <Shell session={session} route={route} activeWorkspaceId={activeWorkspaceId} onWorkspaceChange={handleWorkspaceChange} onSignOut={signOut}>
