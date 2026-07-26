@@ -39,6 +39,7 @@ import type {
   ValueStream,
 } from '../types/model';
 import { api, getList, setTokens, clearTokens, getRefreshToken, ApiError } from '../api/client';
+import { listObjectives } from '../api/objectives';
 
 type RouteId =
   | 'landing'
@@ -1303,13 +1304,71 @@ function DepartmentsPage({ tenant }: { tenant: TenantData }) {
 
 // Note: Strategic objectives page for executive intent, activation-gate fields, metrics, traceability links,
 // and computed financial rollups. Mobile uses summary cards while desktop shows the full working record.
-function ObjectivesPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
+function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai: AiActions; apiWorkspaceId: string | null }) {
+  // The objectives list is the one dataset on this page sourced from the real API.
+  // Everything else (metrics, links, rollups) still reads the mock via `tenant`.
+  const [objectives, setObjectives] = useState<StrategicObjective[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    (async () => {
+      if (!apiWorkspaceId) {
+        // No workspace resolved (shouldn't happen behind auth) — treat as empty, not a spinner.
+        if (!cancelled) {
+          setObjectives([]);
+          setLoading(false);
+        }
+        return;
+      }
+      try {
+        const result = await listObjectives(apiWorkspaceId);
+        if (!cancelled) setObjectives(result.items);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load strategic objectives.', status: 0 }));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [apiWorkspaceId]);
+
+  if (loading) {
+    return (
+      <div className="hud-page">
+        <SectionTitle eyebrow="Phase 1 · Strategy" title="Strategic Objectives" subtitle="Executive intent and strategic value. Forecast only; actuals roll up from implementation." />
+        <HudPanel><p>Loading strategic objectives…</p></HudPanel>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="hud-page">
+        <SectionTitle eyebrow="Phase 1 · Strategy" title="Strategic Objectives" subtitle="Executive intent and strategic value. Forecast only; actuals roll up from implementation." />
+        <HudPanel><p>Could not load strategic objectives: {error.message}</p></HudPanel>
+      </div>
+    );
+  }
+
+  if (objectives.length === 0) {
+    return (
+      <div className="hud-page">
+        <SectionTitle eyebrow="Phase 1 · Strategy" title="Strategic Objectives" subtitle="Executive intent and strategic value. Forecast only; actuals roll up from implementation." />
+        <HudPanel><p>No strategic objectives yet. Create your first objective to begin defining executive intent for this workspace.</p></HudPanel>
+      </div>
+    );
+  }
+
   return (
     <div className="hud-page">
       <SectionTitle eyebrow="Phase 1 · Strategy" title="Strategic Objectives" subtitle="Executive intent and strategic value. Forecast only; actuals roll up from implementation." />
-      <RuleNote>Cardinality: objectives {tenant.objectives.length} / {cardinalityLimits.strategicObjectivesPerWorkspace}. Active requires name, executive objective, value category, problem/opportunity statement, and value hypothesis.</RuleNote>
+      <RuleNote>Cardinality: objectives {objectives.length} / {cardinalityLimits.strategicObjectivesPerWorkspace}. Active requires name, executive objective, value category, problem/opportunity statement, and value hypothesis.</RuleNote>
       <div className="hud-primary-list-mobile">
-        {tenant.objectives.map((objective) => {
+        {objectives.map((objective) => {
           const pending = ai.pending.objectives[objective.id];
           const saved = ai.saved.objectives[objective.id];
           const displayObjective = { ...objective, ...saved, ...pending };
@@ -1333,7 +1392,7 @@ function ObjectivesPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
         })}
       </div>
       <div className="hud-primary-list-desktop">
-      {tenant.objectives.map((objective) => {
+      {objectives.map((objective) => {
         const pending = ai.pending.objectives[objective.id];
         const saved = ai.saved.objectives[objective.id];
         const displayObjective = { ...objective, ...saved, ...pending };
@@ -1392,6 +1451,7 @@ function ObjectivesPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
               { label: 'Expected value type', value: displayObjective.expectedValueType },
               { label: 'Realization timeframe', value: displayObjective.valueRealizationTimeframe },
             ]} />
+            <p>Metrics, links and financials not yet connected to the API.</p>
             <DataTable headers={['Metric', 'Category', 'Baseline', 'Target', 'Unit', 'Timeframe']} rows={objectiveMetrics.map((metric) => [metric.name, metric.metricCategory, metric.baselineValue, metric.targetValue, metric.unit, metric.timeframe])} />
             <ReferenceOrCreate label="Selected value streams" items={linkedValueStreams.map((stream) => ({ id: stream.id, name: stream.name, origin: stream.origin }))} />
             <ReferenceOrCreate label="Selected capabilities" items={linkedCapabilities.map((capability) => ({ id: capability.id, name: capability.capabilityName, origin: capability.origin }))} />
@@ -2077,11 +2137,11 @@ function EmptyPage({ title, message }: { title: string; message: string }) {
 
 // Note: Central route switch for implemented authenticated pages. It maps each hash route to its page component
 // so navigation behavior stays easy to audit in one place.
-function ImplementedPage({ route, tenant, ai }: { route: RouteId; tenant: TenantData; ai: AiActions }) {
+function ImplementedPage({ route, tenant, ai, apiWorkspaceId }: { route: RouteId; tenant: TenantData; ai: AiActions; apiWorkspaceId: string | null }) {
   if (route === 'dashboard') return <DashboardPage tenant={tenant} />;
   if (route === 'company') return <CompanyPage tenant={tenant} />;
   if (route === 'departments') return <DepartmentsPage tenant={tenant} />;
-  if (route === 'objectives') return <ObjectivesPage tenant={tenant} ai={ai} />;
+  if (route === 'objectives') return <ObjectivesPage tenant={tenant} ai={ai} apiWorkspaceId={apiWorkspaceId} />;
   if (route === 'architecture') return <ArchitecturePage tenant={tenant} />;
   if (route === 'value-streams') return <ValueStreamsPage tenant={tenant} />;
   if (route === 'key-activities') return <KeyActivitiesPage tenant={tenant} />;
@@ -2196,8 +2256,8 @@ export default function WireframeApp() {
     if (route === 'landing') return <LandingPage />;
     if (route === 'signup') return <AuthPage mode="signup" onAuthenticated={handleAuthenticated} />;
     if (route === 'login') return <AuthPage mode="login" onAuthenticated={handleAuthenticated} />;
-    return implementedRoutes.has(route) ? <ImplementedPage route={route} tenant={tenant} ai={aiActions} /> : <StageLaterPage route={route} />;
-  }, [route, tenant, aiActions]);
+    return implementedRoutes.has(route) ? <ImplementedPage route={route} tenant={tenant} ai={aiActions} apiWorkspaceId={apiWorkspaceId} /> : <StageLaterPage route={route} />;
+  }, [route, tenant, aiActions, apiWorkspaceId]);
 
   const signOut = async () => {
     const refreshToken = getRefreshToken();
