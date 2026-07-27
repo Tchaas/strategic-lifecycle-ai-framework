@@ -66,11 +66,11 @@ export const getMissingObjectiveActiveFields = (objective: Pick<
   'strategicInitiativeName' | 'executiveObjective' | 'strategicValueCategory' | 'problemOpportunityStatement' | 'valueHypothesis'
 >): string[] => {
   const missing: string[] = [];
-  if (!objective.strategicInitiativeName.trim()) missing.push('Strategic Initiative Name');
-  if (!objective.executiveObjective.trim()) missing.push('Executive Objective');
+  if (!objective.strategicInitiativeName?.trim()) missing.push('Strategic Initiative Name');
+  if (!objective.executiveObjective?.trim()) missing.push('Executive Objective');
   if (!objective.strategicValueCategory) missing.push('Strategic Value Category');
-  if (!objective.problemOpportunityStatement.trim()) missing.push('Problem Opportunity Statement');
-  if (!objective.valueHypothesis.trim()) missing.push('Value Hypothesis');
+  if (!objective.problemOpportunityStatement?.trim()) missing.push('Problem Opportunity Statement');
+  if (!objective.valueHypothesis?.trim()) missing.push('Value Hypothesis');
   return missing;
 };
 
@@ -79,10 +79,10 @@ export const getMissingLeanBusinessCaseActiveFields = (businessCase: Pick<
   'title' | 'summary' | 'problemOpportunityStatement' | 'valueHypothesis' | 'priority'
 >): string[] => {
   const missing: string[] = [];
-  if (!businessCase.title.trim()) missing.push('Title');
-  if (!businessCase.summary.trim()) missing.push('Summary');
-  if (!businessCase.problemOpportunityStatement.trim()) missing.push('Problem Opportunity Statement');
-  if (!businessCase.valueHypothesis.trim()) missing.push('Value Hypothesis');
+  if (!businessCase.title?.trim()) missing.push('Title');
+  if (!businessCase.summary?.trim()) missing.push('Summary');
+  if (!businessCase.problemOpportunityStatement?.trim()) missing.push('Problem Opportunity Statement');
+  if (!businessCase.valueHypothesis?.trim()) missing.push('Value Hypothesis');
   if (!businessCase.priority) missing.push('Priority');
   return missing;
 };

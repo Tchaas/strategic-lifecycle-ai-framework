@@ -544,7 +544,8 @@
     text-transform: uppercase;
   }
 
-  .hud-field input {
+  .hud-field input,
+  .hud-field select {
     background: rgba(2, 6, 17, 0.8);
     border: 1px solid rgba(34, 211, 238, 0.38);
     color: var(--hud-text);
@@ -561,7 +562,8 @@
     resize: vertical;
   }
 
-  .hud-field input:focus {
+  .hud-field input:focus,
+  .hud-field select:focus {
     border-color: var(--hud-green);
     outline: none;
   }

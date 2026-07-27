@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownToLine,
   Bot,
@@ -14,6 +14,7 @@ import {
   LogIn,
   LogOut,
   Menu,
+  Plus,
   Shield,
   Sparkles,
   UserPlus,
@@ -39,7 +40,7 @@ import type {
   ValueStream,
 } from '../types/model';
 import { api, getList, setTokens, clearTokens, getRefreshToken, ApiError } from '../api/client';
-import { listObjectives } from '../api/objectives';
+import { listObjectives, createObjective, updateObjective } from '../api/objectives';
 
 type RouteId =
   | 'landing'
@@ -479,6 +480,47 @@ const formatValue = (value: ReactNode) => {
   return value;
 };
 
+// Turn an enum value like `revenue_growth` into a readable label `Revenue growth`.
+const prettifyEnum = (value: string) => {
+  const spaced = value.replaceAll('_', ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+};
+
+const toOptions = (values: readonly string[]) => values.map((value) => ({ value, label: prettifyEnum(value) }));
+
+const strategicValueCategoryOptions = toOptions([
+  'revenue_growth', 'cost_reduction', 'operational_efficiency', 'customer_experience',
+  'risk_reduction', 'scalability', 'competitive_advantage',
+]);
+const problemTypeOptions = toOptions(['customer', 'internal', 'both']);
+const expectedValueTypeOptions = toOptions(['financial', 'operational', 'mixed']);
+
+// Target dates come in as ISO strings or '' / null. Show "Not entered" when both are blank,
+// matching every other empty field — instead of the literal "null to null".
+const formatTargetDates = (start: string | null | undefined, end: string | null | undefined) => {
+  const s = start || '';
+  const e = end || '';
+  if (!s && !e) return 'Not entered';
+  if (s && e) return `${s} to ${e}`;
+  return s || e;
+};
+
+// Turn an ApiError into a readable, on-screen message. The backend enforces rules the mock
+// never did; each must render as text, not a console error or silent failure.
+const renderApiMessage = (error: ApiError): string => {
+  const details = (error.details ?? {}) as { limit?: number; current?: number; fields?: unknown };
+  if (error.status === 409 && error.code === 'cardinality_limit') {
+    const limit = details.limit ?? 3;
+    return `You've reached the limit of ${limit} active objectives. Archive one to create another.`;
+  }
+  if (error.status === 422) {
+    const fields = Array.isArray(details.fields) ? (details.fields as string[]) : [];
+    const suffix = fields.length ? ` (${fields.map(prettifyEnum).join(', ')})` : '';
+    return `${error.message}${suffix}`;
+  }
+  return error.message;
+};
+
 const tenantFocus = (workspaceName: string) => {
   if (workspaceName.includes('Walmart')) return 'store fulfillment reliability';
   if (workspaceName.includes('Amazon')) return 'returns flow optimization';
@@ -653,6 +695,18 @@ function TextInput({ label, value, onChange, type = 'text', readOnly = false }: 
     <label className="hud-field">
       <span>{label}</span>
       <input value={value} type={type} readOnly={readOnly} onChange={(event) => onChange?.(event.target.value)} />
+    </label>
+  );
+}
+
+function SelectInput({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <label className="hud-field">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Select…</option>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
     </label>
   );
 }
@@ -1311,30 +1365,109 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
+  // "New objective" form.
+  const emptyCreateForm = {
+    strategicInitiativeName: '',
+    executiveObjective: '',
+    strategicValueCategory: '',
+    problemOpportunityStatement: '',
+    valueHypothesis: '',
+    problemType: '',
+    expectedValueType: '',
+  };
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  // Inline edit (desktop) — one objective at a time. cardError is scoped to a single card id.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ strategicInitiativeName: '', executiveObjective: '', problemOpportunityStatement: '', valueHypothesis: '' });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<{ id: string; error: ApiError } | null>(null);
+
+  const loadObjectives = useCallback(async () => {
+    if (!apiWorkspaceId) {
+      // No workspace resolved (shouldn't happen behind auth) — treat as empty, not a spinner.
+      setObjectives([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
-    (async () => {
-      if (!apiWorkspaceId) {
-        // No workspace resolved (shouldn't happen behind auth) — treat as empty, not a spinner.
-        if (!cancelled) {
-          setObjectives([]);
-          setLoading(false);
-        }
-        return;
-      }
-      try {
-        const result = await listObjectives(apiWorkspaceId);
-        if (!cancelled) setObjectives(result.items);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load strategic objectives.', status: 0 }));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+    try {
+      const result = await listObjectives(apiWorkspaceId);
+      setObjectives(result.items);
+    } catch (err) {
+      setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load strategic objectives.', status: 0 }));
+    } finally {
+      setLoading(false);
+    }
   }, [apiWorkspaceId]);
+
+  useEffect(() => { loadObjectives(); }, [loadObjectives]);
+
+  const setCreateField = (field: keyof typeof emptyCreateForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId) return;
+    setCreateError(null);
+    setCreating(true);
+    try {
+      // Send only the fields the user actually filled in.
+      const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<StrategicObjective>;
+      await createObjective(apiWorkspaceId, body);
+      setCreateForm(emptyCreateForm);
+      setShowCreate(false);
+      await loadObjectives();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create objective.', status: 0 }));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startEdit = (objective: StrategicObjective) => {
+    setCardError(null);
+    setEditingId(objective.id);
+    setEditDraft({
+      strategicInitiativeName: objective.strategicInitiativeName ?? '',
+      executiveObjective: objective.executiveObjective ?? '',
+      problemOpportunityStatement: objective.problemOpportunityStatement ?? '',
+      valueHypothesis: objective.valueHypothesis ?? '',
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await updateObjective(apiWorkspaceId, id, editDraft);
+      setEditingId(null);
+      await loadObjectives();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save objective.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const archiveObjective = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await updateObjective(apiWorkspaceId, id, { status: 'archived' });
+      await loadObjectives();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to archive objective.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -1354,19 +1487,36 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
     );
   }
 
-  if (objectives.length === 0) {
-    return (
-      <div className="hud-page">
-        <SectionTitle eyebrow="Phase 1 · Strategy" title="Strategic Objectives" subtitle="Executive intent and strategic value. Forecast only; actuals roll up from implementation." />
-        <HudPanel><p>No strategic objectives yet. Create your first objective to begin defining executive intent for this workspace.</p></HudPanel>
-      </div>
-    );
-  }
-
   return (
     <div className="hud-page">
       <SectionTitle eyebrow="Phase 1 · Strategy" title="Strategic Objectives" subtitle="Executive intent and strategic value. Forecast only; actuals roll up from implementation." />
-      <RuleNote>Cardinality: objectives {objectives.length} / {cardinalityLimits.strategicObjectivesPerWorkspace}. Active requires name, executive objective, value category, problem/opportunity statement, and value hypothesis.</RuleNote>
+      <RuleNote>Cardinality: objectives {objectives.filter((objective) => objective.status !== 'archived').length} / {cardinalityLimits.strategicObjectivesPerWorkspace}. Active requires name, executive objective, value category, problem/opportunity statement, and value hypothesis.</RuleNote>
+
+      <div className="hud-actions">
+        <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+          <Plus size={16} /> {showCreate ? 'Close' : 'New objective'}
+        </HudButton>
+      </div>
+      {showCreate && (
+        <HudPanel>
+          <form onSubmit={submitCreate} className="hud-form">
+            <TextInput label="Strategic initiative name (required)" value={createForm.strategicInitiativeName} onChange={(value) => setCreateField('strategicInitiativeName', value)} />
+            <TextInput label="Executive objective" value={createForm.executiveObjective} onChange={(value) => setCreateField('executiveObjective', value)} />
+            <SelectInput label="Strategic value category" value={createForm.strategicValueCategory} onChange={(value) => setCreateField('strategicValueCategory', value)} options={strategicValueCategoryOptions} />
+            <TextInput label="Problem / opportunity statement" value={createForm.problemOpportunityStatement} onChange={(value) => setCreateField('problemOpportunityStatement', value)} />
+            <TextInput label="Value hypothesis" value={createForm.valueHypothesis} onChange={(value) => setCreateField('valueHypothesis', value)} />
+            <SelectInput label="Problem type" value={createForm.problemType} onChange={(value) => setCreateField('problemType', value)} options={problemTypeOptions} />
+            <SelectInput label="Expected value type" value={createForm.expectedValueType} onChange={(value) => setCreateField('expectedValueType', value)} options={expectedValueTypeOptions} />
+            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError)}</p>}
+            <HudButton type="submit" disabled={creating || !createForm.strategicInitiativeName.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create objective'}</HudButton>
+          </form>
+        </HudPanel>
+      )}
+
+      {objectives.length === 0 && (
+        <HudPanel><p>No strategic objectives yet. Create your first objective to begin defining executive intent for this workspace.</p></HudPanel>
+      )}
+
       <div className="hud-primary-list-mobile">
         {objectives.map((objective) => {
           const pending = ai.pending.objectives[objective.id];
@@ -1382,7 +1532,7 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
               badge={<StatusBadge status={displayObjective.status} />}
               rows={[
                 { label: 'Category', value: displayObjective.strategicValueCategory },
-                { label: 'Target dates', value: `${displayObjective.targetImplementationStartDate} to ${displayObjective.targetImplementationEndDate}` },
+                { label: 'Target dates', value: formatTargetDates(displayObjective.targetImplementationStartDate, displayObjective.targetImplementationEndDate) },
                 { label: 'Forecast cost', value: formatCurrency(rollup.forecastCost) },
                 { label: 'Computed actual value', value: formatCurrency(rollup.actualValue) },
               ]}
@@ -1414,9 +1564,26 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
               <div><h2>{displayObjective.strategicInitiativeName}</h2><p>{displayObjective.executiveObjective}</p></div>
               <div className="hud-badge-stack">
                 <HudButton variant="ghost" onClick={() => ai.draftObjective(tenant.workspace.name, objective)}><Sparkles size={16} /> Draft with AI</HudButton>
+                {editingId !== objective.id && <HudButton variant="ghost" onClick={() => startEdit(objective)}>Edit</HudButton>}
+                {objective.status !== 'archived' && <HudButton variant="ghost" disabled={savingId === objective.id} onClick={() => archiveObjective(objective.id)}>Archive</HudButton>}
                 <StatusBadge status={displayObjective.status} />
               </div>
             </div>
+            {editingId === objective.id && (
+              <div className="hud-ai-edit-panel">
+                <div className="hud-ai-edit-grid">
+                  <TextInput label="Strategic initiative name" value={editDraft.strategicInitiativeName} onChange={(value) => setEditDraft((prev) => ({ ...prev, strategicInitiativeName: value }))} />
+                  <TextInput label="Executive objective" value={editDraft.executiveObjective} onChange={(value) => setEditDraft((prev) => ({ ...prev, executiveObjective: value }))} />
+                  <TextInput label="Problem / opportunity" value={editDraft.problemOpportunityStatement} onChange={(value) => setEditDraft((prev) => ({ ...prev, problemOpportunityStatement: value }))} />
+                  <TextInput label="Value hypothesis" value={editDraft.valueHypothesis} onChange={(value) => setEditDraft((prev) => ({ ...prev, valueHypothesis: value }))} />
+                </div>
+                <div className="hud-actions">
+                  <HudButton disabled={savingId === objective.id} onClick={() => saveEdit(objective.id)}>{savingId === objective.id ? 'Saving…' : 'Save'}</HudButton>
+                  <HudButton variant="ghost" onClick={() => { setEditingId(null); setCardError(null); }}>Cancel</HudButton>
+                </div>
+              </div>
+            )}
+            {cardError?.id === objective.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error)}</p>}
             {pending && (
               <div className="hud-ai-edit-panel">
                 <AiBanner />
@@ -1440,7 +1607,7 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
               { label: 'Financial impact', value: displayObjective.financialImpact },
               { label: 'Urgency rationale', value: displayObjective.urgencyRationale },
               { label: 'Target year', value: displayObjective.targetImplementationYear },
-              { label: 'Target dates', value: `${displayObjective.targetImplementationStartDate} to ${displayObjective.targetImplementationEndDate}` },
+              { label: 'Target dates', value: formatTargetDates(displayObjective.targetImplementationStartDate, displayObjective.targetImplementationEndDate) },
               { label: 'Problem / opportunity', value: displayObjective.problemOpportunityStatement },
               { label: 'Cost of inaction', value: displayObjective.costOfInaction },
               { label: 'Current limitation', value: displayObjective.currentLimitation },
