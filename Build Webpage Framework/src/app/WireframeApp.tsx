@@ -44,6 +44,7 @@ import { api, getList, setTokens, clearTokens, getRefreshToken, ApiError } from 
 import { listObjectives, createObjective, updateObjective } from '../api/objectives';
 import { getArchitecture, createArchitecture, updateArchitecture } from '../api/architecture';
 import { listValueStreams, createValueStream, updateValueStream, deleteValueStream } from '../api/valueStreams';
+import { listCapabilities, createCapability, updateCapability, deleteCapability } from '../api/capabilities';
 
 type RouteId =
   | 'landing'
@@ -2108,27 +2109,233 @@ function KeyActivitiesPage({ tenant }: { tenant: TenantData }) {
 }
 
 // Note: Capabilities page for stable business building blocks and maturity gaps. Capabilities are reusable
-// across streams, activities, objectives, cases, and solution features.
-function CapabilitiesPage({ tenant }: { tenant: TenantData }) {
+// across streams, activities, objectives, cases, and solution features. Wired to the real API like value
+// streams; linked departments still read the mock via `tenant`.
+function CapabilitiesPage({ tenant, apiWorkspaceId, architectureId, architectureLoading }: {
+  tenant: TenantData;
+  apiWorkspaceId: string | null;
+  architectureId: string | null;
+  architectureLoading: boolean;
+}) {
+  const [items, setItems] = useState<BusinessCapability[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  // "New capability" form.
+  const emptyCreateForm = {
+    capabilityName: '',
+    capabilityDescription: '',
+    currentMaturity: '',
+    targetMaturity: '',
+    capabilityGap: '',
+  };
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  // Inline edit (desktop) — one capability at a time. cardError is scoped to a single card id.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ capabilityName: '', capabilityDescription: '', currentMaturity: '', targetMaturity: '', capabilityGap: '' });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<{ id: string; error: ApiError } | null>(null);
+
+  const loadCapabilities = useCallback(async () => {
+    if (!apiWorkspaceId || !architectureId) {
+      // No architecture resolved yet — the render guards below handle messaging; don't spin or call the API.
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await listCapabilities(apiWorkspaceId, architectureId);
+      setItems(result.items);
+    } catch (err) {
+      setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load capabilities.', status: 0 }));
+    } finally {
+      setLoading(false);
+    }
+  }, [apiWorkspaceId, architectureId]);
+
+  useEffect(() => { loadCapabilities(); }, [loadCapabilities]);
+
+  const setCreateField = (field: keyof typeof emptyCreateForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId || !architectureId) return;
+    setCreateError(null);
+    setCreating(true);
+    try {
+      // Send only the fields the user actually filled in.
+      const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<BusinessCapability>;
+      await createCapability(apiWorkspaceId, architectureId, body);
+      setCreateForm(emptyCreateForm);
+      setShowCreate(false);
+      await loadCapabilities();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create capability.', status: 0 }));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startEdit = (capability: BusinessCapability) => {
+    setCardError(null);
+    setEditingId(capability.id);
+    setEditDraft({
+      capabilityName: capability.capabilityName ?? '',
+      capabilityDescription: capability.capabilityDescription ?? '',
+      currentMaturity: capability.currentMaturity ?? '',
+      targetMaturity: capability.targetMaturity ?? '',
+      capabilityGap: capability.capabilityGap ?? '',
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await updateCapability(apiWorkspaceId, id, editDraft);
+      setEditingId(null);
+      await loadCapabilities();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save capability.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const removeCapability = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await deleteCapability(apiWorkspaceId, id);
+      await loadCapabilities();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to delete capability.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const header = (
+    <SectionTitle eyebrow="Phase 1 · Strategy" title="Business Capabilities" subtitle="What the business does. Stable building blocks with current and target maturity." />
+  );
+
+  // State 0 — architecture still loading. Guard first so nothing flashes before the fetch resolves.
+  if (architectureLoading) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Loading…</p></HudPanel>
+      </div>
+    );
+  }
+
+  // State 1 — no architecture yet. Capabilities nest under it, so there is nothing to list or create.
+  if (!architectureId) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Create a Business Architecture for this workspace first — capabilities belong to it.</p></HudPanel>
+        <RuleNote>Head to the Business Architecture page to create the workspace architecture, then return here.</RuleNote>
+      </div>
+    );
+  }
+
+  // State 2 — capabilities loading.
+  if (loading) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Loading capabilities…</p></HudPanel>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Could not load capabilities: {error.message}</p></HudPanel>
+      </div>
+    );
+  }
+
+  // State 3 — loaded. Real records return null for unfilled fields, so every access below is null-guarded.
   return (
-    <ListPage
-      eyebrow="Phase 1 · Strategy"
-      title="Business Capabilities"
-      subtitle="What the business does. Stable building blocks with current and target maturity."
-      rule="Capabilities are company-level and reusable by value streams, key activities, objectives, cases, and features."
-      rows={tenant.capabilities.map((capability) => ({
-        id: capability.id,
-        title: capability.capabilityName,
-        meta: capability.capabilityDescription,
-        badges: [<OriginBadge origin={capability.origin} key="origin" />, <StatusBadge status={capability.status} key="status" />],
-        fields: [
-          { label: 'Current maturity', value: capability.currentMaturity },
-          { label: 'Target maturity', value: capability.targetMaturity },
-          { label: 'Gap', value: capability.capabilityGap },
-          { label: 'Owning department', value: tenant.departments.find((department) => department.id === capability.owningDepartmentId)?.name },
-        ],
-      }))}
-    />
+    <div className="hud-page">
+      {header}
+      <RuleNote>Capabilities are company-level and reusable by value streams, key activities, objectives, cases, and features.</RuleNote>
+
+      <div className="hud-actions">
+        <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+          <Plus size={16} /> {showCreate ? 'Close' : 'New capability'}
+        </HudButton>
+      </div>
+      {showCreate && (
+        <HudPanel>
+          <form onSubmit={submitCreate} className="hud-form">
+            <TextInput label="Name (required)" value={createForm.capabilityName} onChange={(value) => setCreateField('capabilityName', value)} />
+            <TextInput label="Description" value={createForm.capabilityDescription} onChange={(value) => setCreateField('capabilityDescription', value)} />
+            <TextInput label="Current maturity" value={createForm.currentMaturity} onChange={(value) => setCreateField('currentMaturity', value)} />
+            <TextInput label="Target maturity" value={createForm.targetMaturity} onChange={(value) => setCreateField('targetMaturity', value)} />
+            <TextInput label="Gap" value={createForm.capabilityGap} onChange={(value) => setCreateField('capabilityGap', value)} />
+            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'capabilities')}</p>}
+            <HudButton type="submit" disabled={creating || !createForm.capabilityName.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create capability'}</HudButton>
+          </form>
+        </HudPanel>
+      )}
+
+      {items.length === 0 && (
+        <HudPanel><p>No capabilities yet. Create your first capability to map what this architecture does.</p></HudPanel>
+      )}
+
+      <div className="hud-primary-list-desktop">
+        {items.map((capability) => (
+          <HudPanel key={capability.id}>
+            <div className="hud-record-head">
+              <div><h2>{capability.capabilityName ?? '(unnamed capability)'}</h2><p>{capability.capabilityDescription ?? ''}</p></div>
+              <div className="hud-badge-stack">
+                {editingId !== capability.id && <HudButton variant="ghost" onClick={() => startEdit(capability)}>Edit</HudButton>}
+                <HudButton variant="ghost" disabled={savingId === capability.id} onClick={() => removeCapability(capability.id)}>Delete</HudButton>
+                <OriginBadge origin={capability.origin ?? 'architecture'} />
+                <StatusBadge status={capability.status ?? 'draft'} />
+              </div>
+            </div>
+            {editingId === capability.id && (
+              <div className="hud-ai-edit-panel">
+                <div className="hud-ai-edit-grid">
+                  <TextInput label="Name" value={editDraft.capabilityName} onChange={(value) => setEditDraft((prev) => ({ ...prev, capabilityName: value }))} />
+                  <TextInput label="Description" value={editDraft.capabilityDescription} onChange={(value) => setEditDraft((prev) => ({ ...prev, capabilityDescription: value }))} />
+                  <TextInput label="Current maturity" value={editDraft.currentMaturity} onChange={(value) => setEditDraft((prev) => ({ ...prev, currentMaturity: value }))} />
+                  <TextInput label="Target maturity" value={editDraft.targetMaturity} onChange={(value) => setEditDraft((prev) => ({ ...prev, targetMaturity: value }))} />
+                  <TextInput label="Gap" value={editDraft.capabilityGap} onChange={(value) => setEditDraft((prev) => ({ ...prev, capabilityGap: value }))} />
+                </div>
+                <div className="hud-actions">
+                  <HudButton disabled={savingId === capability.id} onClick={() => saveEdit(capability.id)}>{savingId === capability.id ? 'Saving…' : 'Save'}</HudButton>
+                  <HudButton variant="ghost" onClick={() => { setEditingId(null); setCardError(null); }}>Cancel</HudButton>
+                </div>
+              </div>
+            )}
+            {cardError?.id === capability.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error, 'capabilities')}</p>}
+            <FieldGrid rows={[
+              { label: 'Current maturity', value: capability.currentMaturity },
+              { label: 'Target maturity', value: capability.targetMaturity },
+              { label: 'Gap', value: capability.capabilityGap },
+              { label: 'Owning department', value: tenant.departments.find((department) => department.id === capability.owningDepartmentId)?.name },
+            ]} />
+            <RuleNote>Linked departments are not yet connected to the API.</RuleNote>
+          </HudPanel>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -2678,7 +2885,7 @@ function ImplementedPage({
   if (route === 'architecture') return <ArchitecturePage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architecture={architecture} architectureId={architectureId} refetchArchitecture={refetchArchitecture} architectureLoading={architectureLoading} />;
   if (route === 'value-streams') return <ValueStreamsPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
   if (route === 'key-activities') return <KeyActivitiesPage tenant={tenant} />;
-  if (route === 'capabilities') return <CapabilitiesPage tenant={tenant} />;
+  if (route === 'capabilities') return <CapabilitiesPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
   if (route === 'processes') return <ProcessesPage tenant={tenant} />;
   if (route === 'personas') return <PersonasPage tenant={tenant} />;
   if (route === 'information') return <InformationPage tenant={tenant} />;
