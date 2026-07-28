@@ -33,6 +33,7 @@ import type {
   Discovery,
   Feature,
   InformationConcept,
+  KeyActivity,
   LeanBusinessCase,
   Requirement,
   StakeholderPersona,
@@ -45,6 +46,7 @@ import { listObjectives, createObjective, updateObjective } from '../api/objecti
 import { getArchitecture, createArchitecture, updateArchitecture } from '../api/architecture';
 import { listValueStreams, createValueStream, updateValueStream, deleteValueStream } from '../api/valueStreams';
 import { listCapabilities, createCapability, updateCapability, deleteCapability } from '../api/capabilities';
+import { listKeyActivities, createKeyActivity, updateKeyActivity, deleteKeyActivity } from '../api/keyActivities';
 
 type RouteId =
   | 'landing'
@@ -2083,28 +2085,294 @@ function ValueStreamsPage({ tenant, apiWorkspaceId, architectureId, architecture
 
 // Note: Key activities page for ordered stages inside value streams. It shows sequence, current/future changes,
 // business impact text, and capability traceability.
-function KeyActivitiesPage({ tenant }: { tenant: TenantData }) {
+// Note: Key activities are the ordered stages of a value stream. Unlike capabilities and value
+// streams (which nest under the architecture singleton), activities nest under a value stream, so
+// this page first loads the workspace's value streams and renders a picker; selecting a stream
+// loads that stream's activities. The 6-limit is enforced per value stream, not globally.
+function KeyActivitiesPage({ apiWorkspaceId, architectureId, architectureLoading }: {
+  apiWorkspaceId: string | null;
+  architectureId: string | null;
+  architectureLoading: boolean;
+}) {
+  // Value stream picker — activities belong to a stream, so we need a selected stream before we can list them.
+  const [valueStreams, setValueStreams] = useState<ValueStream[]>([]);
+  const [vsLoading, setVsLoading] = useState(true);
+  const [vsError, setVsError] = useState<ApiError | null>(null);
+  const [selectedVsId, setSelectedVsId] = useState<string>('');
+
+  const [items, setItems] = useState<KeyActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  // "New key activity" form. All fields are held as strings; sequenceOrder is coerced to a number on submit.
+  const emptyCreateForm = {
+    activityName: '',
+    activityDescription: '',
+    sequenceOrder: '',
+    currentStateIssue: '',
+    futureStateChange: '',
+    businessImpact: '',
+  };
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  // Inline edit (desktop) — one activity at a time. cardError is scoped to a single card id.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ activityName: '', activityDescription: '', sequenceOrder: '', currentStateIssue: '', futureStateChange: '', businessImpact: '' });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<{ id: string; error: ApiError } | null>(null);
+
+  // Load the workspace's value streams, then auto-select the first so the loaded state shows picker + list.
+  const loadValueStreams = useCallback(async () => {
+    if (!apiWorkspaceId || !architectureId) {
+      // No architecture resolved yet — render guards below handle messaging; don't spin or call the API.
+      setValueStreams([]);
+      setSelectedVsId('');
+      setVsLoading(false);
+      return;
+    }
+    setVsLoading(true);
+    setVsError(null);
+    try {
+      const result = await listValueStreams(apiWorkspaceId, architectureId);
+      setValueStreams(result.items);
+      setSelectedVsId(result.items[0]?.id ?? '');
+    } catch (err) {
+      setValueStreams([]);
+      setSelectedVsId('');
+      setVsError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load value streams.', status: 0 }));
+    } finally {
+      setVsLoading(false);
+    }
+  }, [apiWorkspaceId, architectureId]);
+
+  useEffect(() => { loadValueStreams(); }, [loadValueStreams]);
+
+  const loadKeyActivities = useCallback(async () => {
+    if (!apiWorkspaceId || !selectedVsId) {
+      // No stream selected (or none exist) — nothing to list; the render guards handle messaging.
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await listKeyActivities(apiWorkspaceId, selectedVsId);
+      setItems(result.items);
+    } catch (err) {
+      setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load key activities.', status: 0 }));
+    } finally {
+      setLoading(false);
+    }
+  }, [apiWorkspaceId, selectedVsId]);
+
+  useEffect(() => { loadKeyActivities(); }, [loadKeyActivities]);
+
+  const setCreateField = (field: keyof typeof emptyCreateForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId || !selectedVsId) return;
+    setCreateError(null);
+    setCreating(true);
+    try {
+      // Send only the fields the user actually filled in; sequenceOrder is numeric, so coerce it separately.
+      const { sequenceOrder, ...strings } = createForm;
+      const body = Object.fromEntries(Object.entries(strings).filter(([, value]) => value !== '')) as Partial<KeyActivity>;
+      if (sequenceOrder.trim() !== '' && !Number.isNaN(Number(sequenceOrder))) {
+        body.sequenceOrder = Number(sequenceOrder);
+      }
+      await createKeyActivity(apiWorkspaceId, selectedVsId, body);
+      setCreateForm(emptyCreateForm);
+      setShowCreate(false);
+      await loadKeyActivities();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create key activity.', status: 0 }));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startEdit = (activity: KeyActivity) => {
+    setCardError(null);
+    setEditingId(activity.id);
+    setEditDraft({
+      activityName: activity.activityName ?? '',
+      activityDescription: activity.activityDescription ?? '',
+      sequenceOrder: activity.sequenceOrder != null ? String(activity.sequenceOrder) : '',
+      currentStateIssue: activity.currentStateIssue ?? '',
+      futureStateChange: activity.futureStateChange ?? '',
+      businessImpact: activity.businessImpact ?? '',
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      const { sequenceOrder, ...strings } = editDraft;
+      const patch: Partial<KeyActivity> = {
+        ...strings,
+        // Empty clears the sequence (null); otherwise send the number, guarding NaN → null.
+        sequenceOrder: sequenceOrder.trim() === '' || Number.isNaN(Number(sequenceOrder)) ? null : Number(sequenceOrder),
+      };
+      await updateKeyActivity(apiWorkspaceId, id, patch);
+      setEditingId(null);
+      await loadKeyActivities();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save key activity.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const removeKeyActivity = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await deleteKeyActivity(apiWorkspaceId, id);
+      await loadKeyActivities();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to delete key activity.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const header = (
+    <SectionTitle eyebrow="Phase 1 · Strategy" title="Key Activities" subtitle="The ordered stages of a value stream where value is created, delayed, or transferred." />
+  );
+
+  // State 0 — architecture or value streams still loading. Guard first so nothing flashes before the fetch resolves.
+  if (architectureLoading || vsLoading) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Loading…</p></HudPanel>
+      </div>
+    );
+  }
+
+  // State 1 — no architecture yet. Value streams (and their activities) nest under it.
+  if (!architectureId) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Create a Business Architecture for this workspace first — key activities belong to one.</p></HudPanel>
+        <RuleNote>Head to the Business Architecture page to create the workspace architecture, then return here.</RuleNote>
+      </div>
+    );
+  }
+
+  if (vsError) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Could not load value streams: {vsError.message}</p></HudPanel>
+      </div>
+    );
+  }
+
+  // State 2 — architecture exists but no value streams. Activities have nowhere to live, so no picker/form/API call.
+  if (valueStreams.length === 0) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Create a value stream first — key activities belong to one.</p></HudPanel>
+        <RuleNote>Head to the Value Streams page to create one, then return here.</RuleNote>
+      </div>
+    );
+  }
+
+  // Loaded shell — picker + create form stay mounted so switching streams doesn't unmount the dropdown.
+  // The list region below swaps on the activity-fetch state (error / loading / empty / records).
   return (
-    <ListPage
-      eyebrow="Phase 1 · Strategy"
-      title="Key Activities"
-      subtitle="The ordered stages of a value stream where value is created, delayed, or transferred."
-      rule={`Max ${cardinalityLimits.keyActivitiesPerValueStream} per value stream. Sequence is ordering only.`}
-      rows={tenant.keyActivities.map((activity) => ({
-        id: activity.id,
-        title: activity.activityName,
-        meta: tenant.valueStreams.find((stream) => stream.id === activity.valueStreamId)?.name || 'Unknown value stream',
-        badges: [<OriginBadge origin={activity.origin} key="origin" />, <StatusBadge status={activity.status} key="status" />],
-        fields: [
-          { label: 'Description', value: activity.activityDescription },
-          { label: 'Sequence', value: activity.sequenceOrder },
-          { label: 'Current issue', value: activity.currentStateIssue },
-          { label: 'Future change', value: activity.futureStateChange },
-          { label: 'Business impact', value: activity.businessImpact },
-        ],
-        references: <ReferenceOrCreate label="Capabilities linked to this activity" items={state.keyActivityCapabilities.filter((link) => link.keyActivityId === activity.id).map((link) => tenant.capabilities.find((capability) => capability.id === link.capabilityId)).filter(Boolean).map((capability) => ({ id: capability!.id, name: capability!.capabilityName, origin: capability!.origin }))} />,
-      }))}
-    />
+    <div className="hud-page">
+      {header}
+      <RuleNote>Cardinality: key activities {items.length} / {cardinalityLimits.keyActivitiesPerValueStream} in this value stream. Sequence is ordering only.</RuleNote>
+
+      <HudPanel>
+        <SelectInput
+          label="Value stream"
+          value={selectedVsId}
+          onChange={setSelectedVsId}
+          options={valueStreams.map((stream) => ({ value: stream.id, label: stream.name ?? '(unnamed value stream)' }))}
+        />
+      </HudPanel>
+
+      <div className="hud-actions">
+        <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+          <Plus size={16} /> {showCreate ? 'Close' : 'New key activity'}
+        </HudButton>
+      </div>
+      {showCreate && (
+        <HudPanel>
+          <form onSubmit={submitCreate} className="hud-form">
+            <TextInput label="Name (required)" value={createForm.activityName} onChange={(value) => setCreateField('activityName', value)} />
+            <TextInput label="Description" value={createForm.activityDescription} onChange={(value) => setCreateField('activityDescription', value)} />
+            <TextInput label="Sequence order" type="number" value={createForm.sequenceOrder} onChange={(value) => setCreateField('sequenceOrder', value)} />
+            <TextInput label="Current state issue" value={createForm.currentStateIssue} onChange={(value) => setCreateField('currentStateIssue', value)} />
+            <TextInput label="Future state change" value={createForm.futureStateChange} onChange={(value) => setCreateField('futureStateChange', value)} />
+            <TextInput label="Business impact" value={createForm.businessImpact} onChange={(value) => setCreateField('businessImpact', value)} />
+            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'key activities in this value stream', 'Delete one to create another.')}</p>}
+            <HudButton type="submit" disabled={creating || !createForm.activityName.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create key activity'}</HudButton>
+          </form>
+        </HudPanel>
+      )}
+
+      {error ? (
+        <HudPanel><p>Could not load key activities: {error.message}</p></HudPanel>
+      ) : loading ? (
+        <HudPanel><p>Loading key activities…</p></HudPanel>
+      ) : items.length === 0 ? (
+        <HudPanel><p>No key activities in this value stream yet. Create your first to map its stages.</p></HudPanel>
+      ) : (
+        <div className="hud-primary-list-desktop">
+          {items.map((activity) => (
+            <HudPanel key={activity.id}>
+              <div className="hud-record-head">
+                <div><h2>{activity.activityName ?? '(unnamed activity)'}</h2><p>{activity.activityDescription ?? ''}</p></div>
+                <div className="hud-badge-stack">
+                  {editingId !== activity.id && <HudButton variant="ghost" onClick={() => startEdit(activity)}>Edit</HudButton>}
+                  <HudButton variant="ghost" disabled={savingId === activity.id} onClick={() => removeKeyActivity(activity.id)}>Delete</HudButton>
+                  <OriginBadge origin={activity.origin ?? 'architecture'} />
+                  <StatusBadge status={activity.status ?? 'draft'} />
+                </div>
+              </div>
+              {editingId === activity.id && (
+                <div className="hud-ai-edit-panel">
+                  <div className="hud-ai-edit-grid">
+                    <TextInput label="Name" value={editDraft.activityName} onChange={(value) => setEditDraft((prev) => ({ ...prev, activityName: value }))} />
+                    <TextInput label="Description" value={editDraft.activityDescription} onChange={(value) => setEditDraft((prev) => ({ ...prev, activityDescription: value }))} />
+                    <TextInput label="Sequence order" type="number" value={editDraft.sequenceOrder} onChange={(value) => setEditDraft((prev) => ({ ...prev, sequenceOrder: value }))} />
+                    <TextInput label="Current state issue" value={editDraft.currentStateIssue} onChange={(value) => setEditDraft((prev) => ({ ...prev, currentStateIssue: value }))} />
+                    <TextInput label="Future state change" value={editDraft.futureStateChange} onChange={(value) => setEditDraft((prev) => ({ ...prev, futureStateChange: value }))} />
+                    <TextInput label="Business impact" value={editDraft.businessImpact} onChange={(value) => setEditDraft((prev) => ({ ...prev, businessImpact: value }))} />
+                  </div>
+                  <div className="hud-actions">
+                    <HudButton disabled={savingId === activity.id} onClick={() => saveEdit(activity.id)}>{savingId === activity.id ? 'Saving…' : 'Save'}</HudButton>
+                    <HudButton variant="ghost" onClick={() => { setEditingId(null); setCardError(null); }}>Cancel</HudButton>
+                  </div>
+                </div>
+              )}
+              {cardError?.id === activity.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error, 'key activities in this value stream', 'Delete one to create another.')}</p>}
+              <FieldGrid rows={[
+                { label: 'Sequence', value: activity.sequenceOrder ?? '—' },
+                { label: 'Current issue', value: activity.currentStateIssue },
+                { label: 'Future change', value: activity.futureStateChange },
+                { label: 'Business impact', value: activity.businessImpact },
+              ]} />
+            </HudPanel>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2884,7 +3152,7 @@ function ImplementedPage({
   if (route === 'objectives') return <ObjectivesPage tenant={tenant} ai={ai} apiWorkspaceId={apiWorkspaceId} />;
   if (route === 'architecture') return <ArchitecturePage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architecture={architecture} architectureId={architectureId} refetchArchitecture={refetchArchitecture} architectureLoading={architectureLoading} />;
   if (route === 'value-streams') return <ValueStreamsPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
-  if (route === 'key-activities') return <KeyActivitiesPage tenant={tenant} />;
+  if (route === 'key-activities') return <KeyActivitiesPage apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
   if (route === 'capabilities') return <CapabilitiesPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
   if (route === 'processes') return <ProcessesPage tenant={tenant} />;
   if (route === 'personas') return <PersonasPage tenant={tenant} />;

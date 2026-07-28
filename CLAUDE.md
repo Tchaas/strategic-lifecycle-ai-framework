@@ -38,6 +38,10 @@ Wire remaining pages onto `apiWorkspaceId`, then delete the mock plumbing.
 `migrations/env.py` reads DATABASE_URL from the OS environment, NOT from `.env`.
 Always `export DATABASE_URL=...` in the shell before running alembic.
 
+## Verify commands
+The frontend has NO TypeScript installed and no tsconfig. `npx tsc --noEmit` will error — it
+is not a valid check. Use `npm run build` (vite/esbuild) to verify.
+
 ## Working style
 - I am new to Claude Code. Explain what you're about to do in one or two sentences first.
 - Use plan mode for anything touching more than 3 files.
