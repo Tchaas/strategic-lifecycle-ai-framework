@@ -43,6 +43,7 @@ import type {
 import { api, getList, setTokens, clearTokens, getRefreshToken, ApiError } from '../api/client';
 import { listObjectives, createObjective, updateObjective } from '../api/objectives';
 import { getArchitecture, createArchitecture, updateArchitecture } from '../api/architecture';
+import { listValueStreams, createValueStream, updateValueStream, deleteValueStream } from '../api/valueStreams';
 
 type RouteId =
   | 'landing'
@@ -511,6 +512,7 @@ const strategicValueCategoryOptions = toOptions([
 ]);
 const problemTypeOptions = toOptions(['customer', 'internal', 'both']);
 const expectedValueTypeOptions = toOptions(['financial', 'operational', 'mixed']);
+const valueStreamTypeOptions = toOptions(['current_state', 'future_state', 'modified_existing']);
 
 // Target dates come in as ISO strings or '' / null. Show "Not entered" when both are blank,
 // matching every other empty field — instead of the literal "null to null".
@@ -524,11 +526,12 @@ const formatTargetDates = (start: string | null | undefined, end: string | null 
 
 // Turn an ApiError into a readable, on-screen message. The backend enforces rules the mock
 // never did; each must render as text, not a console error or silent failure.
-const renderApiMessage = (error: ApiError): string => {
+const renderApiMessage = (error: ApiError, entityLabel = 'records', remedy = ''): string => {
   const details = (error.details ?? {}) as { limit?: number; current?: number; fields?: unknown };
   if (error.status === 409 && error.code === 'cardinality_limit') {
     const limit = details.limit ?? 3;
-    return `You've reached the limit of ${limit} active objectives. Archive one to create another.`;
+    const suffix = remedy ? ` ${remedy}` : '';
+    return `You've reached the limit of ${limit} ${entityLabel}.${suffix}`;
   }
   if (error.status === 422) {
     const fields = Array.isArray(details.fields) ? (details.fields as string[]) : [];
@@ -1526,7 +1529,7 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
             <TextInput label="Value hypothesis" value={createForm.valueHypothesis} onChange={(value) => setCreateField('valueHypothesis', value)} />
             <SelectInput label="Problem type" value={createForm.problemType} onChange={(value) => setCreateField('problemType', value)} options={problemTypeOptions} />
             <SelectInput label="Expected value type" value={createForm.expectedValueType} onChange={(value) => setCreateField('expectedValueType', value)} options={expectedValueTypeOptions} />
-            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError)}</p>}
+            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'active objectives', 'Archive one to create another.')}</p>}
             <HudButton type="submit" disabled={creating || !createForm.strategicInitiativeName.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create objective'}</HudButton>
           </form>
         </HudPanel>
@@ -1602,7 +1605,7 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
                 </div>
               </div>
             )}
-            {cardError?.id === objective.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error)}</p>}
+            {cardError?.id === objective.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error, 'active objectives', 'Archive one to create another.')}</p>}
             {pending && (
               <div className="hud-ai-edit-panel">
                 <AiBanner />
@@ -1845,30 +1848,235 @@ function ListPage({ eyebrow, title, subtitle, rule, rows }: { eyebrow: string; t
   );
 }
 
-// Note: Value streams page showing how business value flows through the workspace architecture. Each stream
-// can reference linked capabilities and linked departments.
-function ValueStreamsPage({ tenant }: { tenant: TenantData }) {
+// Note: Value streams page. The value-streams list is sourced from the real API; value streams nest
+// under the Business Architecture singleton, so the page needs a "no architecture yet" state that
+// objectives don't. Everything else (linked departments/capabilities) still reads the mock via `tenant`.
+function ValueStreamsPage({ tenant, apiWorkspaceId, architectureId, architectureLoading }: {
+  tenant: TenantData;
+  apiWorkspaceId: string | null;
+  architectureId: string | null;
+  architectureLoading: boolean;
+}) {
+  const [items, setItems] = useState<ValueStream[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  // "New value stream" form.
+  const emptyCreateForm = {
+    name: '',
+    description: '',
+    valueStreamType: '',
+    strategicAlignment: '',
+    triggeringStakeholder: '',
+    valueRecipient: '',
+  };
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  // Inline edit (desktop) — one stream at a time. cardError is scoped to a single card id.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ name: '', description: '', strategicAlignment: '', valueRecipient: '' });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<{ id: string; error: ApiError } | null>(null);
+
+  const loadValueStreams = useCallback(async () => {
+    if (!apiWorkspaceId || !architectureId) {
+      // No architecture resolved yet — the render guards below handle messaging; don't spin or call the API.
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await listValueStreams(apiWorkspaceId, architectureId);
+      setItems(result.items);
+    } catch (err) {
+      setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load value streams.', status: 0 }));
+    } finally {
+      setLoading(false);
+    }
+  }, [apiWorkspaceId, architectureId]);
+
+  useEffect(() => { loadValueStreams(); }, [loadValueStreams]);
+
+  const setCreateField = (field: keyof typeof emptyCreateForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId || !architectureId) return;
+    setCreateError(null);
+    setCreating(true);
+    try {
+      // Send only the fields the user actually filled in.
+      const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<ValueStream>;
+      await createValueStream(apiWorkspaceId, architectureId, body);
+      setCreateForm(emptyCreateForm);
+      setShowCreate(false);
+      await loadValueStreams();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create value stream.', status: 0 }));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startEdit = (stream: ValueStream) => {
+    setCardError(null);
+    setEditingId(stream.id);
+    setEditDraft({
+      name: stream.name ?? '',
+      description: stream.description ?? '',
+      strategicAlignment: stream.strategicAlignment ?? '',
+      valueRecipient: stream.valueRecipient ?? '',
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await updateValueStream(apiWorkspaceId, id, editDraft);
+      setEditingId(null);
+      await loadValueStreams();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save value stream.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const removeValueStream = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await deleteValueStream(apiWorkspaceId, id);
+      await loadValueStreams();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to delete value stream.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const header = (
+    <SectionTitle eyebrow="Phase 1 · Strategy" title="Value Streams" subtitle="How value flows through the business. Lives under the company architecture." />
+  );
+
+  // State 0 — architecture still loading. Guard first so nothing flashes before the fetch resolves.
+  if (architectureLoading) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Loading…</p></HudPanel>
+      </div>
+    );
+  }
+
+  // State 1 — no architecture yet. Value streams nest under it, so there is nothing to list or create.
+  if (!architectureId) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Create a Business Architecture for this workspace first — value streams belong to it.</p></HudPanel>
+        <RuleNote>Head to the Business Architecture page to create the workspace architecture, then return here.</RuleNote>
+      </div>
+    );
+  }
+
+  // State 2 — value streams loading.
+  if (loading) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Loading value streams…</p></HudPanel>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Could not load value streams: {error.message}</p></HudPanel>
+      </div>
+    );
+  }
+
+  // State 3 — loaded. Real records return null for unfilled fields, so every access below is null-guarded.
   return (
-    <ListPage
-      eyebrow="Phase 1 · Strategy"
-      title="Value Streams"
-      subtitle="How value flows through the business. Lives under the company architecture."
-      rule={`Max ${cardinalityLimits.valueStreamsPerBusinessArchitecture} per architecture. Capabilities link here; origin never restricts reuse.`}
-      rows={tenant.valueStreams.map((stream) => ({
-        id: stream.id,
-        title: stream.name,
-        meta: stream.description,
-        badges: [<OriginBadge origin={stream.origin} key="origin" />, <StatusBadge status={stream.status} key="status" />],
-        fields: [
-          { label: 'Type', value: stream.valueStreamType },
-          { label: 'Strategic alignment', value: stream.strategicAlignment },
-          { label: 'Triggering stakeholder', value: stream.triggeringStakeholder },
-          { label: 'Value recipient', value: stream.valueRecipient },
-          { label: 'Linked department', value: tenant.departments.find((department) => department.id === stream.linkedDepartmentId)?.name },
-        ],
-        references: <ReferenceOrCreate label="Capabilities linked to this value stream" items={state.valueStreamCapabilities.filter((link) => link.valueStreamId === stream.id).map((link) => tenant.capabilities.find((capability) => capability.id === link.capabilityId)).filter(Boolean).map((capability) => ({ id: capability!.id, name: capability!.capabilityName, origin: capability!.origin }))} />,
-      }))}
-    />
+    <div className="hud-page">
+      {header}
+      <RuleNote>Cardinality: value streams {items.length} / {cardinalityLimits.valueStreamsPerBusinessArchitecture}. Capabilities link here; origin never restricts reuse.</RuleNote>
+
+      <div className="hud-actions">
+        <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+          <Plus size={16} /> {showCreate ? 'Close' : 'New value stream'}
+        </HudButton>
+      </div>
+      {showCreate && (
+        <HudPanel>
+          <form onSubmit={submitCreate} className="hud-form">
+            <TextInput label="Name (required)" value={createForm.name} onChange={(value) => setCreateField('name', value)} />
+            <TextInput label="Description" value={createForm.description} onChange={(value) => setCreateField('description', value)} />
+            <SelectInput label="Value stream type" value={createForm.valueStreamType} onChange={(value) => setCreateField('valueStreamType', value)} options={valueStreamTypeOptions} />
+            <TextInput label="Strategic alignment" value={createForm.strategicAlignment} onChange={(value) => setCreateField('strategicAlignment', value)} />
+            <TextInput label="Triggering stakeholder" value={createForm.triggeringStakeholder} onChange={(value) => setCreateField('triggeringStakeholder', value)} />
+            <TextInput label="Value recipient" value={createForm.valueRecipient} onChange={(value) => setCreateField('valueRecipient', value)} />
+            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'value streams', 'Delete one to create another.')}</p>}
+            <HudButton type="submit" disabled={creating || !createForm.name.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create value stream'}</HudButton>
+          </form>
+        </HudPanel>
+      )}
+
+      {items.length === 0 && (
+        <HudPanel><p>No value streams yet. Create your first value stream to map how value flows through this architecture.</p></HudPanel>
+      )}
+
+      <div className="hud-primary-list-desktop">
+        {items.map((stream) => (
+          <HudPanel key={stream.id}>
+            <div className="hud-record-head">
+              <div><h2>{stream.name ?? '(unnamed value stream)'}</h2><p>{stream.description ?? ''}</p></div>
+              <div className="hud-badge-stack">
+                {editingId !== stream.id && <HudButton variant="ghost" onClick={() => startEdit(stream)}>Edit</HudButton>}
+                <HudButton variant="ghost" disabled={savingId === stream.id} onClick={() => removeValueStream(stream.id)}>Delete</HudButton>
+                <OriginBadge origin={stream.origin ?? 'architecture'} />
+                <StatusBadge status={stream.status ?? 'draft'} />
+              </div>
+            </div>
+            {editingId === stream.id && (
+              <div className="hud-ai-edit-panel">
+                <div className="hud-ai-edit-grid">
+                  <TextInput label="Name" value={editDraft.name} onChange={(value) => setEditDraft((prev) => ({ ...prev, name: value }))} />
+                  <TextInput label="Description" value={editDraft.description} onChange={(value) => setEditDraft((prev) => ({ ...prev, description: value }))} />
+                  <TextInput label="Strategic alignment" value={editDraft.strategicAlignment} onChange={(value) => setEditDraft((prev) => ({ ...prev, strategicAlignment: value }))} />
+                  <TextInput label="Value recipient" value={editDraft.valueRecipient} onChange={(value) => setEditDraft((prev) => ({ ...prev, valueRecipient: value }))} />
+                </div>
+                <div className="hud-actions">
+                  <HudButton disabled={savingId === stream.id} onClick={() => saveEdit(stream.id)}>{savingId === stream.id ? 'Saving…' : 'Save'}</HudButton>
+                  <HudButton variant="ghost" onClick={() => { setEditingId(null); setCardError(null); }}>Cancel</HudButton>
+                </div>
+              </div>
+            )}
+            {cardError?.id === stream.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error, 'value streams', 'Delete one to create another.')}</p>}
+            <FieldGrid rows={[
+              { label: 'Type', value: stream.valueStreamType },
+              { label: 'Strategic alignment', value: stream.strategicAlignment },
+              { label: 'Triggering stakeholder', value: stream.triggeringStakeholder },
+              { label: 'Value recipient', value: stream.valueRecipient },
+              { label: 'Linked department', value: tenant.departments.find((department) => department.id === stream.linkedDepartmentId)?.name },
+            ]} />
+            <RuleNote>Linked capabilities and departments are not yet connected to the API.</RuleNote>
+          </HudPanel>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -2468,7 +2676,7 @@ function ImplementedPage({
   if (route === 'departments') return <DepartmentsPage tenant={tenant} />;
   if (route === 'objectives') return <ObjectivesPage tenant={tenant} ai={ai} apiWorkspaceId={apiWorkspaceId} />;
   if (route === 'architecture') return <ArchitecturePage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architecture={architecture} architectureId={architectureId} refetchArchitecture={refetchArchitecture} architectureLoading={architectureLoading} />;
-  if (route === 'value-streams') return <ValueStreamsPage tenant={tenant} />;
+  if (route === 'value-streams') return <ValueStreamsPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
   if (route === 'key-activities') return <KeyActivitiesPage tenant={tenant} />;
   if (route === 'capabilities') return <CapabilitiesPage tenant={tenant} />;
   if (route === 'processes') return <ProcessesPage tenant={tenant} />;
