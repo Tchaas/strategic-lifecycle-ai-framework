@@ -42,7 +42,7 @@ import type {
 } from '../types/model';
 import { api, getList, setTokens, clearTokens, getRefreshToken, ApiError } from '../api/client';
 import { listObjectives, createObjective, updateObjective } from '../api/objectives';
-import { getArchitecture } from '../api/architecture';
+import { getArchitecture, createArchitecture, updateArchitecture } from '../api/architecture';
 
 type RouteId =
   | 'landing'
@@ -1658,27 +1658,146 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
 }
 
 // Note: Business architecture singleton page for the workspace-level architecture record. It anchors reusable
-// value streams, activities, capabilities, and supporting architecture content.
-function ArchitecturePage({ tenant }: { tenant: TenantData }) {
-  const architecture = tenant.architecture;
-  if (!architecture) {
-    return <EmptyPage title="Business Architecture" message="No company-level business architecture exists for this workspace." />;
+// value streams, activities, capabilities, and supporting architecture content. Wired to the real API
+// (singleton, not a list): the record is fetched at app level and passed in; this page creates/edits it.
+const emptyArchitectureForm = { name: '', description: '', currentStateSummary: '', futureStateSummary: '' };
+
+function ArchitecturePage({ tenant, apiWorkspaceId, architecture, architectureId, refetchArchitecture, architectureLoading }: {
+  tenant: TenantData;
+  apiWorkspaceId: string | null;
+  architecture: BusinessArchitecture | null;
+  architectureId: string | null;
+  refetchArchitecture: () => Promise<void>;
+  architectureLoading: boolean;
+}) {
+  // Create-form state (shown only when no record exists yet).
+  const [createForm, setCreateForm] = useState(emptyArchitectureForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  // Inline-edit state (singleton, so no id needed to scope it).
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState(emptyArchitectureForm);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<ApiError | null>(null);
+
+  const setCreateField = (field: keyof typeof emptyArchitectureForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+  const setEditField = (field: keyof typeof emptyArchitectureForm, value: string) =>
+    setEditDraft((prev) => ({ ...prev, [field]: value }));
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId) return;
+    setCreateError(null);
+    setCreating(true);
+    try {
+      // Send only the fields the user actually filled in.
+      const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<BusinessArchitecture>;
+      await createArchitecture(apiWorkspaceId, body);
+      setCreateForm(emptyArchitectureForm);
+      await refetchArchitecture();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create business architecture.', status: 0 }));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startEdit = (record: BusinessArchitecture) => {
+    setEditError(null);
+    setEditDraft({
+      name: record.name ?? '',
+      description: record.description ?? '',
+      currentStateSummary: record.currentStateSummary ?? '',
+      futureStateSummary: record.futureStateSummary ?? '',
+    });
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    if (!apiWorkspaceId || !architectureId) return;
+    setEditError(null);
+    setSaving(true);
+    try {
+      await updateArchitecture(apiWorkspaceId, architectureId, editDraft);
+      setEditing(false);
+      await refetchArchitecture();
+    } catch (err) {
+      setEditError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save business architecture.', status: 0 }));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // State 0 — loading. Guard first so the create form never flashes before the fetch resolves.
+  if (architectureLoading) {
+    return (
+      <div className="hud-page">
+        <SectionTitle eyebrow="Phase 1 · Strategy" title="Business Architecture" subtitle="The company's architecture: one record, reused across every objective and case." />
+        <HudPanel><p>Loading business architecture…</p></HudPanel>
+      </div>
+    );
   }
+
+  // State 1 — loaded, no record yet. Offer a create form.
+  if (!architecture) {
+    return (
+      <div className="hud-page">
+        <SectionTitle eyebrow="Phase 1 · Strategy" title="Business Architecture" subtitle="The company's architecture: one record, reused across every objective and case." />
+        <RuleNote>One Business Architecture per workspace. Once it exists, the action is Open, not Create.</RuleNote>
+        <HudPanel><p>No business architecture yet for this workspace.</p></HudPanel>
+        <HudPanel>
+          <form onSubmit={submitCreate} className="hud-form">
+            <TextInput label="Name (required)" value={createForm.name} onChange={(value) => setCreateField('name', value)} />
+            <TextInput label="Description" value={createForm.description} onChange={(value) => setCreateField('description', value)} />
+            <TextInput label="Current state summary" value={createForm.currentStateSummary} onChange={(value) => setCreateField('currentStateSummary', value)} />
+            <TextInput label="Future state summary" value={createForm.futureStateSummary} onChange={(value) => setCreateField('futureStateSummary', value)} />
+            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError)}</p>}
+            <HudButton type="submit" disabled={creating || !createForm.name.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create business architecture'}</HudButton>
+          </form>
+        </HudPanel>
+      </div>
+    );
+  }
+
+  // State 2 — loaded record. View + inline edit of its text fields. Fields may be null from the
+  // API even though the type marks them non-null, so every access below is null-guarded.
   return (
     <div className="hud-page">
       <SectionTitle eyebrow="Phase 1 · Strategy" title="Business Architecture" subtitle="The company's architecture: one record, reused across every objective and case." />
       <RuleNote>One Business Architecture per workspace. Once it exists, the action is Open, not Create.</RuleNote>
       <HudPanel>
         <div className="hud-record-head">
-          <div><h2>{architecture.name}</h2><p>{architecture.description}</p></div>
-          <div className="hud-badge-stack"><OriginBadge origin={architecture.origin} /><StatusBadge status={architecture.status} /></div>
+          <div><h2>{architecture.name ?? ''}</h2><p>{architecture.description ?? ''}</p></div>
+          <div className="hud-badge-stack">
+            <OriginBadge origin={architecture.origin ?? 'architecture'} />
+            <StatusBadge status={architecture.status ?? 'draft'} />
+            {!editing && <HudButton variant="ghost" onClick={() => startEdit(architecture)}>Edit</HudButton>}
+          </div>
         </div>
+        {editing && (
+          <div className="hud-ai-edit-panel">
+            <div className="hud-ai-edit-grid">
+              <TextInput label="Name" value={editDraft.name} onChange={(value) => setEditField('name', value)} />
+              <TextInput label="Description" value={editDraft.description} onChange={(value) => setEditField('description', value)} />
+              <TextInput label="Current state summary" value={editDraft.currentStateSummary} onChange={(value) => setEditField('currentStateSummary', value)} />
+              <TextInput label="Future state summary" value={editDraft.futureStateSummary} onChange={(value) => setEditField('futureStateSummary', value)} />
+            </div>
+            <div className="hud-actions">
+              <HudButton disabled={saving} onClick={saveEdit}>{saving ? 'Saving…' : 'Save'}</HudButton>
+              <HudButton variant="ghost" onClick={() => { setEditing(false); setEditError(null); }}>Cancel</HudButton>
+            </div>
+          </div>
+        )}
+        {editError && <p className="hud-form-error" role="alert">{renderApiMessage(editError)}</p>}
         <FieldGrid rows={[
-          { label: 'Current state summary', value: architecture.currentStateSummary },
-          { label: 'Future state summary', value: architecture.futureStateSummary },
+          { label: 'Current state summary', value: architecture.currentStateSummary ?? '' },
+          { label: 'Future state summary', value: architecture.futureStateSummary ?? '' },
           { label: 'Value streams', value: `${tenant.valueStreams.length} / ${cardinalityLimits.valueStreamsPerBusinessArchitecture}` },
           { label: 'Capabilities', value: tenant.capabilities.length },
         ]} />
+        <RuleNote>Value streams and capabilities counts are not yet connected to the API.</RuleNote>
       </HudPanel>
     </div>
   );
@@ -2328,22 +2447,27 @@ function ImplementedPage({
   tenant,
   ai,
   apiWorkspaceId,
+  architecture,
+  architectureId,
+  refetchArchitecture,
+  architectureLoading,
 }: {
   route: RouteId;
   tenant: TenantData;
   ai: AiActions;
   apiWorkspaceId: string | null;
   // Business architecture is fetched once at app level and passed down so the six pages
-  // that nest under it don't each re-fetch. Not consumed by any page yet — plumbing only.
+  // that nest under it don't each re-fetch. Consumed by ArchitecturePage; others still pending.
   architecture: BusinessArchitecture | null;
   architectureId: string | null;
   refetchArchitecture: () => Promise<void>;
+  architectureLoading: boolean;
 }) {
   if (route === 'dashboard') return <DashboardPage tenant={tenant} />;
   if (route === 'company') return <CompanyPage tenant={tenant} />;
   if (route === 'departments') return <DepartmentsPage tenant={tenant} />;
   if (route === 'objectives') return <ObjectivesPage tenant={tenant} ai={ai} apiWorkspaceId={apiWorkspaceId} />;
-  if (route === 'architecture') return <ArchitecturePage tenant={tenant} />;
+  if (route === 'architecture') return <ArchitecturePage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architecture={architecture} architectureId={architectureId} refetchArchitecture={refetchArchitecture} architectureLoading={architectureLoading} />;
   if (route === 'value-streams') return <ValueStreamsPage tenant={tenant} />;
   if (route === 'key-activities') return <KeyActivitiesPage tenant={tenant} />;
   if (route === 'capabilities') return <CapabilitiesPage tenant={tenant} />;
@@ -2367,6 +2491,7 @@ export default function WireframeApp() {
   const [apiWorkspaceId, setApiWorkspaceId] = useState<string | null>(null);
   const [apiWorkspaces, setApiWorkspaces] = useState<ApiWorkspace[]>([]);
   const [architecture, setArchitecture] = useState<BusinessArchitecture | null>(null);
+  const [architectureLoading, setArchitectureLoading] = useState(false);
   const architectureId = architecture?.id ?? null; // derived — the singleton's id, or null if not created yet
   // Tracks the workspace id the most recent architecture request was issued for, so a
   // response for a stale workspace (after a rapid switch) can be discarded on arrival.
@@ -2432,8 +2557,10 @@ export default function WireframeApp() {
     architectureRequestRef.current = requestedWs;
     if (!requestedWs) {
       setArchitecture(null);
+      setArchitectureLoading(false);
       return;
     }
+    setArchitectureLoading(true);
     try {
       const record = await getArchitecture(requestedWs);
       if (architectureRequestRef.current !== requestedWs) return; // superseded by a newer workspace
@@ -2446,6 +2573,10 @@ export default function WireframeApp() {
         console.error('Failed to load business architecture', err);
         setArchitecture(null);
       }
+    } finally {
+      // Only the still-current request clears the flag; a late stale response must not flip it
+      // off while a newer request for a different workspace is already in flight.
+      if (architectureRequestRef.current === requestedWs) setArchitectureLoading(false);
     }
   }, [apiWorkspaceId]);
 
@@ -2505,11 +2636,12 @@ export default function WireframeApp() {
         architecture={architecture}
         architectureId={architectureId}
         refetchArchitecture={refetchArchitecture}
+        architectureLoading={architectureLoading}
       />
     ) : (
       <StageLaterPage route={route} />
     );
-  }, [route, tenant, aiActions, apiWorkspaceId, architecture, architectureId, refetchArchitecture]);
+  }, [route, tenant, aiActions, apiWorkspaceId, architecture, architectureId, refetchArchitecture, architectureLoading]);
 
   const signOut = async () => {
     const refreshToken = getRefreshToken();
