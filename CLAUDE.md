@@ -17,6 +17,14 @@ need something from them, stop and ask me first.
 Frontend uses **npm** (`npm install`, `npm run dev`). Ignore the README's pnpm instructions —
 package-lock.json is current, pnpm-lock.yaml is stale.
 
+## Two workspace ids (mid-transition)
+The frontend has two workspace identities while pages are being wired to the API:
+- `apiWorkspaceId` — the REAL id from `GET /workspaces`. Drives the header switcher and all
+  wired pages (currently just Objectives). Persisted under `slaf.activeWorkspace`.
+- `activeWorkspaceId` / `getTenantData()` — the MOCK id. Drives every not-yet-wired page.
+  It is now frozen (no UI changes it), so mock pages always show FedEx until wired.
+Wire remaining pages onto `apiWorkspaceId`, then delete the mock plumbing.
+
 ## Non-negotiables
 - API JSON is camelCase; Postgres is snake_case. `app/schemas/base.py::ApiModel` maps them.
 - Every list endpoint returns `{items, total, limit, offset}` — never a bare array.

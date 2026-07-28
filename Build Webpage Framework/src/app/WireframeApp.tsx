@@ -116,7 +116,22 @@ type AiActions = {
 
 const state: StrategicLifecycleMockState = seededStrategicLifecycleState;
 const activeWorkspaceStorageKey = 'slaf.wireframe.activeWorkspaceId';
+const apiWorkspaceStorageKey = 'slaf.activeWorkspace';
 const emptyAiDraftState = (): AiDraftState => ({ objectives: {}, cases: {}, discoveries: {} });
+
+// A workspace from the real GET /workspaces list — only id + name are needed for the switcher.
+type ApiWorkspace = { id: string; name: string };
+
+// Restore the persisted workspace choice, validating it still exists in the fetched list;
+// fall back to the first workspace (or null if the list is empty).
+const resolveApiWorkspaceId = (items: ApiWorkspace[]): string | null => {
+  if (items.length === 0) return null;
+  try {
+    const saved = localStorage.getItem(apiWorkspaceStorageKey);
+    if (saved && items.some((w) => w.id === saved)) return saved;
+  } catch { /* ignore */ }
+  return items[0].id;
+};
 
 const routeByHash: Record<string, RouteId> = {
   '': 'landing',
@@ -853,14 +868,16 @@ function MobileRecordCard({
 function Shell({
   session,
   route,
-  activeWorkspaceId,
+  apiWorkspaceId,
+  workspaces,
   onWorkspaceChange,
   children,
   onSignOut,
 }: {
   session: AuthSession | null;
   route: RouteId;
-  activeWorkspaceId: string;
+  apiWorkspaceId: string | null;
+  workspaces: ApiWorkspace[];
   onWorkspaceChange: (workspaceId: string) => void;
   children: ReactNode;
   onSignOut: () => void;
@@ -900,11 +917,11 @@ function Shell({
         </nav>
 
         <div className="hud-right-cluster">
-          {session && (
+          {session && workspaces.length > 0 && (
             <label className="hud-switcher">
               <span>Workspace</span>
-              <select value={activeWorkspaceId} onChange={(event) => onWorkspaceChange(event.target.value)}>
-                {state.workspaces.map((workspace) => <option value={workspace.id} key={workspace.id}>{workspace.name}</option>)}
+              <select value={apiWorkspaceId ?? ''} onChange={(event) => onWorkspaceChange(event.target.value)}>
+                {workspaces.map((workspace) => <option value={workspace.id} key={workspace.id}>{workspace.name}</option>)}
               </select>
             </label>
           )}
@@ -1174,7 +1191,7 @@ function LandingPage() {
 // page only reports the resolved session + active workspace id back up via onAuthenticated.
 function AuthPage({ mode, onAuthenticated }: {
   mode: 'signup' | 'login';
-  onAuthenticated: (session: AuthSession, workspaceId: string | null) => void;
+  onAuthenticated: (session: AuthSession, workspaces: ApiWorkspace[]) => void;
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -1189,28 +1206,28 @@ function AuthPage({ mode, onAuthenticated }: {
     setSubmitting(true);
     try {
       let userEmail: string;
-      let workspaceId: string | null;
+      let workspaces: ApiWorkspace[];
       if (mode === 'signup') {
-        const res = await api.post<{ accessToken: string; refreshToken: string; user: { email: string }; workspace: { id: string } }>(
+        const res = await api.post<{ accessToken: string; refreshToken: string; user: { email: string }; workspace: { id: string; name: string } }>(
           '/auth/signup',
           { email, password, fullName, workspaceName: companyName },
         );
         setTokens(res.accessToken, res.refreshToken);
         userEmail = res.user.email;
-        workspaceId = res.workspace.id; // signup returns the workspace directly
+        workspaces = [{ id: res.workspace.id, name: res.workspace.name }]; // signup returns the one new workspace
       } else {
         const res = await api.post<{ accessToken: string; refreshToken: string; user: { email: string } }>(
           '/auth/login',
           { email, password },
         );
         setTokens(res.accessToken, res.refreshToken);
-        const ws = await getList<{ id: string }>('/workspaces'); // login response has no workspace
+        const ws = await getList<ApiWorkspace>('/workspaces'); // login response has no workspace
         userEmail = res.user.email;
-        workspaceId = ws.items[0]?.id ?? null;
+        workspaces = ws.items;
       }
       onAuthenticated(
         { email: userEmail, authProvider: 'password', signedInAt: new Date().toISOString() },
-        workspaceId,
+        workspaces,
       );
       navigateTo('dashboard');
     } catch (err) {
@@ -2331,6 +2348,7 @@ export default function WireframeApp() {
   const [route, setRoute] = useState<RouteId>(getRoute);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [apiWorkspaceId, setApiWorkspaceId] = useState<string | null>(null);
+  const [apiWorkspaces, setApiWorkspaces] = useState<ApiWorkspace[]>([]);
   const [authLoading, setAuthLoading] = useState(() => Boolean(getRefreshToken()));
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(loadWorkspaceId);
   const [pendingAi, setPendingAi] = useState<AiDraftState>(emptyAiDraftState);
@@ -2390,10 +2408,10 @@ export default function WireframeApp() {
     (async () => {
       try {
         const user = await api.get<{ email: string }>('/me'); // client auto-refreshes on 401
-        const ws = await getList<{ id: string }>('/workspaces');
+        const ws = await getList<ApiWorkspace>('/workspaces');
         if (cancelled) return;
         setSession({ email: user.email, authProvider: 'password', signedInAt: new Date().toISOString() });
-        setApiWorkspaceId(ws.items[0]?.id ?? null);
+        applyWorkspaces(ws.items);
       } catch {
         clearTokens(); // dead/invalid session
       } finally {
@@ -2409,14 +2427,20 @@ export default function WireframeApp() {
     if (session && (route === 'login' || route === 'signup')) navigateTo('dashboard');
   }, [route, session, authLoading]);
 
-  const handleWorkspaceChange = (workspaceId: string) => {
-    localStorage.setItem(activeWorkspaceStorageKey, workspaceId);
-    setActiveWorkspaceId(workspaceId);
+  // Store the full workspace list and pick the active one (restored + validated, else first).
+  const applyWorkspaces = (items: ApiWorkspace[]) => {
+    setApiWorkspaces(items);
+    setApiWorkspaceId(resolveApiWorkspaceId(items));
   };
 
-  const handleAuthenticated = (s: AuthSession, workspaceId: string | null) => {
-    setSession(s);
+  const handleApiWorkspaceChange = (workspaceId: string) => {
+    try { localStorage.setItem(apiWorkspaceStorageKey, workspaceId); } catch { /* ignore */ }
     setApiWorkspaceId(workspaceId);
+  };
+
+  const handleAuthenticated = (s: AuthSession, workspaces: ApiWorkspace[]) => {
+    setSession(s);
+    applyWorkspaces(workspaces);
   };
 
   const content = useMemo(() => {
@@ -2436,6 +2460,7 @@ export default function WireframeApp() {
     clearTokens();
     setSession(null);
     setApiWorkspaceId(null);
+    setApiWorkspaces([]);
     navigateTo('landing');
   };
 
@@ -2448,7 +2473,7 @@ export default function WireframeApp() {
   }
 
   return (
-    <Shell session={session} route={route} activeWorkspaceId={activeWorkspaceId} onWorkspaceChange={handleWorkspaceChange} onSignOut={signOut}>
+    <Shell session={session} route={route} apiWorkspaceId={apiWorkspaceId} workspaces={apiWorkspaces} onWorkspaceChange={handleApiWorkspaceChange} onSignOut={signOut}>
       {content}
     </Shell>
   );
