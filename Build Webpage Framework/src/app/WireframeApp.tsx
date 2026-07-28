@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownToLine,
   Bot,
@@ -25,6 +25,7 @@ import { calculateObjectiveFinancialRollup, cardinalityLimits, getMissingLeanBus
 import { TableScroller } from './components/TableScroller';
 import type {
   ArchitectureOrigin,
+  BusinessArchitecture,
   BusinessCapability,
   BusinessImpact,
   BusinessProcess,
@@ -41,6 +42,7 @@ import type {
 } from '../types/model';
 import { api, getList, setTokens, clearTokens, getRefreshToken, ApiError } from '../api/client';
 import { listObjectives, createObjective, updateObjective } from '../api/objectives';
+import { getArchitecture } from '../api/architecture';
 
 type RouteId =
   | 'landing'
@@ -2321,7 +2323,22 @@ function EmptyPage({ title, message }: { title: string; message: string }) {
 
 // Note: Central route switch for implemented authenticated pages. It maps each hash route to its page component
 // so navigation behavior stays easy to audit in one place.
-function ImplementedPage({ route, tenant, ai, apiWorkspaceId }: { route: RouteId; tenant: TenantData; ai: AiActions; apiWorkspaceId: string | null }) {
+function ImplementedPage({
+  route,
+  tenant,
+  ai,
+  apiWorkspaceId,
+}: {
+  route: RouteId;
+  tenant: TenantData;
+  ai: AiActions;
+  apiWorkspaceId: string | null;
+  // Business architecture is fetched once at app level and passed down so the six pages
+  // that nest under it don't each re-fetch. Not consumed by any page yet — plumbing only.
+  architecture: BusinessArchitecture | null;
+  architectureId: string | null;
+  refetchArchitecture: () => Promise<void>;
+}) {
   if (route === 'dashboard') return <DashboardPage tenant={tenant} />;
   if (route === 'company') return <CompanyPage tenant={tenant} />;
   if (route === 'departments') return <DepartmentsPage tenant={tenant} />;
@@ -2349,6 +2366,11 @@ export default function WireframeApp() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [apiWorkspaceId, setApiWorkspaceId] = useState<string | null>(null);
   const [apiWorkspaces, setApiWorkspaces] = useState<ApiWorkspace[]>([]);
+  const [architecture, setArchitecture] = useState<BusinessArchitecture | null>(null);
+  const architectureId = architecture?.id ?? null; // derived — the singleton's id, or null if not created yet
+  // Tracks the workspace id the most recent architecture request was issued for, so a
+  // response for a stale workspace (after a rapid switch) can be discarded on arrival.
+  const architectureRequestRef = useRef<string | null>(null);
   const [authLoading, setAuthLoading] = useState(() => Boolean(getRefreshToken()));
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(loadWorkspaceId);
   const [pendingAi, setPendingAi] = useState<AiDraftState>(emptyAiDraftState);
@@ -2402,6 +2424,33 @@ export default function WireframeApp() {
     return () => window.removeEventListener('hashchange', syncRoute);
   }, []);
 
+  // Fetch the workspace's singleton business architecture. Single implementation so the
+  // six pages that will consume it (and the effect below) all share one code path.
+  // A 404 means "not created yet" — set null and carry on; anything else is a real error.
+  const refetchArchitecture = useCallback(async () => {
+    const requestedWs = apiWorkspaceId;
+    architectureRequestRef.current = requestedWs;
+    if (!requestedWs) {
+      setArchitecture(null);
+      return;
+    }
+    try {
+      const record = await getArchitecture(requestedWs);
+      if (architectureRequestRef.current !== requestedWs) return; // superseded by a newer workspace
+      setArchitecture(record);
+    } catch (err) {
+      if (architectureRequestRef.current !== requestedWs) return; // superseded by a newer workspace
+      if (err instanceof ApiError && err.status === 404) {
+        setArchitecture(null); // not created yet — expected, not an error
+      } else {
+        console.error('Failed to load business architecture', err);
+        setArchitecture(null);
+      }
+    }
+  }, [apiWorkspaceId]);
+
+  useEffect(() => { refetchArchitecture(); }, [refetchArchitecture]);
+
   useEffect(() => {
     if (!getRefreshToken()) return; // authLoading is already false — nothing to restore
     let cancelled = false;
@@ -2447,8 +2496,20 @@ export default function WireframeApp() {
     if (route === 'landing') return <LandingPage />;
     if (route === 'signup') return <AuthPage mode="signup" onAuthenticated={handleAuthenticated} />;
     if (route === 'login') return <AuthPage mode="login" onAuthenticated={handleAuthenticated} />;
-    return implementedRoutes.has(route) ? <ImplementedPage route={route} tenant={tenant} ai={aiActions} apiWorkspaceId={apiWorkspaceId} /> : <StageLaterPage route={route} />;
-  }, [route, tenant, aiActions, apiWorkspaceId]);
+    return implementedRoutes.has(route) ? (
+      <ImplementedPage
+        route={route}
+        tenant={tenant}
+        ai={aiActions}
+        apiWorkspaceId={apiWorkspaceId}
+        architecture={architecture}
+        architectureId={architectureId}
+        refetchArchitecture={refetchArchitecture}
+      />
+    ) : (
+      <StageLaterPage route={route} />
+    );
+  }, [route, tenant, aiActions, apiWorkspaceId, architecture, architectureId, refetchArchitecture]);
 
   const signOut = async () => {
     const refreshToken = getRefreshToken();
@@ -2461,6 +2522,7 @@ export default function WireframeApp() {
     setSession(null);
     setApiWorkspaceId(null);
     setApiWorkspaces([]);
+    setArchitecture(null);
     navigateTo('landing');
   };
 
