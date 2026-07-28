@@ -47,6 +47,10 @@ import { getArchitecture, createArchitecture, updateArchitecture } from '../api/
 import { listValueStreams, createValueStream, updateValueStream, deleteValueStream } from '../api/valueStreams';
 import { listCapabilities, createCapability, updateCapability, deleteCapability } from '../api/capabilities';
 import { listKeyActivities, createKeyActivity, updateKeyActivity, deleteKeyActivity } from '../api/keyActivities';
+import { listProcesses, createProcess, updateProcess, deleteProcess } from '../api/processes';
+import { listStakeholders, createStakeholder, updateStakeholder, deleteStakeholder } from '../api/stakeholders';
+import { listInformationConcepts, createInformationConcept, updateInformationConcept, deleteInformationConcept } from '../api/informationConcepts';
+import { listBusinessImpacts, createBusinessImpact, updateBusinessImpact, deleteBusinessImpact } from '../api/businessImpacts';
 
 type RouteId =
   | 'landing'
@@ -516,6 +520,9 @@ const strategicValueCategoryOptions = toOptions([
 const problemTypeOptions = toOptions(['customer', 'internal', 'both']);
 const expectedValueTypeOptions = toOptions(['financial', 'operational', 'mixed']);
 const valueStreamTypeOptions = toOptions(['current_state', 'future_state', 'modified_existing']);
+const stakeholderTypeOptions = toOptions(['internal', 'external', 'executive', 'customer']);
+const impactTypeOptions = toOptions(['process', 'financial', 'customer', 'risk', 'operational']);
+const severityOptions = toOptions(['low', 'medium', 'high']);
 
 // Target dates come in as ISO strings or '' / null. Show "Not entered" when both are blank,
 // matching every other empty field — instead of the literal "null to null".
@@ -2607,81 +2614,851 @@ function CapabilitiesPage({ tenant, apiWorkspaceId, architectureId, architecture
   );
 }
 
-// Note: Business processes route for supporting process records. It delegates to the shared supporting
-// component page because processes, personas, and information concepts follow the same interaction pattern.
-function ProcessesPage({ tenant }: { tenant: TenantData }) {
-  return <SupportingComponentPage tenant={tenant} type="processes" title="Business Processes" subtitle="Current- and future-state process detail supporting the architecture." />;
-}
+// Note: Business Processes page. Wired to the real API — processes nest under the workspace's
+// Business Architecture singleton (list/create via ba_id; update/delete via the process's own id).
+function ProcessesPage({ tenant, apiWorkspaceId, architectureId, architectureLoading }: {
+  tenant: TenantData;
+  apiWorkspaceId: string | null;
+  architectureId: string | null;
+  architectureLoading: boolean;
+}) {
+  const [items, setItems] = useState<BusinessProcess[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
 
-// Note: Stakeholders/personas route for internal, external, executive, and customer participants. It uses the
-// shared supporting component layout while preserving persona-specific display fields.
-function PersonasPage({ tenant }: { tenant: TenantData }) {
-  return <SupportingComponentPage tenant={tenant} type="personas" title="Stakeholders & Personas" subtitle="The people the value streams serve or depend on." />;
-}
+  const emptyCreateForm = {
+    processName: '',
+    currentStateProcess: '',
+    futureStateProcess: '',
+    processGap: '',
+    impactedSystems: '',
+  };
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
 
-// Note: Information concepts route for source/target data, ownership, quality issues, and business usage.
-// It shares the supporting component renderer with processes and personas.
-function InformationPage({ tenant }: { tenant: TenantData }) {
-  return <SupportingComponentPage tenant={tenant} type="information" title="Information Concepts" subtitle="The key data objects the architecture produces and consumes." />;
-}
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ processName: '', currentStateProcess: '', futureStateProcess: '', processGap: '', impactedSystems: '' });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<{ id: string; error: ApiError } | null>(null);
 
-// Note: Shared page for supporting architecture resources. It normalizes common fields, linked value streams,
-// origin badges, and reference/create affordances across process, persona, and information records.
-function SupportingComponentPage({ tenant, type, title, subtitle }: { tenant: TenantData; type: 'processes' | 'personas' | 'information'; title: string; subtitle: string }) {
-  const records = type === 'processes' ? tenant.processes : type === 'personas' ? tenant.personas : tenant.informationConcepts;
+  const loadProcesses = useCallback(async () => {
+    if (!apiWorkspaceId || !architectureId) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await listProcesses(apiWorkspaceId, architectureId);
+      setItems(result.items);
+    } catch (err) {
+      setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load processes.', status: 0 }));
+    } finally {
+      setLoading(false);
+    }
+  }, [apiWorkspaceId, architectureId]);
+
+  useEffect(() => { loadProcesses(); }, [loadProcesses]);
+
+  const setCreateField = (field: keyof typeof emptyCreateForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId || !architectureId) return;
+    setCreateError(null);
+    setCreating(true);
+    try {
+      const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<BusinessProcess>;
+      await createProcess(apiWorkspaceId, architectureId, body);
+      setCreateForm(emptyCreateForm);
+      setShowCreate(false);
+      await loadProcesses();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create process.', status: 0 }));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startEdit = (process: BusinessProcess) => {
+    setCardError(null);
+    setEditingId(process.id);
+    setEditDraft({
+      processName: process.processName ?? '',
+      currentStateProcess: process.currentStateProcess ?? '',
+      futureStateProcess: process.futureStateProcess ?? '',
+      processGap: process.processGap ?? '',
+      impactedSystems: process.impactedSystems ?? '',
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await updateProcess(apiWorkspaceId, id, editDraft);
+      setEditingId(null);
+      await loadProcesses();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save process.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const removeProcess = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await deleteProcess(apiWorkspaceId, id);
+      await loadProcesses();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to delete process.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const header = (
+    <SectionTitle eyebrow="Phase 1 · Strategy" title="Business Processes" subtitle="Current- and future-state process detail supporting the architecture." />
+  );
+
+  if (architectureLoading) {
+    return <div className="hud-page">{header}<HudPanel><p>Loading…</p></HudPanel></div>;
+  }
+  if (!architectureId) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Create a Business Architecture for this workspace first — processes belong to it.</p></HudPanel>
+        <RuleNote>Head to the Business Architecture page to create the workspace architecture, then return here.</RuleNote>
+      </div>
+    );
+  }
+  if (loading) {
+    return <div className="hud-page">{header}<HudPanel><p>Loading processes…</p></HudPanel></div>;
+  }
+  if (error) {
+    return <div className="hud-page">{header}<HudPanel><p>Could not load processes: {error.message}</p></HudPanel></div>;
+  }
+
   return (
-    <ListPage
-      eyebrow="Phase 1 · Strategy"
-      title={title}
-      subtitle={subtitle}
-      rule="Supporting components use reference-or-create: reference links an existing workspace record and never copies it."
-      rows={records.map((record) => {
-        const common = record as BusinessProcess | StakeholderPersona | InformationConcept;
-        const name = 'processName' in record ? record.processName : 'conceptName' in record ? record.conceptName : record.name;
-        const linkedValueStream = tenant.valueStreams.find((stream) => stream.id === common.linkedValueStreamId);
-        return {
-          id: common.id,
-          title: name,
-          meta: linkedValueStream?.name || 'No linked value stream',
-          badges: [<OriginBadge origin={common.origin} key="origin" />, <StatusBadge status={common.status} key="status" />],
-          fields: Object.entries(record)
-            .filter(([key]) => !['id', 'workspaceId', 'businessArchitectureId', 'createdByUserId', 'createdAt', 'updatedAt', 'origin', 'status', 'linkedValueStreamId'].includes(key))
-            .map(([key, value]) => ({ label: key.replace(/([A-Z])/g, ' $1'), value: String(value || 'Not entered') })),
-          references: <ReferenceOrCreate label="Workspace supporting component picker" items={records.map((item) => {
-            const typed = item as BusinessProcess | StakeholderPersona | InformationConcept;
-            const itemName = 'processName' in item ? item.processName : 'conceptName' in item ? item.conceptName : item.name;
-            return { id: typed.id, name: itemName, origin: typed.origin };
-          })} />,
-        };
-      })}
-    />
+    <div className="hud-page">
+      {header}
+      <RuleNote>Supporting components use reference-or-create: reference links an existing workspace record and never copies it.</RuleNote>
+
+      <div className="hud-actions">
+        <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+          <Plus size={16} /> {showCreate ? 'Close' : 'New process'}
+        </HudButton>
+      </div>
+      {showCreate && (
+        <HudPanel>
+          <form onSubmit={submitCreate} className="hud-form">
+            <TextInput label="Process name (required)" value={createForm.processName} onChange={(value) => setCreateField('processName', value)} />
+            <TextInput label="Current state" value={createForm.currentStateProcess} onChange={(value) => setCreateField('currentStateProcess', value)} />
+            <TextInput label="Future state" value={createForm.futureStateProcess} onChange={(value) => setCreateField('futureStateProcess', value)} />
+            <TextInput label="Process gap" value={createForm.processGap} onChange={(value) => setCreateField('processGap', value)} />
+            <TextInput label="Impacted systems" value={createForm.impactedSystems} onChange={(value) => setCreateField('impactedSystems', value)} />
+            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'processes')}</p>}
+            <HudButton type="submit" disabled={creating || !createForm.processName.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create process'}</HudButton>
+          </form>
+        </HudPanel>
+      )}
+
+      {items.length === 0 && (
+        <HudPanel><p>No processes yet. Create your first process to document current- and future-state detail.</p></HudPanel>
+      )}
+
+      <div className="hud-primary-list-desktop">
+        {items.map((process) => (
+          <HudPanel key={process.id}>
+            <div className="hud-record-head">
+              <div><h2>{process.processName ?? '(unnamed process)'}</h2><p>{process.currentStateProcess ?? ''}</p></div>
+              <div className="hud-badge-stack">
+                {editingId !== process.id && <HudButton variant="ghost" onClick={() => startEdit(process)}>Edit</HudButton>}
+                <HudButton variant="ghost" disabled={savingId === process.id} onClick={() => removeProcess(process.id)}>Delete</HudButton>
+                <OriginBadge origin={process.origin ?? 'architecture'} />
+                <StatusBadge status={process.status ?? 'draft'} />
+              </div>
+            </div>
+            {editingId === process.id && (
+              <div className="hud-ai-edit-panel">
+                <div className="hud-ai-edit-grid">
+                  <TextInput label="Process name" value={editDraft.processName} onChange={(value) => setEditDraft((prev) => ({ ...prev, processName: value }))} />
+                  <TextInput label="Current state" value={editDraft.currentStateProcess} onChange={(value) => setEditDraft((prev) => ({ ...prev, currentStateProcess: value }))} />
+                  <TextInput label="Future state" value={editDraft.futureStateProcess} onChange={(value) => setEditDraft((prev) => ({ ...prev, futureStateProcess: value }))} />
+                  <TextInput label="Process gap" value={editDraft.processGap} onChange={(value) => setEditDraft((prev) => ({ ...prev, processGap: value }))} />
+                  <TextInput label="Impacted systems" value={editDraft.impactedSystems} onChange={(value) => setEditDraft((prev) => ({ ...prev, impactedSystems: value }))} />
+                </div>
+                <div className="hud-actions">
+                  <HudButton disabled={savingId === process.id} onClick={() => saveEdit(process.id)}>{savingId === process.id ? 'Saving…' : 'Save'}</HudButton>
+                  <HudButton variant="ghost" onClick={() => { setEditingId(null); setCardError(null); }}>Cancel</HudButton>
+                </div>
+              </div>
+            )}
+            {cardError?.id === process.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error, 'processes')}</p>}
+            <FieldGrid rows={[
+              { label: 'Current state', value: process.currentStateProcess },
+              { label: 'Future state', value: process.futureStateProcess },
+              { label: 'Process gap', value: process.processGap },
+              { label: 'Impacted systems', value: process.impactedSystems },
+              { label: 'Linked value stream', value: tenant.valueStreams.find((stream) => stream.id === process.linkedValueStreamId)?.name },
+            ]} />
+            <RuleNote>Linked value streams are not yet connected to the API.</RuleNote>
+          </HudPanel>
+        ))}
+      </div>
+    </div>
   );
 }
 
-// Note: Business impacts page for qualitative process, financial, customer, risk, and operational impacts.
-// These records help justify later cases and discovery priorities without storing actual financials.
-function ImpactsPage({ tenant }: { tenant: TenantData }) {
+// Note: Stakeholders & Personas page. Wired to the real API — stakeholders nest under the workspace's
+// Business Architecture singleton (list/create via ba_id; update/delete via the stakeholder's own id).
+function PersonasPage({ tenant, apiWorkspaceId, architectureId, architectureLoading }: {
+  tenant: TenantData;
+  apiWorkspaceId: string | null;
+  architectureId: string | null;
+  architectureLoading: boolean;
+}) {
+  const [items, setItems] = useState<StakeholderPersona[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const emptyCreateForm = {
+    name: '',
+    roleOrPersona: '',
+    stakeholderType: '',
+    needs: '',
+    painPoints: '',
+    valueReceived: '',
+  };
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ name: '', roleOrPersona: '', stakeholderType: '', needs: '', painPoints: '', valueReceived: '' });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<{ id: string; error: ApiError } | null>(null);
+
+  const loadStakeholders = useCallback(async () => {
+    if (!apiWorkspaceId || !architectureId) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await listStakeholders(apiWorkspaceId, architectureId);
+      setItems(result.items);
+    } catch (err) {
+      setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load stakeholders.', status: 0 }));
+    } finally {
+      setLoading(false);
+    }
+  }, [apiWorkspaceId, architectureId]);
+
+  useEffect(() => { loadStakeholders(); }, [loadStakeholders]);
+
+  const setCreateField = (field: keyof typeof emptyCreateForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId || !architectureId) return;
+    setCreateError(null);
+    setCreating(true);
+    try {
+      const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<StakeholderPersona>;
+      await createStakeholder(apiWorkspaceId, architectureId, body);
+      setCreateForm(emptyCreateForm);
+      setShowCreate(false);
+      await loadStakeholders();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create stakeholder.', status: 0 }));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startEdit = (stakeholder: StakeholderPersona) => {
+    setCardError(null);
+    setEditingId(stakeholder.id);
+    setEditDraft({
+      name: stakeholder.name ?? '',
+      roleOrPersona: stakeholder.roleOrPersona ?? '',
+      stakeholderType: stakeholder.stakeholderType ?? '',
+      needs: stakeholder.needs ?? '',
+      painPoints: stakeholder.painPoints ?? '',
+      valueReceived: stakeholder.valueReceived ?? '',
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      // Drop an unselected enum — '' is not a valid stakeholderType and would 422.
+      const patch: Partial<StakeholderPersona> = { ...editDraft } as Partial<StakeholderPersona>;
+      if (!patch.stakeholderType) delete patch.stakeholderType;
+      await updateStakeholder(apiWorkspaceId, id, patch);
+      setEditingId(null);
+      await loadStakeholders();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save stakeholder.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const removeStakeholder = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await deleteStakeholder(apiWorkspaceId, id);
+      await loadStakeholders();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to delete stakeholder.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const header = (
+    <SectionTitle eyebrow="Phase 1 · Strategy" title="Stakeholders & Personas" subtitle="The people the value streams serve or depend on." />
+  );
+
+  if (architectureLoading) {
+    return <div className="hud-page">{header}<HudPanel><p>Loading…</p></HudPanel></div>;
+  }
+  if (!architectureId) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Create a Business Architecture for this workspace first — stakeholders belong to it.</p></HudPanel>
+        <RuleNote>Head to the Business Architecture page to create the workspace architecture, then return here.</RuleNote>
+      </div>
+    );
+  }
+  if (loading) {
+    return <div className="hud-page">{header}<HudPanel><p>Loading stakeholders…</p></HudPanel></div>;
+  }
+  if (error) {
+    return <div className="hud-page">{header}<HudPanel><p>Could not load stakeholders: {error.message}</p></HudPanel></div>;
+  }
+
   return (
-    <ListPage
-      eyebrow="Phase 1 · Strategy"
-      title="Business Impacts"
-      subtitle="Effects that later justify lean business cases and discovery priorities."
-      rule="Impacts carry optional value-stream and lean-case links. Origin is provenance only."
-      rows={tenant.impacts.map((impact: BusinessImpact) => ({
-        id: impact.id,
-        title: impact.impactedArea,
-        meta: impact.impactDescription,
-        badges: [<OriginBadge origin={impact.origin} key="origin" />, <StatusBadge status={impact.status} key="status" />],
-        fields: [
-          { label: 'Impact type', value: impact.impactType },
-          { label: 'Severity', value: impact.severity },
-          { label: 'Mitigation notes', value: impact.mitigationNotes },
-          { label: 'Expected value', value: impact.expectedValue },
-          { label: 'Linked value stream', value: tenant.valueStreams.find((stream) => stream.id === impact.linkedValueStreamId)?.name },
-          { label: 'Linked lean business case', value: tenant.cases.find((businessCase) => businessCase.id === impact.linkedLeanBusinessCaseId)?.title },
-        ],
-      }))}
-    />
+    <div className="hud-page">
+      {header}
+      <RuleNote>Supporting components use reference-or-create: reference links an existing workspace record and never copies it.</RuleNote>
+
+      <div className="hud-actions">
+        <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+          <Plus size={16} /> {showCreate ? 'Close' : 'New stakeholder'}
+        </HudButton>
+      </div>
+      {showCreate && (
+        <HudPanel>
+          <form onSubmit={submitCreate} className="hud-form">
+            <TextInput label="Name (required)" value={createForm.name} onChange={(value) => setCreateField('name', value)} />
+            <TextInput label="Role or persona" value={createForm.roleOrPersona} onChange={(value) => setCreateField('roleOrPersona', value)} />
+            <SelectInput label="Stakeholder type" value={createForm.stakeholderType} onChange={(value) => setCreateField('stakeholderType', value)} options={stakeholderTypeOptions} />
+            <TextInput label="Needs" value={createForm.needs} onChange={(value) => setCreateField('needs', value)} />
+            <TextInput label="Pain points" value={createForm.painPoints} onChange={(value) => setCreateField('painPoints', value)} />
+            <TextInput label="Value received" value={createForm.valueReceived} onChange={(value) => setCreateField('valueReceived', value)} />
+            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'stakeholders')}</p>}
+            <HudButton type="submit" disabled={creating || !createForm.name.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create stakeholder'}</HudButton>
+          </form>
+        </HudPanel>
+      )}
+
+      {items.length === 0 && (
+        <HudPanel><p>No stakeholders yet. Create your first stakeholder or persona to map who the value streams serve.</p></HudPanel>
+      )}
+
+      <div className="hud-primary-list-desktop">
+        {items.map((stakeholder) => (
+          <HudPanel key={stakeholder.id}>
+            <div className="hud-record-head">
+              <div><h2>{stakeholder.name ?? '(unnamed stakeholder)'}</h2><p>{stakeholder.roleOrPersona ?? ''}</p></div>
+              <div className="hud-badge-stack">
+                {editingId !== stakeholder.id && <HudButton variant="ghost" onClick={() => startEdit(stakeholder)}>Edit</HudButton>}
+                <HudButton variant="ghost" disabled={savingId === stakeholder.id} onClick={() => removeStakeholder(stakeholder.id)}>Delete</HudButton>
+                <OriginBadge origin={stakeholder.origin ?? 'architecture'} />
+                <StatusBadge status={stakeholder.status ?? 'draft'} />
+              </div>
+            </div>
+            {editingId === stakeholder.id && (
+              <div className="hud-ai-edit-panel">
+                <div className="hud-ai-edit-grid">
+                  <TextInput label="Name" value={editDraft.name} onChange={(value) => setEditDraft((prev) => ({ ...prev, name: value }))} />
+                  <TextInput label="Role or persona" value={editDraft.roleOrPersona} onChange={(value) => setEditDraft((prev) => ({ ...prev, roleOrPersona: value }))} />
+                  <SelectInput label="Stakeholder type" value={editDraft.stakeholderType} onChange={(value) => setEditDraft((prev) => ({ ...prev, stakeholderType: value }))} options={stakeholderTypeOptions} />
+                  <TextInput label="Needs" value={editDraft.needs} onChange={(value) => setEditDraft((prev) => ({ ...prev, needs: value }))} />
+                  <TextInput label="Pain points" value={editDraft.painPoints} onChange={(value) => setEditDraft((prev) => ({ ...prev, painPoints: value }))} />
+                  <TextInput label="Value received" value={editDraft.valueReceived} onChange={(value) => setEditDraft((prev) => ({ ...prev, valueReceived: value }))} />
+                </div>
+                <div className="hud-actions">
+                  <HudButton disabled={savingId === stakeholder.id} onClick={() => saveEdit(stakeholder.id)}>{savingId === stakeholder.id ? 'Saving…' : 'Save'}</HudButton>
+                  <HudButton variant="ghost" onClick={() => { setEditingId(null); setCardError(null); }}>Cancel</HudButton>
+                </div>
+              </div>
+            )}
+            {cardError?.id === stakeholder.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error, 'stakeholders')}</p>}
+            <FieldGrid rows={[
+              { label: 'Role or persona', value: stakeholder.roleOrPersona },
+              { label: 'Stakeholder type', value: stakeholder.stakeholderType },
+              { label: 'Needs', value: stakeholder.needs },
+              { label: 'Pain points', value: stakeholder.painPoints },
+              { label: 'Value received', value: stakeholder.valueReceived },
+              { label: 'Linked value stream', value: tenant.valueStreams.find((stream) => stream.id === stakeholder.linkedValueStreamId)?.name },
+            ]} />
+            <RuleNote>Linked value streams are not yet connected to the API.</RuleNote>
+          </HudPanel>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Note: Information Concepts page. Wired to the real API — concepts nest under the workspace's
+// Business Architecture singleton (list/create via ba_id; update/delete via the concept's own id).
+function InformationPage({ tenant, apiWorkspaceId, architectureId, architectureLoading }: {
+  tenant: TenantData;
+  apiWorkspaceId: string | null;
+  architectureId: string | null;
+  architectureLoading: boolean;
+}) {
+  const [items, setItems] = useState<InformationConcept[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const emptyCreateForm = {
+    conceptName: '',
+    description: '',
+    dataOwner: '',
+    sourceSystem: '',
+    targetSystem: '',
+    dataQualityIssue: '',
+    businessUsage: '',
+  };
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ conceptName: '', description: '', dataOwner: '', sourceSystem: '', targetSystem: '', dataQualityIssue: '', businessUsage: '' });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<{ id: string; error: ApiError } | null>(null);
+
+  const loadConcepts = useCallback(async () => {
+    if (!apiWorkspaceId || !architectureId) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await listInformationConcepts(apiWorkspaceId, architectureId);
+      setItems(result.items);
+    } catch (err) {
+      setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load information concepts.', status: 0 }));
+    } finally {
+      setLoading(false);
+    }
+  }, [apiWorkspaceId, architectureId]);
+
+  useEffect(() => { loadConcepts(); }, [loadConcepts]);
+
+  const setCreateField = (field: keyof typeof emptyCreateForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId || !architectureId) return;
+    setCreateError(null);
+    setCreating(true);
+    try {
+      const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<InformationConcept>;
+      await createInformationConcept(apiWorkspaceId, architectureId, body);
+      setCreateForm(emptyCreateForm);
+      setShowCreate(false);
+      await loadConcepts();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create information concept.', status: 0 }));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startEdit = (concept: InformationConcept) => {
+    setCardError(null);
+    setEditingId(concept.id);
+    setEditDraft({
+      conceptName: concept.conceptName ?? '',
+      description: concept.description ?? '',
+      dataOwner: concept.dataOwner ?? '',
+      sourceSystem: concept.sourceSystem ?? '',
+      targetSystem: concept.targetSystem ?? '',
+      dataQualityIssue: concept.dataQualityIssue ?? '',
+      businessUsage: concept.businessUsage ?? '',
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await updateInformationConcept(apiWorkspaceId, id, editDraft);
+      setEditingId(null);
+      await loadConcepts();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save information concept.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const removeConcept = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await deleteInformationConcept(apiWorkspaceId, id);
+      await loadConcepts();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to delete information concept.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const header = (
+    <SectionTitle eyebrow="Phase 1 · Strategy" title="Information Concepts" subtitle="The key data objects the architecture produces and consumes." />
+  );
+
+  if (architectureLoading) {
+    return <div className="hud-page">{header}<HudPanel><p>Loading…</p></HudPanel></div>;
+  }
+  if (!architectureId) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Create a Business Architecture for this workspace first — information concepts belong to it.</p></HudPanel>
+        <RuleNote>Head to the Business Architecture page to create the workspace architecture, then return here.</RuleNote>
+      </div>
+    );
+  }
+  if (loading) {
+    return <div className="hud-page">{header}<HudPanel><p>Loading information concepts…</p></HudPanel></div>;
+  }
+  if (error) {
+    return <div className="hud-page">{header}<HudPanel><p>Could not load information concepts: {error.message}</p></HudPanel></div>;
+  }
+
+  return (
+    <div className="hud-page">
+      {header}
+      <RuleNote>Supporting components use reference-or-create: reference links an existing workspace record and never copies it.</RuleNote>
+
+      <div className="hud-actions">
+        <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+          <Plus size={16} /> {showCreate ? 'Close' : 'New information concept'}
+        </HudButton>
+      </div>
+      {showCreate && (
+        <HudPanel>
+          <form onSubmit={submitCreate} className="hud-form">
+            <TextInput label="Concept name (required)" value={createForm.conceptName} onChange={(value) => setCreateField('conceptName', value)} />
+            <TextInput label="Description" value={createForm.description} onChange={(value) => setCreateField('description', value)} />
+            <TextInput label="Data owner" value={createForm.dataOwner} onChange={(value) => setCreateField('dataOwner', value)} />
+            <TextInput label="Source system" value={createForm.sourceSystem} onChange={(value) => setCreateField('sourceSystem', value)} />
+            <TextInput label="Target system" value={createForm.targetSystem} onChange={(value) => setCreateField('targetSystem', value)} />
+            <TextInput label="Data quality issue" value={createForm.dataQualityIssue} onChange={(value) => setCreateField('dataQualityIssue', value)} />
+            <TextInput label="Business usage" value={createForm.businessUsage} onChange={(value) => setCreateField('businessUsage', value)} />
+            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'information concepts')}</p>}
+            <HudButton type="submit" disabled={creating || !createForm.conceptName.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create information concept'}</HudButton>
+          </form>
+        </HudPanel>
+      )}
+
+      {items.length === 0 && (
+        <HudPanel><p>No information concepts yet. Create your first concept to map the data the architecture produces and consumes.</p></HudPanel>
+      )}
+
+      <div className="hud-primary-list-desktop">
+        {items.map((concept) => (
+          <HudPanel key={concept.id}>
+            <div className="hud-record-head">
+              <div><h2>{concept.conceptName ?? '(unnamed concept)'}</h2><p>{concept.description ?? ''}</p></div>
+              <div className="hud-badge-stack">
+                {editingId !== concept.id && <HudButton variant="ghost" onClick={() => startEdit(concept)}>Edit</HudButton>}
+                <HudButton variant="ghost" disabled={savingId === concept.id} onClick={() => removeConcept(concept.id)}>Delete</HudButton>
+                <OriginBadge origin={concept.origin ?? 'architecture'} />
+                <StatusBadge status={concept.status ?? 'draft'} />
+              </div>
+            </div>
+            {editingId === concept.id && (
+              <div className="hud-ai-edit-panel">
+                <div className="hud-ai-edit-grid">
+                  <TextInput label="Concept name" value={editDraft.conceptName} onChange={(value) => setEditDraft((prev) => ({ ...prev, conceptName: value }))} />
+                  <TextInput label="Description" value={editDraft.description} onChange={(value) => setEditDraft((prev) => ({ ...prev, description: value }))} />
+                  <TextInput label="Data owner" value={editDraft.dataOwner} onChange={(value) => setEditDraft((prev) => ({ ...prev, dataOwner: value }))} />
+                  <TextInput label="Source system" value={editDraft.sourceSystem} onChange={(value) => setEditDraft((prev) => ({ ...prev, sourceSystem: value }))} />
+                  <TextInput label="Target system" value={editDraft.targetSystem} onChange={(value) => setEditDraft((prev) => ({ ...prev, targetSystem: value }))} />
+                  <TextInput label="Data quality issue" value={editDraft.dataQualityIssue} onChange={(value) => setEditDraft((prev) => ({ ...prev, dataQualityIssue: value }))} />
+                  <TextInput label="Business usage" value={editDraft.businessUsage} onChange={(value) => setEditDraft((prev) => ({ ...prev, businessUsage: value }))} />
+                </div>
+                <div className="hud-actions">
+                  <HudButton disabled={savingId === concept.id} onClick={() => saveEdit(concept.id)}>{savingId === concept.id ? 'Saving…' : 'Save'}</HudButton>
+                  <HudButton variant="ghost" onClick={() => { setEditingId(null); setCardError(null); }}>Cancel</HudButton>
+                </div>
+              </div>
+            )}
+            {cardError?.id === concept.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error, 'information concepts')}</p>}
+            <FieldGrid rows={[
+              { label: 'Description', value: concept.description },
+              { label: 'Data owner', value: concept.dataOwner },
+              { label: 'Source system', value: concept.sourceSystem },
+              { label: 'Target system', value: concept.targetSystem },
+              { label: 'Data quality issue', value: concept.dataQualityIssue },
+              { label: 'Business usage', value: concept.businessUsage },
+              { label: 'Linked value stream', value: tenant.valueStreams.find((stream) => stream.id === concept.linkedValueStreamId)?.name },
+            ]} />
+            <RuleNote>Linked value streams are not yet connected to the API.</RuleNote>
+          </HudPanel>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Note: Business Impacts page. Wired to the real API — impacts nest under the workspace's
+// Business Architecture singleton (list/create via ba_id; update/delete via the impact's own id).
+function ImpactsPage({ tenant, apiWorkspaceId, architectureId, architectureLoading }: {
+  tenant: TenantData;
+  apiWorkspaceId: string | null;
+  architectureId: string | null;
+  architectureLoading: boolean;
+}) {
+  const [items, setItems] = useState<BusinessImpact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const emptyCreateForm = {
+    impactedArea: '',
+    impactDescription: '',
+    impactType: '',
+    severity: '',
+    mitigationNotes: '',
+    expectedValue: '',
+  };
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ impactedArea: '', impactDescription: '', impactType: '', severity: '', mitigationNotes: '', expectedValue: '' });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<{ id: string; error: ApiError } | null>(null);
+
+  const loadImpacts = useCallback(async () => {
+    if (!apiWorkspaceId || !architectureId) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await listBusinessImpacts(apiWorkspaceId, architectureId);
+      setItems(result.items);
+    } catch (err) {
+      setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load business impacts.', status: 0 }));
+    } finally {
+      setLoading(false);
+    }
+  }, [apiWorkspaceId, architectureId]);
+
+  useEffect(() => { loadImpacts(); }, [loadImpacts]);
+
+  const setCreateField = (field: keyof typeof emptyCreateForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId || !architectureId) return;
+    setCreateError(null);
+    setCreating(true);
+    try {
+      const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<BusinessImpact>;
+      await createBusinessImpact(apiWorkspaceId, architectureId, body);
+      setCreateForm(emptyCreateForm);
+      setShowCreate(false);
+      await loadImpacts();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create business impact.', status: 0 }));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startEdit = (impact: BusinessImpact) => {
+    setCardError(null);
+    setEditingId(impact.id);
+    setEditDraft({
+      impactedArea: impact.impactedArea ?? '',
+      impactDescription: impact.impactDescription ?? '',
+      impactType: impact.impactType ?? '',
+      severity: impact.severity ?? '',
+      mitigationNotes: impact.mitigationNotes ?? '',
+      expectedValue: impact.expectedValue ?? '',
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      // Drop unselected enums — '' is not a valid impactType/severity and would 422.
+      const patch: Partial<BusinessImpact> = { ...editDraft } as Partial<BusinessImpact>;
+      if (!patch.impactType) delete patch.impactType;
+      if (!patch.severity) delete patch.severity;
+      await updateBusinessImpact(apiWorkspaceId, id, patch);
+      setEditingId(null);
+      await loadImpacts();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save business impact.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const removeImpact = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await deleteBusinessImpact(apiWorkspaceId, id);
+      await loadImpacts();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to delete business impact.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const header = (
+    <SectionTitle eyebrow="Phase 1 · Strategy" title="Business Impacts" subtitle="Effects that later justify lean business cases and discovery priorities." />
+  );
+
+  if (architectureLoading) {
+    return <div className="hud-page">{header}<HudPanel><p>Loading…</p></HudPanel></div>;
+  }
+  if (!architectureId) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Create a Business Architecture for this workspace first — business impacts belong to it.</p></HudPanel>
+        <RuleNote>Head to the Business Architecture page to create the workspace architecture, then return here.</RuleNote>
+      </div>
+    );
+  }
+  if (loading) {
+    return <div className="hud-page">{header}<HudPanel><p>Loading business impacts…</p></HudPanel></div>;
+  }
+  if (error) {
+    return <div className="hud-page">{header}<HudPanel><p>Could not load business impacts: {error.message}</p></HudPanel></div>;
+  }
+
+  return (
+    <div className="hud-page">
+      {header}
+      <RuleNote>Impacts carry optional value-stream and lean-case links. Origin is provenance only.</RuleNote>
+
+      <div className="hud-actions">
+        <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+          <Plus size={16} /> {showCreate ? 'Close' : 'New impact'}
+        </HudButton>
+      </div>
+      {showCreate && (
+        <HudPanel>
+          <form onSubmit={submitCreate} className="hud-form">
+            <TextInput label="Impacted area (required)" value={createForm.impactedArea} onChange={(value) => setCreateField('impactedArea', value)} />
+            <TextInput label="Impact description" value={createForm.impactDescription} onChange={(value) => setCreateField('impactDescription', value)} />
+            <SelectInput label="Impact type" value={createForm.impactType} onChange={(value) => setCreateField('impactType', value)} options={impactTypeOptions} />
+            <SelectInput label="Severity" value={createForm.severity} onChange={(value) => setCreateField('severity', value)} options={severityOptions} />
+            <TextInput label="Mitigation notes" value={createForm.mitigationNotes} onChange={(value) => setCreateField('mitigationNotes', value)} />
+            <TextInput label="Expected value" value={createForm.expectedValue} onChange={(value) => setCreateField('expectedValue', value)} />
+            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'business impacts')}</p>}
+            <HudButton type="submit" disabled={creating || !createForm.impactedArea.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create impact'}</HudButton>
+          </form>
+        </HudPanel>
+      )}
+
+      {items.length === 0 && (
+        <HudPanel><p>No business impacts yet. Create your first impact to capture effects that later justify cases and discovery.</p></HudPanel>
+      )}
+
+      <div className="hud-primary-list-desktop">
+        {items.map((impact) => (
+          <HudPanel key={impact.id}>
+            <div className="hud-record-head">
+              <div><h2>{impact.impactedArea ?? '(unnamed impact)'}</h2><p>{impact.impactDescription ?? ''}</p></div>
+              <div className="hud-badge-stack">
+                {editingId !== impact.id && <HudButton variant="ghost" onClick={() => startEdit(impact)}>Edit</HudButton>}
+                <HudButton variant="ghost" disabled={savingId === impact.id} onClick={() => removeImpact(impact.id)}>Delete</HudButton>
+                <OriginBadge origin={impact.origin ?? 'architecture'} />
+                <StatusBadge status={impact.status ?? 'draft'} />
+              </div>
+            </div>
+            {editingId === impact.id && (
+              <div className="hud-ai-edit-panel">
+                <div className="hud-ai-edit-grid">
+                  <TextInput label="Impacted area" value={editDraft.impactedArea} onChange={(value) => setEditDraft((prev) => ({ ...prev, impactedArea: value }))} />
+                  <TextInput label="Impact description" value={editDraft.impactDescription} onChange={(value) => setEditDraft((prev) => ({ ...prev, impactDescription: value }))} />
+                  <SelectInput label="Impact type" value={editDraft.impactType} onChange={(value) => setEditDraft((prev) => ({ ...prev, impactType: value }))} options={impactTypeOptions} />
+                  <SelectInput label="Severity" value={editDraft.severity} onChange={(value) => setEditDraft((prev) => ({ ...prev, severity: value }))} options={severityOptions} />
+                  <TextInput label="Mitigation notes" value={editDraft.mitigationNotes} onChange={(value) => setEditDraft((prev) => ({ ...prev, mitigationNotes: value }))} />
+                  <TextInput label="Expected value" value={editDraft.expectedValue} onChange={(value) => setEditDraft((prev) => ({ ...prev, expectedValue: value }))} />
+                </div>
+                <div className="hud-actions">
+                  <HudButton disabled={savingId === impact.id} onClick={() => saveEdit(impact.id)}>{savingId === impact.id ? 'Saving…' : 'Save'}</HudButton>
+                  <HudButton variant="ghost" onClick={() => { setEditingId(null); setCardError(null); }}>Cancel</HudButton>
+                </div>
+              </div>
+            )}
+            {cardError?.id === impact.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error, 'business impacts')}</p>}
+            <FieldGrid rows={[
+              { label: 'Impact description', value: impact.impactDescription },
+              { label: 'Impact type', value: impact.impactType },
+              { label: 'Severity', value: impact.severity },
+              { label: 'Mitigation notes', value: impact.mitigationNotes },
+              { label: 'Expected value', value: impact.expectedValue },
+              { label: 'Linked value stream', value: tenant.valueStreams.find((stream) => stream.id === impact.linkedValueStreamId)?.name },
+              { label: 'Linked lean business case', value: tenant.cases.find((businessCase) => businessCase.id === impact.linkedLeanBusinessCaseId)?.title },
+            ]} />
+            <RuleNote>Linked value streams and lean business cases are not yet connected to the API.</RuleNote>
+          </HudPanel>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -3154,10 +3931,10 @@ function ImplementedPage({
   if (route === 'value-streams') return <ValueStreamsPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
   if (route === 'key-activities') return <KeyActivitiesPage apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
   if (route === 'capabilities') return <CapabilitiesPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
-  if (route === 'processes') return <ProcessesPage tenant={tenant} />;
-  if (route === 'personas') return <PersonasPage tenant={tenant} />;
-  if (route === 'information') return <InformationPage tenant={tenant} />;
-  if (route === 'impacts') return <ImpactsPage tenant={tenant} />;
+  if (route === 'processes') return <ProcessesPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
+  if (route === 'personas') return <PersonasPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
+  if (route === 'information') return <InformationPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
+  if (route === 'impacts') return <ImpactsPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
   if (route === 'cases') return <CasesPage tenant={tenant} ai={ai} />;
   if (route === 'discovery') return <DiscoveryPage tenant={tenant} ai={ai} />;
   if (route === 'features') return <FeaturesPage tenant={tenant} />;
