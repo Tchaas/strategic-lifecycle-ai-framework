@@ -30,6 +30,7 @@ import type {
   BusinessImpact,
   BusinessProcess,
   ConceptualDeliverable,
+  CaseStatus,
   Discovery,
   Feature,
   InformationConcept,
@@ -51,6 +52,7 @@ import { listProcesses, createProcess, updateProcess, deleteProcess } from '../a
 import { listStakeholders, createStakeholder, updateStakeholder, deleteStakeholder } from '../api/stakeholders';
 import { listInformationConcepts, createInformationConcept, updateInformationConcept, deleteInformationConcept } from '../api/informationConcepts';
 import { listBusinessImpacts, createBusinessImpact, updateBusinessImpact, deleteBusinessImpact } from '../api/businessImpacts';
+import { listBusinessCases, createBusinessCase, updateBusinessCase, updateBusinessCaseStatus } from '../api/businessCases';
 
 type RouteId =
   | 'landing'
@@ -523,6 +525,8 @@ const valueStreamTypeOptions = toOptions(['current_state', 'future_state', 'modi
 const stakeholderTypeOptions = toOptions(['internal', 'external', 'executive', 'customer']);
 const impactTypeOptions = toOptions(['process', 'financial', 'customer', 'risk', 'operational']);
 const severityOptions = toOptions(['low', 'medium', 'high']);
+const priorityOptions = toOptions(['low', 'medium', 'high']);
+const caseValueTypeOptions = toOptions(['cost_savings', 'revenue', 'risk_reduction', 'efficiency']);
 
 // Target dates come in as ISO strings or '' / null. Show "Not entered" when both are blank,
 // matching every other empty field — instead of the literal "null to null".
@@ -532,6 +536,22 @@ const formatTargetDates = (start: string | null | undefined, end: string | null 
   if (!s && !e) return 'Not entered';
   if (s && e) return `${s} to ${e}`;
   return s || e;
+};
+
+// A 422 `fields` entry is a pydantic error object ({type, loc, msg, ...}) — but treat it as
+// unknown and never assume its shape. Strings are prettified; objects yield a field name from
+// `loc` (last element), optionally with `msg`; anything else is dropped. Must not throw.
+const describeValidationField = (field: unknown): string => {
+  if (typeof field === 'string') return prettifyEnum(field);
+  if (field && typeof field === 'object') {
+    const { loc, msg } = field as { loc?: unknown; msg?: unknown };
+    const last = Array.isArray(loc) ? loc[loc.length - 1] : undefined;
+    const name = typeof last === 'string' ? prettifyEnum(last) : typeof last === 'number' ? String(last) : '';
+    const message = typeof msg === 'string' ? msg : '';
+    if (name && message) return `${name}: ${message}`;
+    return name || message;
+  }
+  return '';
 };
 
 // Turn an ApiError into a readable, on-screen message. The backend enforces rules the mock
@@ -544,8 +564,9 @@ const renderApiMessage = (error: ApiError, entityLabel = 'records', remedy = '')
     return `You've reached the limit of ${limit} ${entityLabel}.${suffix}`;
   }
   if (error.status === 422) {
-    const fields = Array.isArray(details.fields) ? (details.fields as string[]) : [];
-    const suffix = fields.length ? ` (${fields.map(prettifyEnum).join(', ')})` : '';
+    const fields = Array.isArray(details.fields) ? details.fields : [];
+    const parts = fields.map(describeValidationField).filter(Boolean);
+    const suffix = parts.length ? ` (${parts.join(', ')})` : '';
     return `${error.message}${suffix}`;
   }
   return error.message;
@@ -1475,6 +1496,12 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
   const saveEdit = async (id: string) => {
     if (!apiWorkspaceId) return;
     setCardError(null);
+    // Required on create; PATCH treats fields as optional and '' counts as "provided",
+    // so a blanked name would save a headerless card. Guard before the PATCH.
+    if (!editDraft.strategicInitiativeName.trim()) {
+      setCardError({ id, error: new ApiError({ code: 'validation_error', message: 'Strategic initiative name is required.', status: 0 }) });
+      return;
+    }
     setSavingId(id);
     try {
       await updateObjective(apiWorkspaceId, id, editDraft);
@@ -1559,7 +1586,7 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
           return (
             <MobileRecordCard
               key={objective.id}
-              title={displayObjective.strategicInitiativeName}
+              title={displayObjective.strategicInitiativeName?.trim() || '(unnamed objective)'}
               summary={displayObjective.executiveObjective}
               badge={<StatusBadge status={displayObjective.status} />}
               rows={[
@@ -1593,7 +1620,7 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
         return (
           <HudPanel key={objective.id}>
             <div className="hud-record-head">
-              <div><h2>{displayObjective.strategicInitiativeName}</h2><p>{displayObjective.executiveObjective}</p></div>
+              <div><h2>{displayObjective.strategicInitiativeName?.trim() || '(unnamed objective)'}</h2><p>{displayObjective.executiveObjective}</p></div>
               <div className="hud-badge-stack">
                 <HudButton variant="ghost" onClick={() => ai.draftObjective(tenant.workspace.name, objective)}><Sparkles size={16} /> Draft with AI</HudButton>
                 {editingId !== objective.id && <HudButton variant="ghost" onClick={() => startEdit(objective)}>Edit</HudButton>}
@@ -1731,6 +1758,12 @@ function ArchitecturePage({ tenant, apiWorkspaceId, architecture, architectureId
   const saveEdit = async () => {
     if (!apiWorkspaceId || !architectureId) return;
     setEditError(null);
+    // Required on create; PATCH treats fields as optional and '' counts as "provided",
+    // so a blanked name would save a headerless record. Guard before the PATCH.
+    if (!editDraft.name.trim()) {
+      setEditError(new ApiError({ code: 'validation_error', message: 'Name is required.', status: 0 }));
+      return;
+    }
     setSaving(true);
     try {
       await updateArchitecture(apiWorkspaceId, architectureId, editDraft);
@@ -1782,7 +1815,7 @@ function ArchitecturePage({ tenant, apiWorkspaceId, architecture, architectureId
       <RuleNote>One Business Architecture per workspace. Once it exists, the action is Open, not Create.</RuleNote>
       <HudPanel>
         <div className="hud-record-head">
-          <div><h2>{architecture.name ?? ''}</h2><p>{architecture.description ?? ''}</p></div>
+          <div><h2>{architecture.name?.trim() || '(unnamed architecture)'}</h2><p>{architecture.description ?? ''}</p></div>
           <div className="hud-badge-stack">
             <OriginBadge origin={architecture.origin ?? 'architecture'} />
             <StatusBadge status={architecture.status ?? 'draft'} />
@@ -1948,6 +1981,12 @@ function ValueStreamsPage({ tenant, apiWorkspaceId, architectureId, architecture
   const saveEdit = async (id: string) => {
     if (!apiWorkspaceId) return;
     setCardError(null);
+    // Required on create; PATCH treats fields as optional and '' counts as "provided",
+    // so a blanked name would save a headerless card. Guard before the PATCH.
+    if (!editDraft.name.trim()) {
+      setCardError({ id, error: new ApiError({ code: 'validation_error', message: 'Name is required.', status: 0 }) });
+      return;
+    }
     setSavingId(id);
     try {
       await updateValueStream(apiWorkspaceId, id, editDraft);
@@ -2052,7 +2091,7 @@ function ValueStreamsPage({ tenant, apiWorkspaceId, architectureId, architecture
         {items.map((stream) => (
           <HudPanel key={stream.id}>
             <div className="hud-record-head">
-              <div><h2>{stream.name ?? '(unnamed value stream)'}</h2><p>{stream.description ?? ''}</p></div>
+              <div><h2>{stream.name?.trim() || '(unnamed value stream)'}</h2><p>{stream.description ?? ''}</p></div>
               <div className="hud-badge-stack">
                 {editingId !== stream.id && <HudButton variant="ghost" onClick={() => startEdit(stream)}>Edit</HudButton>}
                 <HudButton variant="ghost" disabled={savingId === stream.id} onClick={() => removeValueStream(stream.id)}>Delete</HudButton>
@@ -2220,6 +2259,12 @@ function KeyActivitiesPage({ apiWorkspaceId, architectureId, architectureLoading
   const saveEdit = async (id: string) => {
     if (!apiWorkspaceId) return;
     setCardError(null);
+    // Required on create; PATCH treats fields as optional and '' counts as "provided",
+    // so a blanked name would save a headerless card. Guard before the PATCH.
+    if (!editDraft.activityName.trim()) {
+      setCardError({ id, error: new ApiError({ code: 'validation_error', message: 'Name is required.', status: 0 }) });
+      return;
+    }
     setSavingId(id);
     try {
       const { sequenceOrder, ...strings } = editDraft;
@@ -2344,7 +2389,7 @@ function KeyActivitiesPage({ apiWorkspaceId, architectureId, architectureLoading
           {items.map((activity) => (
             <HudPanel key={activity.id}>
               <div className="hud-record-head">
-                <div><h2>{activity.activityName ?? '(unnamed activity)'}</h2><p>{activity.activityDescription ?? ''}</p></div>
+                <div><h2>{activity.activityName?.trim() || '(unnamed activity)'}</h2><p>{activity.activityDescription ?? ''}</p></div>
                 <div className="hud-badge-stack">
                   {editingId !== activity.id && <HudButton variant="ghost" onClick={() => startEdit(activity)}>Edit</HudButton>}
                   <HudButton variant="ghost" disabled={savingId === activity.id} onClick={() => removeKeyActivity(activity.id)}>Delete</HudButton>
@@ -2473,6 +2518,12 @@ function CapabilitiesPage({ tenant, apiWorkspaceId, architectureId, architecture
   const saveEdit = async (id: string) => {
     if (!apiWorkspaceId) return;
     setCardError(null);
+    // Required on create; PATCH treats fields as optional and '' counts as "provided",
+    // so a blanked name would save a headerless card. Guard before the PATCH.
+    if (!editDraft.capabilityName.trim()) {
+      setCardError({ id, error: new ApiError({ code: 'validation_error', message: 'Name is required.', status: 0 }) });
+      return;
+    }
     setSavingId(id);
     try {
       await updateCapability(apiWorkspaceId, id, editDraft);
@@ -2576,7 +2627,7 @@ function CapabilitiesPage({ tenant, apiWorkspaceId, architectureId, architecture
         {items.map((capability) => (
           <HudPanel key={capability.id}>
             <div className="hud-record-head">
-              <div><h2>{capability.capabilityName ?? '(unnamed capability)'}</h2><p>{capability.capabilityDescription ?? ''}</p></div>
+              <div><h2>{capability.capabilityName?.trim() || '(unnamed capability)'}</h2><p>{capability.capabilityDescription ?? ''}</p></div>
               <div className="hud-badge-stack">
                 {editingId !== capability.id && <HudButton variant="ghost" onClick={() => startEdit(capability)}>Edit</HudButton>}
                 <HudButton variant="ghost" disabled={savingId === capability.id} onClick={() => removeCapability(capability.id)}>Delete</HudButton>
@@ -2699,6 +2750,12 @@ function ProcessesPage({ tenant, apiWorkspaceId, architectureId, architectureLoa
   const saveEdit = async (id: string) => {
     if (!apiWorkspaceId) return;
     setCardError(null);
+    // Required on create; PATCH treats fields as optional and '' counts as "provided",
+    // so a blanked name would save a headerless card. Guard before the PATCH.
+    if (!editDraft.processName.trim()) {
+      setCardError({ id, error: new ApiError({ code: 'validation_error', message: 'Process name is required.', status: 0 }) });
+      return;
+    }
     setSavingId(id);
     try {
       await updateProcess(apiWorkspaceId, id, editDraft);
@@ -2780,7 +2837,7 @@ function ProcessesPage({ tenant, apiWorkspaceId, architectureId, architectureLoa
         {items.map((process) => (
           <HudPanel key={process.id}>
             <div className="hud-record-head">
-              <div><h2>{process.processName ?? '(unnamed process)'}</h2><p>{process.currentStateProcess ?? ''}</p></div>
+              <div><h2>{process.processName?.trim() || '(unnamed process)'}</h2><p>{process.currentStateProcess ?? ''}</p></div>
               <div className="hud-badge-stack">
                 {editingId !== process.id && <HudButton variant="ghost" onClick={() => startEdit(process)}>Edit</HudButton>}
                 <HudButton variant="ghost" disabled={savingId === process.id} onClick={() => removeProcess(process.id)}>Delete</HudButton>
@@ -2906,6 +2963,12 @@ function PersonasPage({ tenant, apiWorkspaceId, architectureId, architectureLoad
   const saveEdit = async (id: string) => {
     if (!apiWorkspaceId) return;
     setCardError(null);
+    // Required on create; PATCH treats fields as optional and '' counts as "provided",
+    // so a blanked name would save a headerless card. Guard before the PATCH.
+    if (!editDraft.name.trim()) {
+      setCardError({ id, error: new ApiError({ code: 'validation_error', message: 'Name is required.', status: 0 }) });
+      return;
+    }
     setSavingId(id);
     try {
       // Drop an unselected enum — '' is not a valid stakeholderType and would 422.
@@ -2991,7 +3054,7 @@ function PersonasPage({ tenant, apiWorkspaceId, architectureId, architectureLoad
         {items.map((stakeholder) => (
           <HudPanel key={stakeholder.id}>
             <div className="hud-record-head">
-              <div><h2>{stakeholder.name ?? '(unnamed stakeholder)'}</h2><p>{stakeholder.roleOrPersona ?? ''}</p></div>
+              <div><h2>{stakeholder.name?.trim() || '(unnamed stakeholder)'}</h2><p>{stakeholder.roleOrPersona ?? ''}</p></div>
               <div className="hud-badge-stack">
                 {editingId !== stakeholder.id && <HudButton variant="ghost" onClick={() => startEdit(stakeholder)}>Edit</HudButton>}
                 <HudButton variant="ghost" disabled={savingId === stakeholder.id} onClick={() => removeStakeholder(stakeholder.id)}>Delete</HudButton>
@@ -3121,6 +3184,12 @@ function InformationPage({ tenant, apiWorkspaceId, architectureId, architectureL
   const saveEdit = async (id: string) => {
     if (!apiWorkspaceId) return;
     setCardError(null);
+    // Required on create; PATCH treats fields as optional and '' counts as "provided",
+    // so a blanked name would save a headerless card. Guard before the PATCH.
+    if (!editDraft.conceptName.trim()) {
+      setCardError({ id, error: new ApiError({ code: 'validation_error', message: 'Concept name is required.', status: 0 }) });
+      return;
+    }
     setSavingId(id);
     try {
       await updateInformationConcept(apiWorkspaceId, id, editDraft);
@@ -3204,7 +3273,7 @@ function InformationPage({ tenant, apiWorkspaceId, architectureId, architectureL
         {items.map((concept) => (
           <HudPanel key={concept.id}>
             <div className="hud-record-head">
-              <div><h2>{concept.conceptName ?? '(unnamed concept)'}</h2><p>{concept.description ?? ''}</p></div>
+              <div><h2>{concept.conceptName?.trim() || '(unnamed concept)'}</h2><p>{concept.description ?? ''}</p></div>
               <div className="hud-badge-stack">
                 {editingId !== concept.id && <HudButton variant="ghost" onClick={() => startEdit(concept)}>Edit</HudButton>}
                 <HudButton variant="ghost" disabled={savingId === concept.id} onClick={() => removeConcept(concept.id)}>Delete</HudButton>
@@ -3334,6 +3403,12 @@ function ImpactsPage({ tenant, apiWorkspaceId, architectureId, architectureLoadi
   const saveEdit = async (id: string) => {
     if (!apiWorkspaceId) return;
     setCardError(null);
+    // Required on create; PATCH treats fields as optional and '' counts as "provided",
+    // so a blanked value would save a headerless card. Guard before the PATCH.
+    if (!editDraft.impactedArea.trim()) {
+      setCardError({ id, error: new ApiError({ code: 'validation_error', message: 'Impacted area is required.', status: 0 }) });
+      return;
+    }
     setSavingId(id);
     try {
       // Drop unselected enums — '' is not a valid impactType/severity and would 422.
@@ -3420,7 +3495,7 @@ function ImpactsPage({ tenant, apiWorkspaceId, architectureId, architectureLoadi
         {items.map((impact) => (
           <HudPanel key={impact.id}>
             <div className="hud-record-head">
-              <div><h2>{impact.impactedArea ?? '(unnamed impact)'}</h2><p>{impact.impactDescription ?? ''}</p></div>
+              <div><h2>{impact.impactedArea?.trim() || '(unnamed impact)'}</h2><p>{impact.impactDescription ?? ''}</p></div>
               <div className="hud-badge-stack">
                 {editingId !== impact.id && <HudButton variant="ghost" onClick={() => startEdit(impact)}>Edit</HudButton>}
                 <HudButton variant="ghost" disabled={savingId === impact.id} onClick={() => removeImpact(impact.id)}>Delete</HudButton>
@@ -3462,103 +3537,330 @@ function ImpactsPage({ tenant, apiWorkspaceId, architectureId, architectureLoadi
   );
 }
 
-// Note: Lean business cases page for granular initiatives under strategic objectives. It shows forecast fields,
-// lifecycle readiness, architecture links, and downstream discovery/implementation status.
-function CasesPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
+// Note: Lean business cases page — the Phase 2 gate. Cases nest under a strategic objective, so an
+// objective picker gates the list (like KeyActivitiesPage's value-stream picker). Wired to the real
+// API; lifecycle transitions go through the dedicated /status endpoint. No delete endpoint exists.
+function CasesPage({ apiWorkspaceId }: { apiWorkspaceId: string | null }) {
+  // Objective picker — cases belong to a strategic objective, so we need one selected before listing.
+  const [objectives, setObjectives] = useState<StrategicObjective[]>([]);
+  const [objLoading, setObjLoading] = useState(true);
+  const [objError, setObjError] = useState<ApiError | null>(null);
+  const [selectedObjId, setSelectedObjId] = useState<string>('');
+
+  const [items, setItems] = useState<LeanBusinessCase[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  // "New case" form. All fields held as strings; forecast numbers are coerced on submit.
+  const emptyCreateForm = {
+    title: '',
+    summary: '',
+    problemOpportunityStatement: '',
+    valueHypothesis: '',
+    priority: '',
+    forecastCost: '',
+    forecastValue: '',
+    valueType: '',
+  };
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  // Inline edit (desktop) — one case at a time. cardError is scoped to a single card id.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ title: '', summary: '', problemOpportunityStatement: '', valueHypothesis: '', priority: '', forecastCost: '', forecastValue: '', valueType: '' });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<{ id: string; error: ApiError } | null>(null);
+
+  // Load the workspace's objectives, drop archived (they can't parent a case), auto-select the first.
+  const loadObjectives = useCallback(async () => {
+    if (!apiWorkspaceId) {
+      // No workspace resolved (shouldn't happen behind auth) — treat as empty, not a spinner.
+      setObjectives([]);
+      setSelectedObjId('');
+      setObjLoading(false);
+      return;
+    }
+    setObjLoading(true);
+    setObjError(null);
+    try {
+      const result = await listObjectives(apiWorkspaceId);
+      const selectable = result.items.filter((objective) => objective.status !== 'archived');
+      setObjectives(selectable);
+      setSelectedObjId(selectable[0]?.id ?? '');
+    } catch (err) {
+      setObjectives([]);
+      setSelectedObjId('');
+      setObjError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load strategic objectives.', status: 0 }));
+    } finally {
+      setObjLoading(false);
+    }
+  }, [apiWorkspaceId]);
+
+  useEffect(() => { loadObjectives(); }, [loadObjectives]);
+
+  const loadCases = useCallback(async () => {
+    if (!apiWorkspaceId || !selectedObjId) {
+      // No objective selected (or none exist) — nothing to list; the render guards handle messaging.
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await listBusinessCases(apiWorkspaceId, selectedObjId);
+      setItems(result.items);
+    } catch (err) {
+      setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load lean business cases.', status: 0 }));
+    } finally {
+      setLoading(false);
+    }
+  }, [apiWorkspaceId, selectedObjId]);
+
+  useEffect(() => { loadCases(); }, [loadCases]);
+
+  const setCreateField = (field: keyof typeof emptyCreateForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+
+  // Turn the string form into a typed body: drop empty strings, coerce the two forecast numbers.
+  const buildBody = (form: typeof emptyCreateForm): Partial<LeanBusinessCase> => {
+    const { forecastCost, forecastValue, ...strings } = form;
+    const body = Object.fromEntries(Object.entries(strings).filter(([, value]) => value !== '')) as Partial<LeanBusinessCase>;
+    if (forecastCost.trim() !== '' && !Number.isNaN(Number(forecastCost))) body.forecastCost = Number(forecastCost);
+    if (forecastValue.trim() !== '' && !Number.isNaN(Number(forecastValue))) body.forecastValue = Number(forecastValue);
+    return body;
+  };
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId || !selectedObjId) return;
+    setCreateError(null);
+    setCreating(true);
+    try {
+      await createBusinessCase(apiWorkspaceId, selectedObjId, buildBody(createForm));
+      setCreateForm(emptyCreateForm);
+      setShowCreate(false);
+      await loadCases();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create lean business case.', status: 0 }));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startEdit = (businessCase: LeanBusinessCase) => {
+    setCardError(null);
+    setEditingId(businessCase.id);
+    setEditDraft({
+      title: businessCase.title ?? '',
+      summary: businessCase.summary ?? '',
+      problemOpportunityStatement: businessCase.problemOpportunityStatement ?? '',
+      valueHypothesis: businessCase.valueHypothesis ?? '',
+      priority: businessCase.priority ?? '',
+      forecastCost: businessCase.forecastCost != null ? String(businessCase.forecastCost) : '',
+      forecastValue: businessCase.forecastValue != null ? String(businessCase.forecastValue) : '',
+      valueType: businessCase.valueType ?? '',
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    // Title is required on create, but PATCH treats fields as optional and '' counts as
+    // "provided" — so a blanked title would save a headerless card. Guard before the PATCH.
+    if (!editDraft.title.trim()) {
+      setCardError({ id, error: new ApiError({ code: 'validation_error', message: 'Title is required.', status: 0 }) });
+      return;
+    }
+    setSavingId(id);
+    try {
+      const { forecastCost, forecastValue, ...strings } = editDraft;
+      const patch: Partial<LeanBusinessCase> = {
+        ...strings,
+        // Empty clears the forecast (null); otherwise send the number, guarding NaN → null.
+        forecastCost: forecastCost.trim() === '' || Number.isNaN(Number(forecastCost)) ? null : Number(forecastCost),
+        forecastValue: forecastValue.trim() === '' || Number.isNaN(Number(forecastValue)) ? null : Number(forecastValue),
+      };
+      // An unselected enum is '', which is not a valid enum member and 422s. Omit these fields
+      // entirely rather than sending ''. (Third page to need this — see Stakeholders/Impacts.)
+      if (!patch.priority) delete patch.priority;
+      if (!patch.valueType) delete patch.valueType;
+      await updateBusinessCase(apiWorkspaceId, id, patch);
+      setEditingId(null);
+      await loadCases();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save lean business case.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  // Lifecycle transitions hit the dedicated /status endpoint, kept separate from content edits.
+  const changeStatus = async (id: string, status: CaseStatus) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await updateBusinessCaseStatus(apiWorkspaceId, id, status);
+      await loadCases();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to update case status.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const header = (
+    <SectionTitle eyebrow="Phase 2 · Delivery" title="Lean Business Cases" subtitle="Granular sub-initiatives of one objective. Each carries its own forecast." />
+  );
+
+  // State 0 — objectives still loading. Guard first so nothing flashes before the fetch resolves.
+  if (objLoading) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Loading…</p></HudPanel>
+      </div>
+    );
+  }
+
+  if (objError) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Could not load strategic objectives: {objError.message}</p></HudPanel>
+      </div>
+    );
+  }
+
+  // State 1 — no non-archived objective to parent a case. No picker/form/API call.
+  if (objectives.length === 0) {
+    return (
+      <div className="hud-page">
+        {header}
+        <HudPanel><p>Create a strategic objective first — cases belong to one.</p></HudPanel>
+        <RuleNote>Head to the Strategic Objectives page to create one, then return here.</RuleNote>
+      </div>
+    );
+  }
+
+  // Loaded shell — picker + create form stay mounted so switching objectives doesn't unmount the dropdown.
+  // The list region below swaps on the case-fetch state (error / loading / empty / records).
   return (
     <div className="hud-page">
-      <SectionTitle eyebrow="Phase 2 · Delivery" title="Lean Business Cases" subtitle="Granular sub-initiatives of one objective. Each carries its own forecast." />
-      <RuleNote>Cardinality: max {cardinalityLimits.leanBusinessCasesPerObjective} lean business cases per strategic objective. Active requires title, summary, problem/opportunity statement, value hypothesis, and priority.</RuleNote>
-      <div className="hud-primary-list-mobile">
-        {tenant.cases.map((businessCase: LeanBusinessCase) => {
-          const pending = ai.pending.cases[businessCase.id];
-          const saved = ai.saved.cases[businessCase.id];
-          const displayCase = { ...businessCase, ...saved, ...pending };
-          const objective = tenant.objectives.find((candidate) => candidate.id === businessCase.strategicObjectiveId);
-          const implementation = tenant.implementations.find((candidate) => candidate.leanBusinessCaseId === businessCase.id);
+      {header}
+      <RuleNote>Cardinality: lean business cases {items.length} / {cardinalityLimits.leanBusinessCasesPerObjective} for this objective. Active requires title, summary, problem/opportunity statement, value hypothesis, and priority.</RuleNote>
 
-          return (
-            <MobileRecordCard
-              key={businessCase.id}
-              title={displayCase.title}
-              summary={displayCase.summary}
-              badge={<StatusBadge status={displayCase.status} />}
-              rows={[
-                { label: 'Strategic objective', value: objective?.strategicInitiativeName },
-                { label: 'Priority', value: displayCase.priority },
-                { label: 'Forecast cost', value: formatCurrency(displayCase.forecastCost) },
-                { label: 'Implementation', value: implementation ? `1:1 · ${implementation.implementationStatus}` : 'Not created' },
-              ]}
-              action={<HudButton variant="ghost" onClick={() => ai.draftCase(tenant.workspace.name, businessCase)}><Sparkles size={16} /> Draft with AI</HudButton>}
-            />
-          );
-        })}
-      </div>
-      <div className="hud-primary-list-desktop">
-      {tenant.cases.map((businessCase: LeanBusinessCase) => {
-        const pending = ai.pending.cases[businessCase.id];
-        const saved = ai.saved.cases[businessCase.id];
-        const displayCase = { ...businessCase, ...saved, ...pending };
-        const objective = tenant.objectives.find((candidate) => candidate.id === businessCase.strategicObjectiveId);
-        const missing = getMissingLeanBusinessCaseActiveFields(displayCase);
-        const linkedValueStreams = state.leanBusinessCaseValueStreams
-          .filter((link) => link.leanBusinessCaseId === businessCase.id)
-          .map((link) => tenant.valueStreams.find((stream) => stream.id === link.valueStreamId))
-          .filter(Boolean) as ValueStream[];
-        const linkedKeyActivities = state.leanBusinessCaseKeyActivities
-          .filter((link) => link.leanBusinessCaseId === businessCase.id)
-          .map((link) => tenant.keyActivities.find((activity) => activity.id === link.keyActivityId))
-          .filter(Boolean);
-        const linkedCapabilities = state.leanBusinessCaseCapabilities
-          .filter((link) => link.leanBusinessCaseId === businessCase.id)
-          .map((link) => tenant.capabilities.find((capability) => capability.id === link.capabilityId))
-          .filter(Boolean) as BusinessCapability[];
-        const discovery = tenant.discoveries.find((candidate) => candidate.leanBusinessCaseId === businessCase.id);
-        const implementation = tenant.implementations.find((candidate) => candidate.leanBusinessCaseId === businessCase.id);
+      <HudPanel>
+        <SelectInput
+          label="Strategic objective"
+          value={selectedObjId}
+          onChange={setSelectedObjId}
+          options={objectives.map((objective) => ({ value: objective.id, label: objective.strategicInitiativeName ?? '(unnamed objective)' }))}
+        />
+      </HudPanel>
 
-        return (
-          <HudPanel key={businessCase.id}>
-            <div className="hud-record-head">
-              <div><h2>{displayCase.title}</h2><p>{displayCase.summary}</p></div>
-              <div className="hud-badge-stack">
-                <HudButton variant="ghost" onClick={() => ai.draftCase(tenant.workspace.name, businessCase)}><Sparkles size={16} /> Draft with AI</HudButton>
-                <StatusBadge status={displayCase.status} />
-              </div>
-            </div>
-            {pending && (
-              <div className="hud-ai-edit-panel">
-                <AiBanner />
-                <div className="hud-ai-edit-grid">
-                  <AiTextArea label="Summary" value={String(displayCase.summary || '')} onChange={(value) => ai.updateCase(businessCase.id, 'summary', value)} onRefine={() => ai.refineCase(businessCase.id, 'summary', String(displayCase.summary || ''))} />
-                  <AiTextArea label="Problem / opportunity" value={String(displayCase.problemOpportunityStatement || '')} onChange={(value) => ai.updateCase(businessCase.id, 'problemOpportunityStatement', value)} onRefine={() => ai.refineCase(businessCase.id, 'problemOpportunityStatement', String(displayCase.problemOpportunityStatement || ''))} />
-                  <AiTextArea label="Value hypothesis" value={String(displayCase.valueHypothesis || '')} onChange={(value) => ai.updateCase(businessCase.id, 'valueHypothesis', value)} onRefine={() => ai.refineCase(businessCase.id, 'valueHypothesis', String(displayCase.valueHypothesis || ''))} />
-                  <AiTextArea label="Priority" value={String(displayCase.priority || '')} onChange={(value) => ai.updateCase(businessCase.id, 'priority', value)} onRefine={() => ai.refineCase(businessCase.id, 'priority', String(displayCase.priority || ''))} />
-                </div>
-                <div className="hud-actions">
-                  <HudButton onClick={() => ai.saveCase(businessCase.id)}>Save</HudButton>
-                  <HudButton variant="ghost" onClick={() => ai.discardCase(businessCase.id)}>Clear / discard</HudButton>
-                </div>
-              </div>
-            )}
-            <FieldGrid rows={[
-              { label: 'Strategic objective', value: objective?.strategicInitiativeName },
-              { label: 'Problem / opportunity', value: displayCase.problemOpportunityStatement },
-              { label: 'Value hypothesis', value: displayCase.valueHypothesis },
-              { label: 'Priority', value: displayCase.priority },
-              { label: 'Forecast cost', value: formatCurrency(displayCase.forecastCost) },
-              { label: 'Forecast value', value: formatCurrency(displayCase.forecastValue) },
-              { label: 'Value type', value: displayCase.valueType },
-              { label: 'Discovery', value: discovery ? `1:1 · ${discovery.status}` : 'Not created' },
-              { label: 'Implementation', value: implementation ? `1:1 · ${implementation.implementationStatus}` : 'Not created' },
-            ]} />
-            <ReferenceOrCreate label="Case value streams" items={linkedValueStreams.map((stream) => ({ id: stream.id, name: stream.name, origin: stream.origin }))} />
-            <ReferenceOrCreate label="Case capabilities" items={linkedCapabilities.map((capability) => ({ id: capability.id, name: capability.capabilityName, origin: capability.origin }))} />
-            <ReferenceOrCreate label="Case key activities" items={linkedKeyActivities.map((activity) => ({ id: activity!.id, name: activity!.activityName, origin: activity!.origin }))} />
-            {missing.length > 0 && <RuleNote>Cannot mark active. Missing: {missing.join(', ')}.</RuleNote>}
-          </HudPanel>
-        );
-      })}
+      <div className="hud-actions">
+        <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+          <Plus size={16} /> {showCreate ? 'Close' : 'New lean business case'}
+        </HudButton>
       </div>
+      {showCreate && (
+        <HudPanel>
+          <form onSubmit={submitCreate} className="hud-form">
+            <TextInput label="Title (required)" value={createForm.title} onChange={(value) => setCreateField('title', value)} />
+            <TextInput label="Summary" value={createForm.summary} onChange={(value) => setCreateField('summary', value)} />
+            <TextInput label="Problem / opportunity statement" value={createForm.problemOpportunityStatement} onChange={(value) => setCreateField('problemOpportunityStatement', value)} />
+            <TextInput label="Value hypothesis" value={createForm.valueHypothesis} onChange={(value) => setCreateField('valueHypothesis', value)} />
+            <SelectInput label="Priority" value={createForm.priority} onChange={(value) => setCreateField('priority', value)} options={priorityOptions} />
+            <TextInput label="Forecast cost" type="number" value={createForm.forecastCost} onChange={(value) => setCreateField('forecastCost', value)} />
+            <TextInput label="Forecast value" type="number" value={createForm.forecastValue} onChange={(value) => setCreateField('forecastValue', value)} />
+            <SelectInput label="Value type" value={createForm.valueType} onChange={(value) => setCreateField('valueType', value)} options={caseValueTypeOptions} />
+            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'lean business cases for this objective')}</p>}
+            <HudButton type="submit" disabled={creating || !createForm.title.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create lean business case'}</HudButton>
+          </form>
+        </HudPanel>
+      )}
+
+      {error ? (
+        <HudPanel><p>Could not load lean business cases: {error.message}</p></HudPanel>
+      ) : loading ? (
+        <HudPanel><p>Loading lean business cases…</p></HudPanel>
+      ) : items.length === 0 ? (
+        <HudPanel><p>No lean business cases for this objective yet. Create your first to break the objective into fundable initiatives.</p></HudPanel>
+      ) : (
+        <>
+        <div className="hud-primary-list-mobile">
+          {items.map((businessCase) => {
+            const status = businessCase.status ?? 'draft';
+            return (
+              <MobileRecordCard
+                key={businessCase.id}
+                title={businessCase.title?.trim() || '(untitled case)'}
+                summary={businessCase.summary ?? ''}
+                badge={<StatusBadge status={status} />}
+                rows={[
+                  { label: 'Priority', value: businessCase.priority ? prettifyEnum(businessCase.priority) : '' },
+                  { label: 'Value type', value: businessCase.valueType ? prettifyEnum(businessCase.valueType) : '' },
+                  { label: 'Forecast cost', value: formatCurrency(businessCase.forecastCost) },
+                  { label: 'Forecast value', value: formatCurrency(businessCase.forecastValue) },
+                ]}
+                action={null}
+              />
+            );
+          })}
+        </div>
+        <div className="hud-primary-list-desktop">
+          {items.map((businessCase) => {
+            const missing = getMissingLeanBusinessCaseActiveFields(businessCase);
+            const status = businessCase.status ?? 'draft';
+            return (
+              <HudPanel key={businessCase.id}>
+                <div className="hud-record-head">
+                  <div><h2>{businessCase.title?.trim() || '(untitled case)'}</h2><p>{businessCase.summary ?? ''}</p></div>
+                  <div className="hud-badge-stack">
+                    {editingId !== businessCase.id && <HudButton variant="ghost" onClick={() => startEdit(businessCase)}>Edit</HudButton>}
+                    {status === 'draft' && <HudButton variant="ghost" disabled={savingId === businessCase.id || missing.length > 0} onClick={() => changeStatus(businessCase.id, 'active')}>Activate</HudButton>}
+                    {status === 'active' && <HudButton variant="ghost" disabled={savingId === businessCase.id} onClick={() => changeStatus(businessCase.id, 'archived')}>Archive</HudButton>}
+                    <StatusBadge status={status} />
+                  </div>
+                </div>
+                {editingId === businessCase.id && (
+                  <div className="hud-ai-edit-panel">
+                    <div className="hud-ai-edit-grid">
+                      <TextInput label="Title" value={editDraft.title} onChange={(value) => setEditDraft((prev) => ({ ...prev, title: value }))} />
+                      <TextInput label="Summary" value={editDraft.summary} onChange={(value) => setEditDraft((prev) => ({ ...prev, summary: value }))} />
+                      <TextInput label="Problem / opportunity statement" value={editDraft.problemOpportunityStatement} onChange={(value) => setEditDraft((prev) => ({ ...prev, problemOpportunityStatement: value }))} />
+                      <TextInput label="Value hypothesis" value={editDraft.valueHypothesis} onChange={(value) => setEditDraft((prev) => ({ ...prev, valueHypothesis: value }))} />
+                      <SelectInput label="Priority" value={editDraft.priority} onChange={(value) => setEditDraft((prev) => ({ ...prev, priority: value }))} options={priorityOptions} />
+                      <TextInput label="Forecast cost" type="number" value={editDraft.forecastCost} onChange={(value) => setEditDraft((prev) => ({ ...prev, forecastCost: value }))} />
+                      <TextInput label="Forecast value" type="number" value={editDraft.forecastValue} onChange={(value) => setEditDraft((prev) => ({ ...prev, forecastValue: value }))} />
+                      <SelectInput label="Value type" value={editDraft.valueType} onChange={(value) => setEditDraft((prev) => ({ ...prev, valueType: value }))} options={caseValueTypeOptions} />
+                    </div>
+                    <div className="hud-actions">
+                      <HudButton disabled={savingId === businessCase.id} onClick={() => saveEdit(businessCase.id)}>{savingId === businessCase.id ? 'Saving…' : 'Save'}</HudButton>
+                      <HudButton variant="ghost" onClick={() => { setEditingId(null); setCardError(null); }}>Cancel</HudButton>
+                    </div>
+                  </div>
+                )}
+                {cardError?.id === businessCase.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error, 'lean business cases for this objective')}</p>}
+                <FieldGrid rows={[
+                  { label: 'Priority', value: businessCase.priority ? prettifyEnum(businessCase.priority) : '' },
+                  { label: 'Value type', value: businessCase.valueType ? prettifyEnum(businessCase.valueType) : '' },
+                  { label: 'Forecast cost', value: formatCurrency(businessCase.forecastCost) },
+                  { label: 'Forecast value', value: formatCurrency(businessCase.forecastValue) },
+                  { label: 'Problem / opportunity', value: businessCase.problemOpportunityStatement },
+                  { label: 'Value hypothesis', value: businessCase.valueHypothesis },
+                ]} />
+                {status === 'draft' && missing.length > 0 && <RuleNote>Cannot activate. Missing: {missing.join(', ')}.</RuleNote>}
+              </HudPanel>
+            );
+          })}
+        </div>
+        </>
+      )}
     </div>
   );
 }
@@ -3935,7 +4237,7 @@ function ImplementedPage({
   if (route === 'personas') return <PersonasPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
   if (route === 'information') return <InformationPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
   if (route === 'impacts') return <ImpactsPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
-  if (route === 'cases') return <CasesPage tenant={tenant} ai={ai} />;
+  if (route === 'cases') return <CasesPage apiWorkspaceId={apiWorkspaceId} />;
   if (route === 'discovery') return <DiscoveryPage tenant={tenant} ai={ai} />;
   if (route === 'features') return <FeaturesPage tenant={tenant} />;
   if (route === 'requirements') return <RequirementsPage tenant={tenant} />;
