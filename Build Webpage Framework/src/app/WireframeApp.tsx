@@ -53,6 +53,7 @@ import { listStakeholders, createStakeholder, updateStakeholder, deleteStakehold
 import { listInformationConcepts, createInformationConcept, updateInformationConcept, deleteInformationConcept } from '../api/informationConcepts';
 import { listBusinessImpacts, createBusinessImpact, updateBusinessImpact, deleteBusinessImpact } from '../api/businessImpacts';
 import { listBusinessCases, createBusinessCase, updateBusinessCase, updateBusinessCaseStatus } from '../api/businessCases';
+import { getDiscoveryForCase, createDiscovery, updateDiscovery } from '../api/discovery';
 
 type RouteId =
   | 'landing'
@@ -3865,89 +3866,339 @@ function CasesPage({ apiWorkspaceId }: { apiWorkspaceId: string | null }) {
   );
 }
 
-// Note: Discovery page for the 1:1 case discovery record and its ten qualitative finding areas. It also exposes
-// the roll-down builder and links to personas, processes, and information concepts.
-function DiscoveryPage({ tenant, ai }: { tenant: TenantData; ai: AiActions }) {
+// The ten qualitative finding areas of a discovery, in display order. All are optional strings on
+// both create and PATCH (backend schema `DiscoveryFindingsBase`), so there is no required field.
+const emptyDiscoveryForm = {
+  problemStatement: '',
+  personaFindings: '',
+  journeyMap: '',
+  currentStateProcessMap: '',
+  bottleneckAnalysis: '',
+  dataFindings: '',
+  legacyConstraints: '',
+  futureStateNeeds: '',
+  discoveryMetrics: '',
+  governanceFindings: '',
+};
+const discoveryFindingFields: [keyof typeof emptyDiscoveryForm, string][] = [
+  ['problemStatement', 'Problem statement'],
+  ['personaFindings', 'Persona findings'],
+  ['journeyMap', 'Journey map'],
+  ['currentStateProcessMap', 'Current process map'],
+  ['bottleneckAnalysis', 'Bottleneck analysis'],
+  ['dataFindings', 'Data findings'],
+  ['legacyConstraints', 'Legacy constraints'],
+  ['futureStateNeeds', 'Future-state needs'],
+  ['discoveryMetrics', 'Discovery metrics'],
+  ['governanceFindings', 'Governance findings'],
+];
+// Update-only enum. Backend forces `draft` on create and only allows draft->active->completed.
+const discoveryStatusOptions = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'active', label: 'Active' },
+  { value: 'completed', label: 'Completed' },
+];
+
+// Note: Discovery page for the 1:1 case discovery record and its ten qualitative finding areas.
+// Discovery is a singleton per lean business case, so two chained pickers (objective -> case) select
+// the record before it is fetched GET-or-404, mirroring the Business Architecture singleton flow.
+// The roll-down builder and persona/process/concept links are a separate task and intentionally omitted.
+function DiscoveryPage({ tenant, apiWorkspaceId }: { tenant: TenantData; apiWorkspaceId: string | null }) {
+  // Objective picker — a case belongs to a strategic objective, so one must be selected first.
+  const [objectives, setObjectives] = useState<StrategicObjective[]>([]);
+  const [objLoading, setObjLoading] = useState(true);
+  const [objError, setObjError] = useState<ApiError | null>(null);
+  const [selectedObjId, setSelectedObjId] = useState<string>('');
+
+  // Case picker — a discovery is 1:1 with a case. No auto-select: the user picks the case explicitly.
+  const [cases, setCases] = useState<LeanBusinessCase[]>([]);
+  const [casesLoading, setCasesLoading] = useState(true);
+  const [casesError, setCasesError] = useState<ApiError | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string>('');
+
+  // The singleton discovery for the selected case. null after a 404 means "not created yet".
+  const [discovery, setDiscovery] = useState<Discovery | null>(null);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<ApiError | null>(null);
+  // Holds the caseId of the most recent discovery request so a stale response (after a rapid case
+  // switch) can be discarded on arrival — same guard as the app-level refetchArchitecture.
+  const discoveryRequestRef = useRef<string | null>(null);
+  const discoveryId = discovery?.id ?? null;
+
+  // Create-form state (shown only when the selected case has no discovery yet).
+  const [createForm, setCreateForm] = useState(emptyDiscoveryForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  // Inline-edit state. editDraft carries the ten findings plus the update-only status enum.
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState({ ...emptyDiscoveryForm, status: '' });
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<ApiError | null>(null);
+
+  const setCreateField = (field: keyof typeof emptyDiscoveryForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+  const setEditField = (field: keyof typeof emptyDiscoveryForm | 'status', value: string) =>
+    setEditDraft((prev) => ({ ...prev, [field]: value }));
+
+  // Placeholder AI drafting — there is no real discovery AI endpoint (and AI never writes the DB).
+  // It only fills the active form's finding fields; persistence is always the explicit Create/Save.
+  const mergeAiDraft = (current: Record<string, string>): Record<string, string> => {
+    const draft = mockDiscoveryDraft(tenant.workspace.name);
+    const next = { ...current };
+    for (const [field] of discoveryFindingFields) {
+      const value = draft[field];
+      if (typeof value === 'string') next[field] = value;
+    }
+    return next;
+  };
+
+  // Load the workspace's objectives, drop archived (they can't parent a case), auto-select the first.
+  const loadObjectives = useCallback(async () => {
+    if (!apiWorkspaceId) {
+      setObjectives([]);
+      setSelectedObjId('');
+      setObjLoading(false);
+      return;
+    }
+    setObjLoading(true);
+    setObjError(null);
+    try {
+      const result = await listObjectives(apiWorkspaceId);
+      const selectable = result.items.filter((objective) => objective.status !== 'archived');
+      setObjectives(selectable);
+      setSelectedObjId(selectable[0]?.id ?? '');
+    } catch (err) {
+      setObjectives([]);
+      setSelectedObjId('');
+      setObjError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load strategic objectives.', status: 0 }));
+    } finally {
+      setObjLoading(false);
+    }
+  }, [apiWorkspaceId]);
+
+  useEffect(() => { loadObjectives(); }, [loadObjectives]);
+
+  // List cases for the selected objective. Changing the objective re-runs this and resets the case
+  // selection, so we never hold a case id that belongs to a different (no-longer-shown) objective.
+  const loadCases = useCallback(async () => {
+    setSelectedCaseId('');
+    if (!apiWorkspaceId || !selectedObjId) {
+      setCases([]);
+      setCasesLoading(false);
+      return;
+    }
+    setCasesLoading(true);
+    setCasesError(null);
+    try {
+      const result = await listBusinessCases(apiWorkspaceId, selectedObjId);
+      setCases(result.items);
+    } catch (err) {
+      setCases([]);
+      setCasesError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load lean business cases.', status: 0 }));
+    } finally {
+      setCasesLoading(false);
+    }
+  }, [apiWorkspaceId, selectedObjId]);
+
+  useEffect(() => { loadCases(); }, [loadCases]);
+
+  // GET-or-404 the singleton discovery for the selected case. A 404 means "not created yet" (null).
+  const loadDiscovery = useCallback(async () => {
+    const requestedCase = selectedCaseId;
+    discoveryRequestRef.current = requestedCase;
+    // Switching case exits any open edit and clears create state so nothing carries across records.
+    setEditing(false);
+    setCreateForm(emptyDiscoveryForm);
+    setCreateError(null);
+    setEditError(null);
+    setDiscoveryError(null);
+    if (!apiWorkspaceId || !requestedCase) {
+      setDiscovery(null);
+      setDiscoveryLoading(false);
+      return;
+    }
+    setDiscoveryLoading(true);
+    try {
+      const record = await getDiscoveryForCase(apiWorkspaceId, requestedCase);
+      if (discoveryRequestRef.current !== requestedCase) return; // superseded by a newer case
+      setDiscovery(record);
+    } catch (err) {
+      if (discoveryRequestRef.current !== requestedCase) return; // superseded by a newer case
+      if (err instanceof ApiError && err.status === 404) {
+        setDiscovery(null); // not created yet — expected, not an error
+      } else {
+        setDiscovery(null);
+        setDiscoveryError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load discovery.', status: 0 }));
+      }
+    } finally {
+      if (discoveryRequestRef.current === requestedCase) setDiscoveryLoading(false);
+    }
+  }, [apiWorkspaceId, selectedCaseId]);
+
+  useEffect(() => { loadDiscovery(); }, [loadDiscovery]);
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId || !selectedCaseId) return;
+    setCreateError(null);
+    setCreating(true);
+    try {
+      // Send only the findings the user actually filled in. Status is not accepted on create.
+      const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<Discovery>;
+      await createDiscovery(apiWorkspaceId, selectedCaseId, body);
+      setCreateForm(emptyDiscoveryForm);
+      await loadDiscovery();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create discovery.', status: 0 }));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const startEdit = (record: Discovery) => {
+    setEditError(null);
+    setEditDraft({
+      problemStatement: record.problemStatement ?? '',
+      personaFindings: record.personaFindings ?? '',
+      journeyMap: record.journeyMap ?? '',
+      currentStateProcessMap: record.currentStateProcessMap ?? '',
+      bottleneckAnalysis: record.bottleneckAnalysis ?? '',
+      dataFindings: record.dataFindings ?? '',
+      legacyConstraints: record.legacyConstraints ?? '',
+      futureStateNeeds: record.futureStateNeeds ?? '',
+      discoveryMetrics: record.discoveryMetrics ?? '',
+      governanceFindings: record.governanceFindings ?? '',
+      status: record.status ?? '',
+    });
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    if (!apiWorkspaceId || !discoveryId) return;
+    setEditError(null);
+    const patch: Partial<Discovery> = { ...editDraft } as Partial<Discovery>;
+    // status is the only enum; '' is not a valid member and would 422 — omit it entirely.
+    if (!patch.status) delete patch.status;
+    // No required-field guard here on purpose: unlike every other wired page, all discovery fields
+    // are optional on the backend, so a blanked finding is a legitimate clear, not an invalid save.
+    setSaving(true);
+    try {
+      // Invalid status transitions (e.g. draft->completed) come back as 409 and render below.
+      await updateDiscovery(apiWorkspaceId, discoveryId, patch);
+      setEditing(false);
+      await loadDiscovery();
+    } catch (err) {
+      setEditError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save discovery.', status: 0 }));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const header = (
+    <SectionTitle eyebrow="Phase 2 · Delivery" title="Discovery" subtitle="Product discovery for a single lean business case." />
+  );
+  const rule = (
+    <RuleNote>Discovery is 1:1 with a lean business case. Pick an objective, then a case, to view or create its discovery.</RuleNote>
+  );
+
+  // State 0 — objectives still loading. Guard first so nothing flashes before the fetch resolves.
+  if (objLoading) {
+    return <div className="hud-page">{header}{rule}<HudPanel><p>Loading…</p></HudPanel></div>;
+  }
+  if (objError) {
+    return <div className="hud-page">{header}{rule}<HudPanel><p>Could not load strategic objectives: {objError.message}</p></HudPanel></div>;
+  }
+  // State 1 — no non-archived objective to parent a case. No pickers/API call.
+  if (objectives.length === 0) {
+    return (
+      <div className="hud-page">
+        {header}{rule}
+        <HudPanel><p>Create a strategic objective first — cases (and their discovery) belong to one.</p></HudPanel>
+      </div>
+    );
+  }
+
+  const selectedCase = cases.find((candidate) => candidate.id === selectedCaseId);
+
+  // Loaded shell — both pickers stay mounted so the region below can swap on the case/discovery
+  // fetch state without unmounting the dropdowns.
   return (
     <div className="hud-page">
-      <SectionTitle eyebrow="Phase 2 · Delivery" title="Discovery" subtitle="Product discovery for a single business case, including the guided roll-down builder." />
-      <RuleNote>Discovery is 1:1 with a lean business case. Architecture created during discovery is tagged origin: discovery, but remains reusable by any objective or case.</RuleNote>
-      {tenant.discoveries.map((discovery) => {
-        const pending = ai.pending.discoveries[discovery.id];
-        const saved = ai.saved.discoveries[discovery.id];
-        const displayDiscovery = { ...discovery, ...saved, ...pending };
-        const businessCase = tenant.cases.find((candidate) => candidate.id === discovery.leanBusinessCaseId);
-        const linkedPersonas = state.discoveryStakeholderPersonas
-          .filter((link) => link.discoveryId === discovery.id)
-          .map((link) => tenant.personas.find((persona) => persona.id === link.stakeholderPersonaId))
-          .filter(Boolean) as StakeholderPersona[];
-        const linkedProcesses = state.discoveryBusinessProcesses
-          .filter((link) => link.discoveryId === discovery.id)
-          .map((link) => tenant.processes.find((process) => process.id === link.businessProcessId))
-          .filter(Boolean) as BusinessProcess[];
-        const linkedConcepts = state.discoveryInformationConcepts
-          .filter((link) => link.discoveryId === discovery.id)
-          .map((link) => tenant.informationConcepts.find((concept) => concept.id === link.informationConceptId))
-          .filter(Boolean) as InformationConcept[];
+      {header}{rule}
+      <HudPanel>
+        <SelectInput
+          label="Strategic objective"
+          value={selectedObjId}
+          onChange={setSelectedObjId}
+          options={objectives.map((objective) => ({ value: objective.id, label: objective.strategicInitiativeName ?? '(unnamed objective)' }))}
+        />
+        <SelectInput
+          label="Lean business case"
+          value={selectedCaseId}
+          onChange={setSelectedCaseId}
+          options={cases.map((businessCase) => ({ value: businessCase.id, label: businessCase.title?.trim() || '(untitled case)' }))}
+        />
+      </HudPanel>
 
-        return (
-          <HudPanel key={discovery.id}>
-            <div className="hud-record-head">
-              <div><h2>{businessCase?.title || 'Discovery'}</h2><p>{displayDiscovery.problemStatement}</p></div>
-              <div className="hud-badge-stack">
-                <HudButton variant="ghost" onClick={() => ai.draftDiscovery(tenant.workspace.name, discovery)}><Sparkles size={16} /> Draft findings with AI</HudButton>
-                <StatusBadge status={displayDiscovery.status} />
+      {casesError ? (
+        <HudPanel><p>Could not load lean business cases: {casesError.message}</p></HudPanel>
+      ) : casesLoading ? (
+        <HudPanel><p>Loading lean business cases…</p></HudPanel>
+      ) : cases.length === 0 ? (
+        <HudPanel><p>No lean business cases for this objective yet. Create one on the Lean Business Cases page first.</p></HudPanel>
+      ) : !selectedCaseId ? (
+        <HudPanel><p>Select a lean business case to view or create its discovery.</p></HudPanel>
+      ) : discoveryError ? (
+        <HudPanel><p>Could not load discovery: {discoveryError.message}</p></HudPanel>
+      ) : discoveryLoading ? (
+        <HudPanel><p>Loading discovery…</p></HudPanel>
+      ) : !discovery ? (
+        // No discovery for this case yet — offer a create form. Fields may be null; all optional.
+        <HudPanel>
+          <p>No discovery yet for {selectedCase?.title?.trim() || 'this case'}.</p>
+          <form onSubmit={submitCreate} className="hud-form">
+            {discoveryFindingFields.map(([field, label]) => (
+              <TextInput key={field} label={label} value={createForm[field]} onChange={(value) => setCreateField(field, value)} />
+            ))}
+            <div className="hud-actions">
+              <HudButton type="button" variant="ghost" onClick={() => setCreateForm((prev) => mergeAiDraft(prev) as typeof emptyDiscoveryForm)}><Sparkles size={16} /> Draft findings with AI</HudButton>
+            </div>
+            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'discovery for this case')}</p>}
+            <HudButton type="submit" disabled={creating}><Plus size={16} /> {creating ? 'Creating…' : 'Create discovery'}</HudButton>
+          </form>
+        </HudPanel>
+      ) : (
+        // Discovery exists — view + inline edit. Fields may be null despite the type, so guard each.
+        <HudPanel>
+          <div className="hud-record-head">
+            <div><h2>{selectedCase?.title?.trim() || 'Discovery'}</h2><p>{discovery.problemStatement ?? ''}</p></div>
+            <div className="hud-badge-stack">
+              <StatusBadge status={discovery.status ?? 'draft'} />
+              {!editing && <HudButton variant="ghost" onClick={() => startEdit(discovery)}>Edit</HudButton>}
+            </div>
+          </div>
+          {editing && (
+            <div className="hud-ai-edit-panel">
+              <div className="hud-ai-edit-grid">
+                {discoveryFindingFields.map(([field, label]) => (
+                  <TextInput key={field} label={label} value={editDraft[field]} onChange={(value) => setEditField(field, value)} />
+                ))}
+                <SelectInput label="Status" value={editDraft.status} onChange={(value) => setEditField('status', value)} options={discoveryStatusOptions} />
+              </div>
+              <div className="hud-actions">
+                <HudButton type="button" variant="ghost" onClick={() => setEditDraft((prev) => ({ ...prev, ...mergeAiDraft(prev) }))}><Sparkles size={16} /> Draft findings with AI</HudButton>
+                <HudButton disabled={saving} onClick={saveEdit}>{saving ? 'Saving…' : 'Save'}</HudButton>
+                <HudButton variant="ghost" onClick={() => { setEditing(false); setEditError(null); }}>Cancel</HudButton>
               </div>
             </div>
-            {pending && (
-              <div className="hud-ai-edit-panel">
-                <AiBanner discovery />
-                <div className="hud-ai-edit-grid">
-                  {([
-                    ['problemStatement', 'Problem statement'],
-                    ['personaFindings', 'Persona findings'],
-                    ['journeyMap', 'Journey map'],
-                    ['currentStateProcessMap', 'Current process map'],
-                    ['bottleneckAnalysis', 'Bottleneck analysis'],
-                    ['dataFindings', 'Data findings'],
-                    ['legacyConstraints', 'Legacy constraints'],
-                    ['futureStateNeeds', 'Future-state needs'],
-                    ['discoveryMetrics', 'Discovery metrics'],
-                    ['governanceFindings', 'Governance findings'],
-                  ] as [keyof Discovery, string][]).map(([field, label]) => (
-                    <AiTextArea
-                      key={field}
-                      label={label}
-                      value={String(displayDiscovery[field] || '')}
-                      onChange={(value) => ai.updateDiscovery(discovery.id, field, value)}
-                      onRefine={() => ai.refineDiscovery(discovery.id, field, String(displayDiscovery[field] || ''))}
-                    />
-                  ))}
-                </div>
-                <div className="hud-actions">
-                  <HudButton onClick={() => ai.saveDiscovery(discovery.id)}>Save</HudButton>
-                  <HudButton variant="ghost" onClick={() => ai.discardDiscovery(discovery.id)}>Clear / discard</HudButton>
-                </div>
-              </div>
-            )}
-            <FieldGrid rows={[
-              { label: 'Persona findings', value: displayDiscovery.personaFindings },
-              { label: 'Journey map', value: displayDiscovery.journeyMap },
-              { label: 'Current process map', value: displayDiscovery.currentStateProcessMap },
-              { label: 'Bottleneck analysis', value: displayDiscovery.bottleneckAnalysis },
-              { label: 'Data findings', value: displayDiscovery.dataFindings },
-              { label: 'Legacy constraints', value: displayDiscovery.legacyConstraints },
-              { label: 'Future-state needs', value: displayDiscovery.futureStateNeeds },
-              { label: 'Discovery metrics', value: displayDiscovery.discoveryMetrics },
-              { label: 'Governance findings', value: displayDiscovery.governanceFindings },
-            ]} />
-            <RollDownBuilder tenant={tenant} />
-            <ReferenceOrCreate label="Discovery personas" items={linkedPersonas.map((persona) => ({ id: persona.id, name: persona.name, origin: persona.origin }))} />
-            <ReferenceOrCreate label="Discovery processes" items={linkedProcesses.map((process) => ({ id: process.id, name: process.processName, origin: process.origin }))} />
-            <ReferenceOrCreate label="Discovery information concepts" items={linkedConcepts.map((concept) => ({ id: concept.id, name: concept.conceptName, origin: concept.origin }))} />
-          </HudPanel>
-        );
-      })}
+          )}
+          {editError && <p className="hud-form-error" role="alert">{renderApiMessage(editError, 'discovery for this case')}</p>}
+          <FieldGrid rows={discoveryFindingFields
+            .filter(([field]) => field !== 'problemStatement')
+            .map(([field, label]) => ({ label, value: discovery[field] ?? '' }))} />
+        </HudPanel>
+      )}
     </div>
   );
 }
@@ -4238,7 +4489,7 @@ function ImplementedPage({
   if (route === 'information') return <InformationPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
   if (route === 'impacts') return <ImpactsPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
   if (route === 'cases') return <CasesPage apiWorkspaceId={apiWorkspaceId} />;
-  if (route === 'discovery') return <DiscoveryPage tenant={tenant} ai={ai} />;
+  if (route === 'discovery') return <DiscoveryPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} />;
   if (route === 'features') return <FeaturesPage tenant={tenant} />;
   if (route === 'requirements') return <RequirementsPage tenant={tenant} />;
   if (route === 'deliverables') return <DeliverablesPage tenant={tenant} />;
