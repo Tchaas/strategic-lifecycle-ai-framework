@@ -54,6 +54,10 @@ import { listInformationConcepts, createInformationConcept, updateInformationCon
 import { listBusinessImpacts, createBusinessImpact, updateBusinessImpact, deleteBusinessImpact } from '../api/businessImpacts';
 import { listBusinessCases, createBusinessCase, updateBusinessCase, updateBusinessCaseStatus } from '../api/businessCases';
 import { getDiscoveryForCase, createDiscovery, updateDiscovery } from '../api/discovery';
+import { listFeatures, createFeature, updateFeature, deleteFeature } from '../api/features';
+import { listRequirements, createRequirement, updateRequirement, deleteRequirement } from '../api/requirements';
+import { listDeliverables, createDeliverable, updateDeliverable, deleteDeliverable } from '../api/deliverables';
+import { getImplementationForCase, createImplementation, updateImplementation } from '../api/implementation';
 
 type RouteId =
   | 'landing'
@@ -528,6 +532,18 @@ const impactTypeOptions = toOptions(['process', 'financial', 'customer', 'risk',
 const severityOptions = toOptions(['low', 'medium', 'high']);
 const priorityOptions = toOptions(['low', 'medium', 'high']);
 const caseValueTypeOptions = toOptions(['cost_savings', 'revenue', 'risk_reduction', 'efficiency']);
+// Phase 2 delivery enums (backend/app/schemas/solution.py + implementation.py). Feature/requirement/
+// deliverable `status` reuse discoveryStatusOptions (draft->active->completed, PATCH-only).
+const featureTypeOptions = toOptions(['user_facing', 'operational', 'analytical', 'integration', 'platform']);
+const requirementTypeOptions = toOptions(['functional', 'non_functional', 'data', 'integration', 'security']);
+const deliverableTypeOptions = toOptions([
+  'conceptual_architecture_document', 'end_to_end_architecture_diagram', 'system_context_diagram',
+  'capability_to_component_diagram', 'value_stream_to_feature_map', 'data_flow_diagram',
+  'api_integration_view', 'governance_oversight_view', 'prioritized_epic_feature_roadmap',
+  'requirement_sets', 'risk_dependency_register', 'traceability_matrix',
+]);
+const deliverableSourceOptions = toOptions(['suggested', 'user_finalized']);
+const implementationStatusOptions = toOptions(['not_started', 'in_progress', 'completed', 'on_hold']);
 
 // Target dates come in as ISO strings or '' / null. Show "Not entered" when both are blank,
 // matching every other empty field — instead of the literal "null to null".
@@ -4232,132 +4248,981 @@ function RollDownBuilder({ tenant }: { tenant: TenantData }) {
 
 // Note: Features page for solution pieces that enable capabilities and belong to a lean business case. It makes
 // the capability-to-feature bridge visible before requirements are detailed.
-function FeaturesPage({ tenant }: { tenant: TenantData }) {
-  return (
-    <ListPage
-      eyebrow="Phase 2 · Delivery"
-      title="Features"
-      subtitle="Solution pieces that enable a capability and belong to a business case."
-      rule="A feature optionally enables one capability, which is how features connect back to value streams."
-      rows={tenant.features.map((feature: Feature) => {
-        const businessCase = tenant.cases.find((candidate) => candidate.id === feature.leanBusinessCaseId);
-        const capability = tenant.capabilities.find((candidate) => candidate.id === feature.capabilityId);
-        const requirements = tenant.requirements.filter((requirement) => requirement.featureId === feature.id);
-        return {
-          id: feature.id,
-          title: feature.featureName,
-          meta: feature.description,
-          badges: [<StatusBadge status={feature.status} key="status" />],
-          fields: [
-            { label: 'Business case', value: businessCase?.title },
-            { label: 'Capability', value: capability?.capabilityName },
-            { label: 'Feature type', value: feature.featureType },
-            { label: 'Priority', value: feature.priority },
-            { label: 'Requirements', value: requirements.length },
-          ],
-          references: capability ? <ReferenceOrCreate label="Enabled capability" items={[{ id: capability.id, name: capability.capabilityName, origin: capability.origin }]} /> : undefined,
-        };
-      })}
-    />
-  );
-}
+// Note: Features page. Wired to the real API — features nest under a lean business case, so two
+// chained pickers (objective -> case) scope the list before the Capabilities-style CRUD below.
+// The optional capability link is intentionally omitted to keep the form minimal.
+function FeaturesPage({ apiWorkspaceId }: { apiWorkspaceId: string | null }) {
+  // Objective picker — a case belongs to a strategic objective, so one must be selected first.
+  const [objectives, setObjectives] = useState<StrategicObjective[]>([]);
+  const [objLoading, setObjLoading] = useState(true);
+  const [objError, setObjError] = useState<ApiError | null>(null);
+  const [selectedObjId, setSelectedObjId] = useState<string>('');
 
-// Note: Requirements page for detailed specifications under features. It shows requirement type, acceptance
-// criteria, priority, and feature ownership without linking requirements directly to streams.
-function RequirementsPage({ tenant }: { tenant: TenantData }) {
-  return (
-    <ListPage
-      eyebrow="Phase 2 · Delivery"
-      title="Requirements"
-      subtitle="Detailed specifications under a feature."
-      rule="Requirements remain scoped under features; they do not link directly to value streams."
-      rows={tenant.requirements.map((requirement: Requirement) => {
-        const feature = tenant.features.find((candidate) => candidate.id === requirement.featureId);
-        return {
-          id: requirement.id,
-          title: requirement.requirementName,
-          meta: requirement.description,
-          badges: [<StatusBadge status={requirement.status} key="status" />],
-          fields: [
-            { label: 'Feature', value: feature?.featureName },
-            { label: 'Requirement type', value: requirement.requirementType },
-            { label: 'Acceptance criteria', value: requirement.acceptanceCriteria },
-            { label: 'Priority', value: requirement.priority },
-          ],
-        };
-      })}
-    />
-  );
-}
+  // Case picker — features nest under a case. No auto-select: the user picks the case explicitly.
+  const [cases, setCases] = useState<LeanBusinessCase[]>([]);
+  const [casesLoading, setCasesLoading] = useState(true);
+  const [casesError, setCasesError] = useState<ApiError | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string>('');
 
-// Note: Conceptual deliverables page for the twelve solution outputs and their suggested/finalized trust marker.
-// It demonstrates that finalized deliverables remain editable but retain their governance source.
-function DeliverablesPage({ tenant }: { tenant: TenantData }) {
-  return (
-    <ListPage
-      eyebrow="Phase 2 · Delivery"
-      title="Conceptual Deliverables"
-      subtitle="The 12 outputs for a business case. Generated from traceability data, edited, then saved as final."
-      rule="Deliverables are suggestions. No auto-regeneration overwrites finalized content."
-      rows={tenant.conceptualDeliverables.map((deliverable: ConceptualDeliverable) => {
-        const businessCase = tenant.cases.find((candidate) => candidate.id === deliverable.leanBusinessCaseId);
-        return {
-          id: deliverable.id,
-          title: deliverable.title,
-          meta: deliverable.content,
-          badges: [<HudBadge tone={deliverable.source === 'user_finalized' ? 'green' : 'amber'} key="source">{deliverable.source.replaceAll('_', ' ')}</HudBadge>, <StatusBadge status={deliverable.status} key="status" />],
-          fields: [
-            { label: 'Business case', value: businessCase?.title },
-            { label: 'Deliverable type', value: deliverable.deliverableType },
-            { label: 'Source', value: deliverable.source },
-            { label: 'Content', value: deliverable.content },
-          ],
-        };
-      })}
-    />
-  );
-}
+  // Features for the selected case.
+  const [items, setItems] = useState<Feature[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
 
-// Note: Implementation page for shipment tracking and actuals entered once per value stream. The allocation
-// table feeds objective financial rollups while direct actual fields remain read-only.
-function ImplementationPage({ tenant }: { tenant: TenantData }) {
+  const emptyCreateForm = { featureName: '', description: '', featureType: '', priority: '' };
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ featureName: '', description: '', featureType: '', priority: '', status: '' });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<{ id: string; error: ApiError } | null>(null);
+
+  const loadObjectives = useCallback(async () => {
+    if (!apiWorkspaceId) { setObjectives([]); setSelectedObjId(''); setObjLoading(false); return; }
+    setObjLoading(true); setObjError(null);
+    try {
+      const result = await listObjectives(apiWorkspaceId);
+      const selectable = result.items.filter((objective) => objective.status !== 'archived');
+      setObjectives(selectable);
+      setSelectedObjId(selectable[0]?.id ?? '');
+    } catch (err) {
+      setObjectives([]); setSelectedObjId('');
+      setObjError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load strategic objectives.', status: 0 }));
+    } finally { setObjLoading(false); }
+  }, [apiWorkspaceId]);
+  useEffect(() => { loadObjectives(); }, [loadObjectives]);
+
+  // Changing the objective resets the case selection so we never hold a case from another objective.
+  const loadCases = useCallback(async () => {
+    setSelectedCaseId('');
+    if (!apiWorkspaceId || !selectedObjId) { setCases([]); setCasesLoading(false); return; }
+    setCasesLoading(true); setCasesError(null);
+    try {
+      const result = await listBusinessCases(apiWorkspaceId, selectedObjId);
+      setCases(result.items);
+    } catch (err) {
+      setCases([]);
+      setCasesError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load lean business cases.', status: 0 }));
+    } finally { setCasesLoading(false); }
+  }, [apiWorkspaceId, selectedObjId]);
+  useEffect(() => { loadCases(); }, [loadCases]);
+
+  const loadFeatures = useCallback(async () => {
+    // Switching case exits any open edit/create so nothing carries across lists.
+    setEditingId(null); setShowCreate(false); setCreateForm(emptyCreateForm); setCreateError(null); setCardError(null);
+    if (!apiWorkspaceId || !selectedCaseId) { setItems([]); setLoading(false); return; }
+    setLoading(true); setError(null);
+    try {
+      const result = await listFeatures(apiWorkspaceId, selectedCaseId);
+      setItems(result.items);
+    } catch (err) {
+      setItems([]);
+      setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load features.', status: 0 }));
+    } finally { setLoading(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiWorkspaceId, selectedCaseId]);
+  useEffect(() => { loadFeatures(); }, [loadFeatures]);
+
+  const setCreateField = (field: keyof typeof emptyCreateForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId || !selectedCaseId) return;
+    setCreateError(null); setCreating(true);
+    try {
+      // Send only the fields the user actually filled in — this drops empty enums too.
+      const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<Feature>;
+      await createFeature(apiWorkspaceId, selectedCaseId, body);
+      setCreateForm(emptyCreateForm); setShowCreate(false);
+      await loadFeatures();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create feature.', status: 0 }));
+    } finally { setCreating(false); }
+  };
+
+  const startEdit = (feature: Feature) => {
+    setCardError(null);
+    setEditingId(feature.id);
+    setEditDraft({
+      featureName: feature.featureName ?? '',
+      description: feature.description ?? '',
+      featureType: feature.featureType ?? '',
+      priority: feature.priority ?? '',
+      status: feature.status ?? '',
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    // Required on create; PATCH treats '' as "provided", so guard the name before saving.
+    if (!editDraft.featureName.trim()) {
+      setCardError({ id, error: new ApiError({ code: 'validation_error', message: 'Name is required.', status: 0 }) });
+      return;
+    }
+    const patch: Partial<Feature> = { ...editDraft } as Partial<Feature>;
+    // Empty enums are not valid members and would 422 — omit each blank one.
+    if (!patch.featureType) delete patch.featureType;
+    if (!patch.priority) delete patch.priority;
+    if (!patch.status) delete patch.status;
+    setSavingId(id);
+    try {
+      await updateFeature(apiWorkspaceId, id, patch);
+      setEditingId(null);
+      await loadFeatures();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save feature.', status: 0 }) });
+    } finally { setSavingId(null); }
+  };
+
+  const removeFeature = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null); setSavingId(id);
+    try {
+      await deleteFeature(apiWorkspaceId, id);
+      await loadFeatures();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to delete feature.', status: 0 }) });
+    } finally { setSavingId(null); }
+  };
+
+  const header = (
+    <SectionTitle eyebrow="Phase 2 · Delivery" title="Features" subtitle="Solution pieces that belong to a lean business case." />
+  );
+  const rule = (
+    <RuleNote>Features nest under a lean business case. Pick an objective, then a case, to manage its features.</RuleNote>
+  );
+
+  if (objLoading) return <div className="hud-page">{header}{rule}<HudPanel><p>Loading…</p></HudPanel></div>;
+  if (objError) return <div className="hud-page">{header}{rule}<HudPanel><p>Could not load strategic objectives: {objError.message}</p></HudPanel></div>;
+  if (objectives.length === 0) {
+    return <div className="hud-page">{header}{rule}<HudPanel><p>Create a strategic objective first — cases (and their features) belong to one.</p></HudPanel></div>;
+  }
+
   return (
     <div className="hud-page">
-      <SectionTitle eyebrow="Phase 2 · Delivery" title="Implementation" subtitle="Where work ships and actual numbers are recorded once, per value stream." />
-      <RuleNote>Actuals are entered once at Implementation, per value stream. Objective actuals are computed from these allocations and remain read-only upstream.</RuleNote>
-      {tenant.implementations.map((implementation) => {
-        const businessCase = tenant.cases.find((candidate) => candidate.id === implementation.leanBusinessCaseId);
-        const allocations = tenant.implementationValueStreams.filter((allocation) => allocation.implementationId === implementation.id);
-        const totalCost = allocations.reduce((sum, allocation) => sum + (allocation.allocatedCost || 0), 0);
-        const totalValue = allocations.reduce((sum, allocation) => sum + (allocation.allocatedValue || 0), 0);
+      {header}{rule}
+      <HudPanel>
+        <SelectInput label="Strategic objective" value={selectedObjId} onChange={setSelectedObjId}
+          options={objectives.map((objective) => ({ value: objective.id, label: objective.strategicInitiativeName ?? '(unnamed objective)' }))} />
+        <SelectInput label="Lean business case" value={selectedCaseId} onChange={setSelectedCaseId}
+          options={cases.map((businessCase) => ({ value: businessCase.id, label: businessCase.title?.trim() || '(untitled case)' }))} />
+      </HudPanel>
 
-        return (
-          <HudPanel key={implementation.id}>
-            <div className="hud-record-head">
-              <div><h2>{businessCase?.title || 'Implementation'}</h2><p>{implementation.outcomeNotes}</p></div>
-              <StatusBadge status={implementation.implementationStatus} />
+      {casesError ? (
+        <HudPanel><p>Could not load lean business cases: {casesError.message}</p></HudPanel>
+      ) : casesLoading ? (
+        <HudPanel><p>Loading lean business cases…</p></HudPanel>
+      ) : cases.length === 0 ? (
+        <HudPanel><p>No lean business cases for this objective yet. Create one on the Lean Business Cases page first.</p></HudPanel>
+      ) : !selectedCaseId ? (
+        <HudPanel><p>Select a lean business case to manage its features.</p></HudPanel>
+      ) : (
+        <>
+          <div className="hud-actions">
+            <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+              <Plus size={16} /> {showCreate ? 'Close' : 'New feature'}
+            </HudButton>
+          </div>
+          {showCreate && (
+            <HudPanel>
+              <form onSubmit={submitCreate} className="hud-form">
+                <TextInput label="Name (required)" value={createForm.featureName} onChange={(value) => setCreateField('featureName', value)} />
+                <TextInput label="Description" value={createForm.description} onChange={(value) => setCreateField('description', value)} />
+                <SelectInput label="Feature type" value={createForm.featureType} onChange={(value) => setCreateField('featureType', value)} options={featureTypeOptions} />
+                <SelectInput label="Priority" value={createForm.priority} onChange={(value) => setCreateField('priority', value)} options={priorityOptions} />
+                {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'features')}</p>}
+                <HudButton type="submit" disabled={creating || !createForm.featureName.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create feature'}</HudButton>
+              </form>
+            </HudPanel>
+          )}
+
+          {error ? (
+            <HudPanel><p>Could not load features: {error.message}</p></HudPanel>
+          ) : loading ? (
+            <HudPanel><p>Loading features…</p></HudPanel>
+          ) : (
+            <>
+              {items.length === 0 && <HudPanel><p>No features for this case yet. Create the first one.</p></HudPanel>}
+              <div className="hud-primary-list-desktop">
+                {items.map((feature) => (
+                  <HudPanel key={feature.id}>
+                    <div className="hud-record-head">
+                      <div><h2>{feature.featureName?.trim() || '(unnamed feature)'}</h2><p>{feature.description ?? ''}</p></div>
+                      <div className="hud-badge-stack">
+                        {editingId !== feature.id && <HudButton variant="ghost" onClick={() => startEdit(feature)}>Edit</HudButton>}
+                        <HudButton variant="ghost" disabled={savingId === feature.id} onClick={() => removeFeature(feature.id)}>Delete</HudButton>
+                        <StatusBadge status={feature.status ?? 'draft'} />
+                      </div>
+                    </div>
+                    {editingId === feature.id && (
+                      <div className="hud-ai-edit-panel">
+                        <div className="hud-ai-edit-grid">
+                          <TextInput label="Name" value={editDraft.featureName} onChange={(value) => setEditDraft((prev) => ({ ...prev, featureName: value }))} />
+                          <TextInput label="Description" value={editDraft.description} onChange={(value) => setEditDraft((prev) => ({ ...prev, description: value }))} />
+                          <SelectInput label="Feature type" value={editDraft.featureType} onChange={(value) => setEditDraft((prev) => ({ ...prev, featureType: value }))} options={featureTypeOptions} />
+                          <SelectInput label="Priority" value={editDraft.priority} onChange={(value) => setEditDraft((prev) => ({ ...prev, priority: value }))} options={priorityOptions} />
+                          <SelectInput label="Status" value={editDraft.status} onChange={(value) => setEditDraft((prev) => ({ ...prev, status: value }))} options={discoveryStatusOptions} />
+                        </div>
+                        <div className="hud-actions">
+                          <HudButton disabled={savingId === feature.id} onClick={() => saveEdit(feature.id)}>{savingId === feature.id ? 'Saving…' : 'Save'}</HudButton>
+                          <HudButton variant="ghost" onClick={() => { setEditingId(null); setCardError(null); }}>Cancel</HudButton>
+                        </div>
+                      </div>
+                    )}
+                    {cardError?.id === feature.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error, 'features')}</p>}
+                    <FieldGrid rows={[
+                      { label: 'Feature type', value: feature.featureType },
+                      { label: 'Priority', value: feature.priority },
+                    ]} />
+                  </HudPanel>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Note: Requirements page. Wired to the real API — requirements nest under a feature, so THREE
+// chained pickers (objective -> case -> feature) scope the list before the CRUD below.
+function RequirementsPage({ apiWorkspaceId }: { apiWorkspaceId: string | null }) {
+  const [objectives, setObjectives] = useState<StrategicObjective[]>([]);
+  const [objLoading, setObjLoading] = useState(true);
+  const [objError, setObjError] = useState<ApiError | null>(null);
+  const [selectedObjId, setSelectedObjId] = useState<string>('');
+
+  const [cases, setCases] = useState<LeanBusinessCase[]>([]);
+  const [casesLoading, setCasesLoading] = useState(true);
+  const [casesError, setCasesError] = useState<ApiError | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string>('');
+
+  // Feature picker — the third link. No auto-select: the user picks the feature explicitly.
+  const [features, setFeatures] = useState<Feature[]>([]);
+  const [featuresLoading, setFeaturesLoading] = useState(true);
+  const [featuresError, setFeaturesError] = useState<ApiError | null>(null);
+  const [selectedFeatureId, setSelectedFeatureId] = useState<string>('');
+
+  const [items, setItems] = useState<Requirement[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const emptyCreateForm = { requirementName: '', description: '', requirementType: '', acceptanceCriteria: '', priority: '' };
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ requirementName: '', description: '', requirementType: '', acceptanceCriteria: '', priority: '', status: '' });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<{ id: string; error: ApiError } | null>(null);
+
+  const loadObjectives = useCallback(async () => {
+    if (!apiWorkspaceId) { setObjectives([]); setSelectedObjId(''); setObjLoading(false); return; }
+    setObjLoading(true); setObjError(null);
+    try {
+      const result = await listObjectives(apiWorkspaceId);
+      const selectable = result.items.filter((objective) => objective.status !== 'archived');
+      setObjectives(selectable);
+      setSelectedObjId(selectable[0]?.id ?? '');
+    } catch (err) {
+      setObjectives([]); setSelectedObjId('');
+      setObjError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load strategic objectives.', status: 0 }));
+    } finally { setObjLoading(false); }
+  }, [apiWorkspaceId]);
+  useEffect(() => { loadObjectives(); }, [loadObjectives]);
+
+  // Changing the objective resets the case (which in turn resets the feature).
+  const loadCases = useCallback(async () => {
+    setSelectedCaseId('');
+    if (!apiWorkspaceId || !selectedObjId) { setCases([]); setCasesLoading(false); return; }
+    setCasesLoading(true); setCasesError(null);
+    try {
+      const result = await listBusinessCases(apiWorkspaceId, selectedObjId);
+      setCases(result.items);
+    } catch (err) {
+      setCases([]);
+      setCasesError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load lean business cases.', status: 0 }));
+    } finally { setCasesLoading(false); }
+  }, [apiWorkspaceId, selectedObjId]);
+  useEffect(() => { loadCases(); }, [loadCases]);
+
+  // Changing the case resets the feature selection.
+  const loadFeatures = useCallback(async () => {
+    setSelectedFeatureId('');
+    if (!apiWorkspaceId || !selectedCaseId) { setFeatures([]); setFeaturesLoading(false); return; }
+    setFeaturesLoading(true); setFeaturesError(null);
+    try {
+      const result = await listFeatures(apiWorkspaceId, selectedCaseId);
+      setFeatures(result.items);
+    } catch (err) {
+      setFeatures([]);
+      setFeaturesError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load features.', status: 0 }));
+    } finally { setFeaturesLoading(false); }
+  }, [apiWorkspaceId, selectedCaseId]);
+  useEffect(() => { loadFeatures(); }, [loadFeatures]);
+
+  const loadRequirements = useCallback(async () => {
+    setEditingId(null); setShowCreate(false); setCreateForm(emptyCreateForm); setCreateError(null); setCardError(null);
+    if (!apiWorkspaceId || !selectedFeatureId) { setItems([]); setLoading(false); return; }
+    setLoading(true); setError(null);
+    try {
+      const result = await listRequirements(apiWorkspaceId, selectedFeatureId);
+      setItems(result.items);
+    } catch (err) {
+      setItems([]);
+      setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load requirements.', status: 0 }));
+    } finally { setLoading(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiWorkspaceId, selectedFeatureId]);
+  useEffect(() => { loadRequirements(); }, [loadRequirements]);
+
+  const setCreateField = (field: keyof typeof emptyCreateForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId || !selectedFeatureId) return;
+    setCreateError(null); setCreating(true);
+    try {
+      const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<Requirement>;
+      await createRequirement(apiWorkspaceId, selectedFeatureId, body);
+      setCreateForm(emptyCreateForm); setShowCreate(false);
+      await loadRequirements();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create requirement.', status: 0 }));
+    } finally { setCreating(false); }
+  };
+
+  const startEdit = (requirement: Requirement) => {
+    setCardError(null);
+    setEditingId(requirement.id);
+    setEditDraft({
+      requirementName: requirement.requirementName ?? '',
+      description: requirement.description ?? '',
+      requirementType: requirement.requirementType ?? '',
+      acceptanceCriteria: requirement.acceptanceCriteria ?? '',
+      priority: requirement.priority ?? '',
+      status: requirement.status ?? '',
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    if (!editDraft.requirementName.trim()) {
+      setCardError({ id, error: new ApiError({ code: 'validation_error', message: 'Name is required.', status: 0 }) });
+      return;
+    }
+    const patch: Partial<Requirement> = { ...editDraft } as Partial<Requirement>;
+    if (!patch.requirementType) delete patch.requirementType;
+    if (!patch.priority) delete patch.priority;
+    if (!patch.status) delete patch.status;
+    setSavingId(id);
+    try {
+      await updateRequirement(apiWorkspaceId, id, patch);
+      setEditingId(null);
+      await loadRequirements();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save requirement.', status: 0 }) });
+    } finally { setSavingId(null); }
+  };
+
+  const removeRequirement = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null); setSavingId(id);
+    try {
+      await deleteRequirement(apiWorkspaceId, id);
+      await loadRequirements();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to delete requirement.', status: 0 }) });
+    } finally { setSavingId(null); }
+  };
+
+  const header = (
+    <SectionTitle eyebrow="Phase 2 · Delivery" title="Requirements" subtitle="Detailed specifications under a feature." />
+  );
+  const rule = (
+    <RuleNote>Requirements nest under a feature. Pick an objective, a case, then a feature to manage its requirements.</RuleNote>
+  );
+
+  if (objLoading) return <div className="hud-page">{header}{rule}<HudPanel><p>Loading…</p></HudPanel></div>;
+  if (objError) return <div className="hud-page">{header}{rule}<HudPanel><p>Could not load strategic objectives: {objError.message}</p></HudPanel></div>;
+  if (objectives.length === 0) {
+    return <div className="hud-page">{header}{rule}<HudPanel><p>Create a strategic objective first — features (and their requirements) belong to one.</p></HudPanel></div>;
+  }
+
+  return (
+    <div className="hud-page">
+      {header}{rule}
+      <HudPanel>
+        <SelectInput label="Strategic objective" value={selectedObjId} onChange={setSelectedObjId}
+          options={objectives.map((objective) => ({ value: objective.id, label: objective.strategicInitiativeName ?? '(unnamed objective)' }))} />
+        <SelectInput label="Lean business case" value={selectedCaseId} onChange={setSelectedCaseId}
+          options={cases.map((businessCase) => ({ value: businessCase.id, label: businessCase.title?.trim() || '(untitled case)' }))} />
+        <SelectInput label="Feature" value={selectedFeatureId} onChange={setSelectedFeatureId}
+          options={features.map((feature) => ({ value: feature.id, label: feature.featureName?.trim() || '(unnamed feature)' }))} />
+      </HudPanel>
+
+      {casesError ? (
+        <HudPanel><p>Could not load lean business cases: {casesError.message}</p></HudPanel>
+      ) : casesLoading ? (
+        <HudPanel><p>Loading lean business cases…</p></HudPanel>
+      ) : cases.length === 0 ? (
+        <HudPanel><p>No lean business cases for this objective yet. Create one on the Lean Business Cases page first.</p></HudPanel>
+      ) : !selectedCaseId ? (
+        <HudPanel><p>Select a lean business case to see its features.</p></HudPanel>
+      ) : featuresError ? (
+        <HudPanel><p>Could not load features: {featuresError.message}</p></HudPanel>
+      ) : featuresLoading ? (
+        <HudPanel><p>Loading features…</p></HudPanel>
+      ) : features.length === 0 ? (
+        <HudPanel><p>No features for this case yet. Create one on the Features page first.</p></HudPanel>
+      ) : !selectedFeatureId ? (
+        <HudPanel><p>Select a feature to manage its requirements.</p></HudPanel>
+      ) : (
+        <>
+          <div className="hud-actions">
+            <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+              <Plus size={16} /> {showCreate ? 'Close' : 'New requirement'}
+            </HudButton>
+          </div>
+          {showCreate && (
+            <HudPanel>
+              <form onSubmit={submitCreate} className="hud-form">
+                <TextInput label="Name (required)" value={createForm.requirementName} onChange={(value) => setCreateField('requirementName', value)} />
+                <TextInput label="Description" value={createForm.description} onChange={(value) => setCreateField('description', value)} />
+                <SelectInput label="Requirement type" value={createForm.requirementType} onChange={(value) => setCreateField('requirementType', value)} options={requirementTypeOptions} />
+                <TextInput label="Acceptance criteria" value={createForm.acceptanceCriteria} onChange={(value) => setCreateField('acceptanceCriteria', value)} />
+                <SelectInput label="Priority" value={createForm.priority} onChange={(value) => setCreateField('priority', value)} options={priorityOptions} />
+                {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'requirements')}</p>}
+                <HudButton type="submit" disabled={creating || !createForm.requirementName.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create requirement'}</HudButton>
+              </form>
+            </HudPanel>
+          )}
+
+          {error ? (
+            <HudPanel><p>Could not load requirements: {error.message}</p></HudPanel>
+          ) : loading ? (
+            <HudPanel><p>Loading requirements…</p></HudPanel>
+          ) : (
+            <>
+              {items.length === 0 && <HudPanel><p>No requirements for this feature yet. Create the first one.</p></HudPanel>}
+              <div className="hud-primary-list-desktop">
+                {items.map((requirement) => (
+                  <HudPanel key={requirement.id}>
+                    <div className="hud-record-head">
+                      <div><h2>{requirement.requirementName?.trim() || '(unnamed requirement)'}</h2><p>{requirement.description ?? ''}</p></div>
+                      <div className="hud-badge-stack">
+                        {editingId !== requirement.id && <HudButton variant="ghost" onClick={() => startEdit(requirement)}>Edit</HudButton>}
+                        <HudButton variant="ghost" disabled={savingId === requirement.id} onClick={() => removeRequirement(requirement.id)}>Delete</HudButton>
+                        <StatusBadge status={requirement.status ?? 'draft'} />
+                      </div>
+                    </div>
+                    {editingId === requirement.id && (
+                      <div className="hud-ai-edit-panel">
+                        <div className="hud-ai-edit-grid">
+                          <TextInput label="Name" value={editDraft.requirementName} onChange={(value) => setEditDraft((prev) => ({ ...prev, requirementName: value }))} />
+                          <TextInput label="Description" value={editDraft.description} onChange={(value) => setEditDraft((prev) => ({ ...prev, description: value }))} />
+                          <SelectInput label="Requirement type" value={editDraft.requirementType} onChange={(value) => setEditDraft((prev) => ({ ...prev, requirementType: value }))} options={requirementTypeOptions} />
+                          <TextInput label="Acceptance criteria" value={editDraft.acceptanceCriteria} onChange={(value) => setEditDraft((prev) => ({ ...prev, acceptanceCriteria: value }))} />
+                          <SelectInput label="Priority" value={editDraft.priority} onChange={(value) => setEditDraft((prev) => ({ ...prev, priority: value }))} options={priorityOptions} />
+                          <SelectInput label="Status" value={editDraft.status} onChange={(value) => setEditDraft((prev) => ({ ...prev, status: value }))} options={discoveryStatusOptions} />
+                        </div>
+                        <div className="hud-actions">
+                          <HudButton disabled={savingId === requirement.id} onClick={() => saveEdit(requirement.id)}>{savingId === requirement.id ? 'Saving…' : 'Save'}</HudButton>
+                          <HudButton variant="ghost" onClick={() => { setEditingId(null); setCardError(null); }}>Cancel</HudButton>
+                        </div>
+                      </div>
+                    )}
+                    {cardError?.id === requirement.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error, 'requirements')}</p>}
+                    <FieldGrid rows={[
+                      { label: 'Requirement type', value: requirement.requirementType },
+                      { label: 'Acceptance criteria', value: requirement.acceptanceCriteria },
+                      { label: 'Priority', value: requirement.priority },
+                    ]} />
+                  </HudPanel>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Note: Conceptual deliverables page. Wired to the real API — deliverables nest under a lean business
+// case (objective -> case pickers). deliverableType is required and immutable: chosen on create, absent
+// from the edit form (PATCH does not accept it).
+function DeliverablesPage({ apiWorkspaceId }: { apiWorkspaceId: string | null }) {
+  const [objectives, setObjectives] = useState<StrategicObjective[]>([]);
+  const [objLoading, setObjLoading] = useState(true);
+  const [objError, setObjError] = useState<ApiError | null>(null);
+  const [selectedObjId, setSelectedObjId] = useState<string>('');
+
+  const [cases, setCases] = useState<LeanBusinessCase[]>([]);
+  const [casesLoading, setCasesLoading] = useState(true);
+  const [casesError, setCasesError] = useState<ApiError | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string>('');
+
+  const [items, setItems] = useState<ConceptualDeliverable[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const emptyCreateForm = { deliverableType: '', title: '', content: '', source: '' };
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreateForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState({ title: '', content: '', source: '', status: '' });
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<{ id: string; error: ApiError } | null>(null);
+
+  const loadObjectives = useCallback(async () => {
+    if (!apiWorkspaceId) { setObjectives([]); setSelectedObjId(''); setObjLoading(false); return; }
+    setObjLoading(true); setObjError(null);
+    try {
+      const result = await listObjectives(apiWorkspaceId);
+      const selectable = result.items.filter((objective) => objective.status !== 'archived');
+      setObjectives(selectable);
+      setSelectedObjId(selectable[0]?.id ?? '');
+    } catch (err) {
+      setObjectives([]); setSelectedObjId('');
+      setObjError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load strategic objectives.', status: 0 }));
+    } finally { setObjLoading(false); }
+  }, [apiWorkspaceId]);
+  useEffect(() => { loadObjectives(); }, [loadObjectives]);
+
+  const loadCases = useCallback(async () => {
+    setSelectedCaseId('');
+    if (!apiWorkspaceId || !selectedObjId) { setCases([]); setCasesLoading(false); return; }
+    setCasesLoading(true); setCasesError(null);
+    try {
+      const result = await listBusinessCases(apiWorkspaceId, selectedObjId);
+      setCases(result.items);
+    } catch (err) {
+      setCases([]);
+      setCasesError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load lean business cases.', status: 0 }));
+    } finally { setCasesLoading(false); }
+  }, [apiWorkspaceId, selectedObjId]);
+  useEffect(() => { loadCases(); }, [loadCases]);
+
+  const loadDeliverables = useCallback(async () => {
+    setEditingId(null); setShowCreate(false); setCreateForm(emptyCreateForm); setCreateError(null); setCardError(null);
+    if (!apiWorkspaceId || !selectedCaseId) { setItems([]); setLoading(false); return; }
+    setLoading(true); setError(null);
+    try {
+      const result = await listDeliverables(apiWorkspaceId, selectedCaseId);
+      setItems(result.items);
+    } catch (err) {
+      setItems([]);
+      setError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load deliverables.', status: 0 }));
+    } finally { setLoading(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiWorkspaceId, selectedCaseId]);
+  useEffect(() => { loadDeliverables(); }, [loadDeliverables]);
+
+  const setCreateField = (field: keyof typeof emptyCreateForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId || !selectedCaseId) return;
+    setCreateError(null); setCreating(true);
+    try {
+      // deliverableType and title are required and non-empty; source (enum) is dropped if blank.
+      const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<ConceptualDeliverable>;
+      await createDeliverable(apiWorkspaceId, selectedCaseId, body);
+      setCreateForm(emptyCreateForm); setShowCreate(false);
+      await loadDeliverables();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create deliverable.', status: 0 }));
+    } finally { setCreating(false); }
+  };
+
+  const startEdit = (deliverable: ConceptualDeliverable) => {
+    setCardError(null);
+    setEditingId(deliverable.id);
+    // deliverableType is immutable on PATCH, so it is intentionally not part of the edit draft.
+    setEditDraft({
+      title: deliverable.title ?? '',
+      content: deliverable.content ?? '',
+      source: deliverable.source ?? '',
+      status: deliverable.status ?? '',
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    if (!editDraft.title.trim()) {
+      setCardError({ id, error: new ApiError({ code: 'validation_error', message: 'Title is required.', status: 0 }) });
+      return;
+    }
+    const patch: Partial<ConceptualDeliverable> = { ...editDraft } as Partial<ConceptualDeliverable>;
+    if (!patch.source) delete patch.source;
+    if (!patch.status) delete patch.status;
+    setSavingId(id);
+    try {
+      await updateDeliverable(apiWorkspaceId, id, patch);
+      setEditingId(null);
+      await loadDeliverables();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save deliverable.', status: 0 }) });
+    } finally { setSavingId(null); }
+  };
+
+  const removeDeliverable = async (id: string) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null); setSavingId(id);
+    try {
+      await deleteDeliverable(apiWorkspaceId, id);
+      await loadDeliverables();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to delete deliverable.', status: 0 }) });
+    } finally { setSavingId(null); }
+  };
+
+  const header = (
+    <SectionTitle eyebrow="Phase 2 · Delivery" title="Conceptual Deliverables" subtitle="The solution outputs for a lean business case." />
+  );
+  const rule = (
+    <RuleNote>Deliverables are suggestions; finalized content is never auto-overwritten. Pick an objective, then a case, to manage them.</RuleNote>
+  );
+
+  if (objLoading) return <div className="hud-page">{header}{rule}<HudPanel><p>Loading…</p></HudPanel></div>;
+  if (objError) return <div className="hud-page">{header}{rule}<HudPanel><p>Could not load strategic objectives: {objError.message}</p></HudPanel></div>;
+  if (objectives.length === 0) {
+    return <div className="hud-page">{header}{rule}<HudPanel><p>Create a strategic objective first — cases (and their deliverables) belong to one.</p></HudPanel></div>;
+  }
+
+  return (
+    <div className="hud-page">
+      {header}{rule}
+      <HudPanel>
+        <SelectInput label="Strategic objective" value={selectedObjId} onChange={setSelectedObjId}
+          options={objectives.map((objective) => ({ value: objective.id, label: objective.strategicInitiativeName ?? '(unnamed objective)' }))} />
+        <SelectInput label="Lean business case" value={selectedCaseId} onChange={setSelectedCaseId}
+          options={cases.map((businessCase) => ({ value: businessCase.id, label: businessCase.title?.trim() || '(untitled case)' }))} />
+      </HudPanel>
+
+      {casesError ? (
+        <HudPanel><p>Could not load lean business cases: {casesError.message}</p></HudPanel>
+      ) : casesLoading ? (
+        <HudPanel><p>Loading lean business cases…</p></HudPanel>
+      ) : cases.length === 0 ? (
+        <HudPanel><p>No lean business cases for this objective yet. Create one on the Lean Business Cases page first.</p></HudPanel>
+      ) : !selectedCaseId ? (
+        <HudPanel><p>Select a lean business case to manage its deliverables.</p></HudPanel>
+      ) : (
+        <>
+          <div className="hud-actions">
+            <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+              <Plus size={16} /> {showCreate ? 'Close' : 'New deliverable'}
+            </HudButton>
+          </div>
+          {showCreate && (
+            <HudPanel>
+              <form onSubmit={submitCreate} className="hud-form">
+                <SelectInput label="Deliverable type (required)" value={createForm.deliverableType} onChange={(value) => setCreateField('deliverableType', value)} options={deliverableTypeOptions} />
+                <TextInput label="Title (required)" value={createForm.title} onChange={(value) => setCreateField('title', value)} />
+                <TextInput label="Content" value={createForm.content} onChange={(value) => setCreateField('content', value)} />
+                <SelectInput label="Source" value={createForm.source} onChange={(value) => setCreateField('source', value)} options={deliverableSourceOptions} />
+                {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'deliverables')}</p>}
+                <HudButton type="submit" disabled={creating || !createForm.deliverableType || !createForm.title.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create deliverable'}</HudButton>
+              </form>
+            </HudPanel>
+          )}
+
+          {error ? (
+            <HudPanel><p>Could not load deliverables: {error.message}</p></HudPanel>
+          ) : loading ? (
+            <HudPanel><p>Loading deliverables…</p></HudPanel>
+          ) : (
+            <>
+              {items.length === 0 && <HudPanel><p>No deliverables for this case yet. Create the first one.</p></HudPanel>}
+              <div className="hud-primary-list-desktop">
+                {items.map((deliverable) => (
+                  <HudPanel key={deliverable.id}>
+                    <div className="hud-record-head">
+                      <div><h2>{deliverable.title?.trim() || '(untitled deliverable)'}</h2><p>{deliverable.content ?? ''}</p></div>
+                      <div className="hud-badge-stack">
+                        {editingId !== deliverable.id && <HudButton variant="ghost" onClick={() => startEdit(deliverable)}>Edit</HudButton>}
+                        <HudButton variant="ghost" disabled={savingId === deliverable.id} onClick={() => removeDeliverable(deliverable.id)}>Delete</HudButton>
+                        {deliverable.source && <HudBadge tone={deliverable.source === 'user_finalized' ? 'green' : 'amber'}>{deliverable.source.replaceAll('_', ' ')}</HudBadge>}
+                        <StatusBadge status={deliverable.status ?? 'draft'} />
+                      </div>
+                    </div>
+                    {editingId === deliverable.id && (
+                      <div className="hud-ai-edit-panel">
+                        <div className="hud-ai-edit-grid">
+                          <TextInput label="Title" value={editDraft.title} onChange={(value) => setEditDraft((prev) => ({ ...prev, title: value }))} />
+                          <TextInput label="Content" value={editDraft.content} onChange={(value) => setEditDraft((prev) => ({ ...prev, content: value }))} />
+                          <SelectInput label="Source" value={editDraft.source} onChange={(value) => setEditDraft((prev) => ({ ...prev, source: value }))} options={deliverableSourceOptions} />
+                          <SelectInput label="Status" value={editDraft.status} onChange={(value) => setEditDraft((prev) => ({ ...prev, status: value }))} options={discoveryStatusOptions} />
+                        </div>
+                        <div className="hud-actions">
+                          <HudButton disabled={savingId === deliverable.id} onClick={() => saveEdit(deliverable.id)}>{savingId === deliverable.id ? 'Saving…' : 'Save'}</HudButton>
+                          <HudButton variant="ghost" onClick={() => { setEditingId(null); setCardError(null); }}>Cancel</HudButton>
+                        </div>
+                      </div>
+                    )}
+                    {cardError?.id === deliverable.id && <p className="hud-form-error" role="alert">{renderApiMessage(cardError.error, 'deliverables')}</p>}
+                    <FieldGrid rows={[
+                      { label: 'Deliverable type', value: deliverable.deliverableType },
+                      { label: 'Source', value: deliverable.source },
+                      { label: 'Content', value: deliverable.content },
+                    ]} />
+                  </HudPanel>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Note: Implementation page. Wired to the real API — a SINGLETON per lean business case (like
+// discovery): two chained pickers (objective -> case) select the record, fetched GET-or-404.
+// actualCost/actualValue are derived and read-only; the allocation sub-endpoints are out of scope.
+function ImplementationPage({ apiWorkspaceId }: { apiWorkspaceId: string | null }) {
+  const [objectives, setObjectives] = useState<StrategicObjective[]>([]);
+  const [objLoading, setObjLoading] = useState(true);
+  const [objError, setObjError] = useState<ApiError | null>(null);
+  const [selectedObjId, setSelectedObjId] = useState<string>('');
+
+  const [cases, setCases] = useState<LeanBusinessCase[]>([]);
+  const [casesLoading, setCasesLoading] = useState(true);
+  const [casesError, setCasesError] = useState<ApiError | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string>('');
+
+  // The singleton implementation for the selected case. null after a 404 means "not created yet".
+  const [implementation, setImplementation] = useState<Implementation | null>(null);
+  const [implLoading, setImplLoading] = useState(false);
+  const [implError, setImplError] = useState<ApiError | null>(null);
+  // Guards against a stale response after a rapid case switch (same pattern as discovery).
+  const implRequestRef = useRef<string | null>(null);
+  const implId = implementation?.id ?? null;
+
+  const emptyForm = { valueType: '', implementationStatus: '', startDate: '', completionDate: '', outcomeNotes: '' };
+  const [createForm, setCreateForm] = useState(emptyForm);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<ApiError | null>(null);
+
+  const setCreateField = (field: keyof typeof emptyForm, value: string) =>
+    setCreateForm((prev) => ({ ...prev, [field]: value }));
+  const setEditField = (field: keyof typeof emptyForm, value: string) =>
+    setEditDraft((prev) => ({ ...prev, [field]: value }));
+
+  const loadObjectives = useCallback(async () => {
+    if (!apiWorkspaceId) { setObjectives([]); setSelectedObjId(''); setObjLoading(false); return; }
+    setObjLoading(true); setObjError(null);
+    try {
+      const result = await listObjectives(apiWorkspaceId);
+      const selectable = result.items.filter((objective) => objective.status !== 'archived');
+      setObjectives(selectable);
+      setSelectedObjId(selectable[0]?.id ?? '');
+    } catch (err) {
+      setObjectives([]); setSelectedObjId('');
+      setObjError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load strategic objectives.', status: 0 }));
+    } finally { setObjLoading(false); }
+  }, [apiWorkspaceId]);
+  useEffect(() => { loadObjectives(); }, [loadObjectives]);
+
+  const loadCases = useCallback(async () => {
+    setSelectedCaseId('');
+    if (!apiWorkspaceId || !selectedObjId) { setCases([]); setCasesLoading(false); return; }
+    setCasesLoading(true); setCasesError(null);
+    try {
+      const result = await listBusinessCases(apiWorkspaceId, selectedObjId);
+      setCases(result.items);
+    } catch (err) {
+      setCases([]);
+      setCasesError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load lean business cases.', status: 0 }));
+    } finally { setCasesLoading(false); }
+  }, [apiWorkspaceId, selectedObjId]);
+  useEffect(() => { loadCases(); }, [loadCases]);
+
+  const loadImplementation = useCallback(async () => {
+    const requestedCase = selectedCaseId;
+    implRequestRef.current = requestedCase;
+    setEditing(false); setCreateForm(emptyForm); setCreateError(null); setEditError(null); setImplError(null);
+    if (!apiWorkspaceId || !requestedCase) { setImplementation(null); setImplLoading(false); return; }
+    setImplLoading(true);
+    try {
+      const record = await getImplementationForCase(apiWorkspaceId, requestedCase);
+      if (implRequestRef.current !== requestedCase) return; // superseded by a newer case
+      setImplementation(record);
+    } catch (err) {
+      if (implRequestRef.current !== requestedCase) return; // superseded by a newer case
+      if (err instanceof ApiError && err.status === 404) {
+        setImplementation(null); // not created yet — expected, not an error
+      } else {
+        setImplementation(null);
+        setImplError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load implementation.', status: 0 }));
+      }
+    } finally {
+      if (implRequestRef.current === requestedCase) setImplLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiWorkspaceId, selectedCaseId]);
+  useEffect(() => { loadImplementation(); }, [loadImplementation]);
+
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!apiWorkspaceId || !selectedCaseId) return;
+    setCreateError(null); setCreating(true);
+    try {
+      // The empty-string filter also drops blank enums (valueType/implementationStatus) and blank
+      // dates (startDate/completionDate) — the same "empty string where the backend wants a typed
+      // value or nothing" pattern handled on Cases (enums, title) and below on PATCH.
+      const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<Implementation>;
+      await createImplementation(apiWorkspaceId, selectedCaseId, body);
+      setCreateForm(emptyForm);
+      await loadImplementation();
+    } catch (err) {
+      setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create implementation.', status: 0 }));
+    } finally { setCreating(false); }
+  };
+
+  const startEdit = (record: Implementation) => {
+    setEditError(null);
+    setEditDraft({
+      valueType: record.valueType ?? '',
+      implementationStatus: record.implementationStatus ?? '',
+      startDate: record.startDate ?? '',
+      completionDate: record.completionDate ?? '',
+      outcomeNotes: record.outcomeNotes ?? '',
+    });
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    if (!apiWorkspaceId || !implId) return;
+    setEditError(null);
+    const patch: Partial<Implementation> = { ...editDraft } as Partial<Implementation>;
+    // Empty enums AND empty dates are typed on the backend (enum member / date | None): '' would 422,
+    // so omit each blank one — the same pattern as Cases enums/title and the create filter above.
+    if (!patch.valueType) delete patch.valueType;
+    if (!patch.implementationStatus) delete patch.implementationStatus;
+    if (!patch.startDate) delete patch.startDate;
+    if (!patch.completionDate) delete patch.completionDate;
+    setSaving(true);
+    try {
+      await updateImplementation(apiWorkspaceId, implId, patch);
+      setEditing(false);
+      await loadImplementation();
+    } catch (err) {
+      setEditError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to save implementation.', status: 0 }));
+    } finally { setSaving(false); }
+  };
+
+  const header = (
+    <SectionTitle eyebrow="Phase 2 · Delivery" title="Implementation" subtitle="Where a lean business case ships and its actual numbers are recorded." />
+  );
+  const rule = (
+    <RuleNote>Implementation is 1:1 with a lean business case. Pick an objective, then a case, to view or create it. Actual cost/value are derived upstream and read-only here.</RuleNote>
+  );
+
+  if (objLoading) return <div className="hud-page">{header}{rule}<HudPanel><p>Loading…</p></HudPanel></div>;
+  if (objError) return <div className="hud-page">{header}{rule}<HudPanel><p>Could not load strategic objectives: {objError.message}</p></HudPanel></div>;
+  if (objectives.length === 0) {
+    return <div className="hud-page">{header}{rule}<HudPanel><p>Create a strategic objective first — cases (and their implementation) belong to one.</p></HudPanel></div>;
+  }
+
+  const selectedCase = cases.find((candidate) => candidate.id === selectedCaseId);
+
+  const implFormFields = (
+    form: typeof emptyForm,
+    setField: (field: keyof typeof emptyForm, value: string) => void,
+  ) => (
+    <>
+      <SelectInput label="Value type" value={form.valueType} onChange={(value) => setField('valueType', value)} options={caseValueTypeOptions} />
+      <SelectInput label="Implementation status" value={form.implementationStatus} onChange={(value) => setField('implementationStatus', value)} options={implementationStatusOptions} />
+      <TextInput label="Start date (YYYY-MM-DD)" value={form.startDate} onChange={(value) => setField('startDate', value)} />
+      <TextInput label="Completion date (YYYY-MM-DD)" value={form.completionDate} onChange={(value) => setField('completionDate', value)} />
+      <TextInput label="Outcome notes" value={form.outcomeNotes} onChange={(value) => setField('outcomeNotes', value)} />
+    </>
+  );
+
+  return (
+    <div className="hud-page">
+      {header}{rule}
+      <HudPanel>
+        <SelectInput label="Strategic objective" value={selectedObjId} onChange={setSelectedObjId}
+          options={objectives.map((objective) => ({ value: objective.id, label: objective.strategicInitiativeName ?? '(unnamed objective)' }))} />
+        <SelectInput label="Lean business case" value={selectedCaseId} onChange={setSelectedCaseId}
+          options={cases.map((businessCase) => ({ value: businessCase.id, label: businessCase.title?.trim() || '(untitled case)' }))} />
+      </HudPanel>
+
+      {casesError ? (
+        <HudPanel><p>Could not load lean business cases: {casesError.message}</p></HudPanel>
+      ) : casesLoading ? (
+        <HudPanel><p>Loading lean business cases…</p></HudPanel>
+      ) : cases.length === 0 ? (
+        <HudPanel><p>No lean business cases for this objective yet. Create one on the Lean Business Cases page first.</p></HudPanel>
+      ) : !selectedCaseId ? (
+        <HudPanel><p>Select a lean business case to view or create its implementation.</p></HudPanel>
+      ) : implError ? (
+        <HudPanel><p>Could not load implementation: {implError.message}</p></HudPanel>
+      ) : implLoading ? (
+        <HudPanel><p>Loading implementation…</p></HudPanel>
+      ) : !implementation ? (
+        <HudPanel>
+          <p>No implementation yet for {selectedCase?.title?.trim() || 'this case'}.</p>
+          <form onSubmit={submitCreate} className="hud-form">
+            {implFormFields(createForm, setCreateField)}
+            {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'implementation for this case')}</p>}
+            <HudButton type="submit" disabled={creating}><Plus size={16} /> {creating ? 'Creating…' : 'Create implementation'}</HudButton>
+          </form>
+        </HudPanel>
+      ) : (
+        <HudPanel>
+          <div className="hud-record-head">
+            <div><h2>{selectedCase?.title?.trim() || 'Implementation'}</h2><p>{implementation.outcomeNotes ?? ''}</p></div>
+            <div className="hud-badge-stack">
+              <StatusBadge status={implementation.implementationStatus ?? 'not_started'} />
+              {!editing && <HudButton variant="ghost" onClick={() => startEdit(implementation)}>Edit</HudButton>}
             </div>
-            <FieldGrid rows={[
-              { label: 'Business case', value: businessCase?.title },
-              { label: 'Value type', value: implementation.valueType },
-              { label: 'Start date', value: implementation.startDate },
-              { label: 'Completion date', value: implementation.completionDate },
-              { label: 'Implementation actual cost field', value: implementation.actualCost === null ? 'Not directly edited' : formatCurrency(implementation.actualCost) },
-              { label: 'Implementation actual value field', value: implementation.actualValue === null ? 'Not directly edited' : formatCurrency(implementation.actualValue) },
-              { label: 'Allocated actual cost', value: formatCurrency(totalCost) },
-              { label: 'Allocated actual value', value: formatCurrency(totalValue) },
-            ]} />
-            <DataTable
-              headers={['Value stream', 'Allocated cost', 'Allocated value']}
-              rows={allocations.map((allocation) => [
-                tenant.valueStreams.find((stream) => stream.id === allocation.valueStreamId)?.name || allocation.valueStreamId,
-                formatCurrency(allocation.allocatedCost),
-                formatCurrency(allocation.allocatedValue),
-              ])}
-            />
-          </HudPanel>
-        );
-      })}
+          </div>
+          {editing && (
+            <div className="hud-ai-edit-panel">
+              <div className="hud-ai-edit-grid">
+                {implFormFields(editDraft, setEditField)}
+              </div>
+              <div className="hud-actions">
+                <HudButton disabled={saving} onClick={saveEdit}>{saving ? 'Saving…' : 'Save'}</HudButton>
+                <HudButton variant="ghost" onClick={() => { setEditing(false); setEditError(null); }}>Cancel</HudButton>
+              </div>
+            </div>
+          )}
+          {editError && <p className="hud-form-error" role="alert">{renderApiMessage(editError, 'implementation for this case')}</p>}
+          <FieldGrid rows={[
+            { label: 'Value type', value: implementation.valueType },
+            { label: 'Start date', value: implementation.startDate },
+            { label: 'Completion date', value: implementation.completionDate },
+            { label: 'Actual cost', value: implementation.actualCost === null || implementation.actualCost === undefined ? 'Not directly edited' : formatCurrency(implementation.actualCost) },
+            { label: 'Actual value', value: implementation.actualValue === null || implementation.actualValue === undefined ? 'Not directly edited' : formatCurrency(implementation.actualValue) },
+          ]} />
+        </HudPanel>
+      )}
     </div>
   );
 }
@@ -4490,10 +5355,10 @@ function ImplementedPage({
   if (route === 'impacts') return <ImpactsPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
   if (route === 'cases') return <CasesPage apiWorkspaceId={apiWorkspaceId} />;
   if (route === 'discovery') return <DiscoveryPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} />;
-  if (route === 'features') return <FeaturesPage tenant={tenant} />;
-  if (route === 'requirements') return <RequirementsPage tenant={tenant} />;
-  if (route === 'deliverables') return <DeliverablesPage tenant={tenant} />;
-  if (route === 'implementation') return <ImplementationPage tenant={tenant} />;
+  if (route === 'features') return <FeaturesPage apiWorkspaceId={apiWorkspaceId} />;
+  if (route === 'requirements') return <RequirementsPage apiWorkspaceId={apiWorkspaceId} />;
+  if (route === 'deliverables') return <DeliverablesPage apiWorkspaceId={apiWorkspaceId} />;
+  if (route === 'implementation') return <ImplementationPage apiWorkspaceId={apiWorkspaceId} />;
   if (route === 'ai') return <AiAssistancePage tenant={tenant} />;
   return <StageLaterPage route={route} />;
 }
