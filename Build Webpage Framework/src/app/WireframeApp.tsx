@@ -1738,6 +1738,28 @@ function ArchitecturePage({ tenant, apiWorkspaceId, architecture, architectureId
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<ApiError | null>(null);
 
+  // Real value-stream / capability counts, fetched from the (now wired) list endpoints.
+  const [valueStreamCount, setValueStreamCount] = useState<number | null>(null);
+  const [capabilityCount, setCapabilityCount] = useState<number | null>(null);
+
+  const loadCounts = useCallback(async () => {
+    if (!apiWorkspaceId || !architectureId) { setValueStreamCount(null); setCapabilityCount(null); return; }
+    try {
+      const [vs, caps] = await Promise.all([
+        listValueStreams(apiWorkspaceId, architectureId),
+        listCapabilities(apiWorkspaceId, architectureId),
+      ]);
+      setValueStreamCount(vs.total);
+      setCapabilityCount(caps.total);
+    } catch {
+      // Secondary summary numbers — fall back to em dash rather than blocking the page.
+      setValueStreamCount(null);
+      setCapabilityCount(null);
+    }
+  }, [apiWorkspaceId, architectureId]);
+
+  useEffect(() => { loadCounts(); }, [loadCounts]);
+
   const setCreateField = (field: keyof typeof emptyArchitectureForm, value: string) =>
     setCreateForm((prev) => ({ ...prev, [field]: value }));
   const setEditField = (field: keyof typeof emptyArchitectureForm, value: string) =>
@@ -1857,10 +1879,9 @@ function ArchitecturePage({ tenant, apiWorkspaceId, architecture, architectureId
         <FieldGrid rows={[
           { label: 'Current state summary', value: architecture.currentStateSummary ?? '' },
           { label: 'Future state summary', value: architecture.futureStateSummary ?? '' },
-          { label: 'Value streams', value: `${tenant.valueStreams.length} / ${cardinalityLimits.valueStreamsPerBusinessArchitecture}` },
-          { label: 'Capabilities', value: tenant.capabilities.length },
+          { label: 'Value streams', value: `${valueStreamCount ?? '—'} / ${cardinalityLimits.valueStreamsPerBusinessArchitecture}` },
+          { label: 'Capabilities', value: capabilityCount ?? '—' },
         ]} />
-        <RuleNote>Value streams and capabilities counts are not yet connected to the API.</RuleNote>
       </HudPanel>
     </div>
   );
@@ -3714,7 +3735,27 @@ function CasesPage({ apiWorkspaceId }: { apiWorkspaceId: string | null }) {
     }
   };
 
-  // Lifecycle transitions hit the dedicated /status endpoint, kept separate from content edits.
+  // The backend splits Business Case lifecycle across two endpoints, and which endpoint a
+  // transition uses is NOT obvious:
+  //   draft->active, active->completed   => the CONTENT PATCH /lean-business-cases/{id}
+  //   ->archived, archived->draft        => the STATUS  PATCH /lean-business-cases/{id}/status
+  // Activate/Complete must therefore go through updateBusinessCase (advanceStatus below), NOT
+  // updateBusinessCaseStatus, or the status endpoint rejects them with 409 "Invalid status transition".
+  const advanceStatus = async (id: string, status: CaseStatus) => {
+    if (!apiWorkspaceId) return;
+    setCardError(null);
+    setSavingId(id);
+    try {
+      await updateBusinessCase(apiWorkspaceId, id, { status });
+      await loadCases();
+    } catch (err) {
+      setCardError({ id, error: err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to update case status.', status: 0 }) });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  // Archive/reactivate legitimately use the dedicated /status endpoint (see the split above).
   const changeStatus = async (id: string, status: CaseStatus) => {
     if (!apiWorkspaceId) return;
     setCardError(null);
@@ -3839,7 +3880,8 @@ function CasesPage({ apiWorkspaceId }: { apiWorkspaceId: string | null }) {
                   <div><h2>{businessCase.title?.trim() || '(untitled case)'}</h2><p>{businessCase.summary ?? ''}</p></div>
                   <div className="hud-badge-stack">
                     {editingId !== businessCase.id && <HudButton variant="ghost" onClick={() => startEdit(businessCase)}>Edit</HudButton>}
-                    {status === 'draft' && <HudButton variant="ghost" disabled={savingId === businessCase.id || missing.length > 0} onClick={() => changeStatus(businessCase.id, 'active')}>Activate</HudButton>}
+                    {status === 'draft' && <HudButton variant="ghost" disabled={savingId === businessCase.id || missing.length > 0} onClick={() => advanceStatus(businessCase.id, 'active')}>Activate</HudButton>}
+                    {status === 'active' && <HudButton variant="ghost" disabled={savingId === businessCase.id} onClick={() => advanceStatus(businessCase.id, 'completed')}>Complete</HudButton>}
                     {status === 'active' && <HudButton variant="ghost" disabled={savingId === businessCase.id} onClick={() => changeStatus(businessCase.id, 'archived')}>Archive</HudButton>}
                     <StatusBadge status={status} />
                   </div>
