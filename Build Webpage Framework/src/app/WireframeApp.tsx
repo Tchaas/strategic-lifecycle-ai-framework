@@ -2003,7 +2003,7 @@ function ArchitecturePage({ tenant, apiWorkspaceId, architecture, architectureId
   };
 
   // State 0 — loading. Guard first so the create form never flashes before the fetch resolves.
-  if (architectureLoading) {
+  if (architectureLoading || !apiWorkspaceId) {
     return (
       <div className="hud-page">
         <SectionTitle eyebrow="Phase 1 · Strategy" title="Business Architecture" subtitle="The company's architecture: one record, reused across every objective and case." />
@@ -2243,7 +2243,7 @@ function ValueStreamsPage({ tenant, apiWorkspaceId, architectureId, architecture
   );
 
   // State 0 — architecture still loading. Guard first so nothing flashes before the fetch resolves.
-  if (architectureLoading) {
+  if (architectureLoading || !apiWorkspaceId) {
     return (
       <div className="hud-page">
         {header}
@@ -2527,7 +2527,7 @@ function KeyActivitiesPage({ apiWorkspaceId, architectureId, architectureLoading
   );
 
   // State 0 — architecture or value streams still loading. Guard first so nothing flashes before the fetch resolves.
-  if (architectureLoading || vsLoading) {
+  if (architectureLoading || vsLoading || !apiWorkspaceId) {
     return (
       <div className="hud-page">
         {header}
@@ -2780,7 +2780,7 @@ function CapabilitiesPage({ tenant, apiWorkspaceId, architectureId, architecture
   );
 
   // State 0 — architecture still loading. Guard first so nothing flashes before the fetch resolves.
-  if (architectureLoading) {
+  if (architectureLoading || !apiWorkspaceId) {
     return (
       <div className="hud-page">
         {header}
@@ -3011,7 +3011,7 @@ function ProcessesPage({ tenant, apiWorkspaceId, architectureId, architectureLoa
     <SectionTitle eyebrow="Phase 1 · Strategy" title="Business Processes" subtitle="Current- and future-state process detail supporting the architecture." />
   );
 
-  if (architectureLoading) {
+  if (architectureLoading || !apiWorkspaceId) {
     return <div className="hud-page">{header}<HudPanel><p>Loading…</p></HudPanel></div>;
   }
   if (!architectureId) {
@@ -3227,7 +3227,7 @@ function PersonasPage({ tenant, apiWorkspaceId, architectureId, architectureLoad
     <SectionTitle eyebrow="Phase 1 · Strategy" title="Stakeholders & Personas" subtitle="The people the value streams serve or depend on." />
   );
 
-  if (architectureLoading) {
+  if (architectureLoading || !apiWorkspaceId) {
     return <div className="hud-page">{header}<HudPanel><p>Loading…</p></HudPanel></div>;
   }
   if (!architectureId) {
@@ -3445,7 +3445,7 @@ function InformationPage({ tenant, apiWorkspaceId, architectureId, architectureL
     <SectionTitle eyebrow="Phase 1 · Strategy" title="Information Concepts" subtitle="The key data objects the architecture produces and consumes." />
   );
 
-  if (architectureLoading) {
+  if (architectureLoading || !apiWorkspaceId) {
     return <div className="hud-page">{header}<HudPanel><p>Loading…</p></HudPanel></div>;
   }
   if (!architectureId) {
@@ -3668,7 +3668,7 @@ function ImpactsPage({ tenant, apiWorkspaceId, architectureId, architectureLoadi
     <SectionTitle eyebrow="Phase 1 · Strategy" title="Business Impacts" subtitle="Effects that later justify lean business cases and discovery priorities." />
   );
 
-  if (architectureLoading) {
+  if (architectureLoading || !apiWorkspaceId) {
     return <div className="hud-page">{header}<HudPanel><p>Loading…</p></HudPanel></div>;
   }
   if (!architectureId) {
