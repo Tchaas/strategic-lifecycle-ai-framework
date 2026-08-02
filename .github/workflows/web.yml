@@ -32,25 +32,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.0.8
-
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: Build Webpage Framework/pnpm-lock.yaml
+          cache: npm
+          cache-dependency-path: Build Webpage Framework/package-lock.json
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       - name: Build
-        run: pnpm run build
+        run: npm run build
         env:
           BASE_PATH: /strategic-lifecycle-ai-framework/
+          VITE_API_BASE_URL: https://slaf-backend.onrender.com
 
       - name: Publish to gh-pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
