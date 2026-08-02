@@ -1,3 +1,4 @@
+from app.api.ai import router as ai_router
 from app.api.architecture_core import router as architecture_core_router
 from app.api.architecture_supporting import router as architecture_supporting_router
 from app.api.auth import router as auth_router
@@ -11,6 +12,7 @@ from app.api.strategy import router as strategy_router
 from app.api.workspaces import router as workspaces_router
 
 __all__ = [
+    "ai_router",
     "architecture_core_router",
     "architecture_supporting_router",
     "auth_router",

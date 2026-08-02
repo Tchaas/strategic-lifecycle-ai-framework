@@ -1,3 +1,5 @@
+from app.models.ai_suggestions import AiSuggestion
+from app.models.ai_usage import AiUsage
 from app.models.base import Base
 from app.models.business_architecture_components import BusinessArchitectureComponent
 from app.models.business_capabilities import BusinessCapability
@@ -68,4 +70,6 @@ __all__ = [
     "ConceptualDeliverable",
     "Implementation",
     "ImplementationValueStream",
+    "AiSuggestion",
+    "AiUsage",
 ]

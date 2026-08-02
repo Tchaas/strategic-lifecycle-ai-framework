@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     rate_limit_refresh_per_minute: int = 30
     rate_limit_invite_accept_per_minute: int = 10
     max_request_body_bytes: int = 1_048_576
+    anthropic_api_key: str | None = None
+    ai_model: str = "claude-haiku-4-5-20251001"
+    ai_input_price_per_mtok: float = 1.00
+    ai_output_price_per_mtok: float = 5.00
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -29,6 +33,11 @@ class Settings(BaseSettings):
         if not self.jwt_secret:
             raise RuntimeError("JWT_SECRET must be set")
         return self.jwt_secret
+
+    def require_anthropic_api_key(self) -> str:
+        if not self.anthropic_api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY must be set")
+        return self.anthropic_api_key
 
 
 settings = Settings()  # type: ignore[call-arg]

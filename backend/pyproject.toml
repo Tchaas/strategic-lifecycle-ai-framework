@@ -5,6 +5,7 @@ description = "Backend schema for the Strategic Lifecycle AI Framework"
 requires-python = ">=3.12"
 dependencies = [
     "alembic==1.16.2",
+    "anthropic==0.120.2",
     "argon2-cffi==25.1.0",
     "black==26.3.1",
     "google-auth==2.49.0",
@@ -36,6 +37,11 @@ python_version = "3.12"
 plugins = ["sqlalchemy.ext.mypy.plugin"]
 strict = true
 exclude = ["migrations/versions"]
+
+[[tool.mypy.overrides]]
+module = "anthropic.*"
+follow_imports = "skip"
+follow_imports_for_stubs = true
 
 [tool.ruff.lint.per-file-ignores]
 "migrations/versions/*.py" = ["E501"]

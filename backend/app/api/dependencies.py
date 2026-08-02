@@ -12,6 +12,7 @@ from app.core.errors import AppError
 from app.core.security import decode_access_token
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
+from app.services.ai_service import AiService
 from app.services.architecture_supporting_service import ArchitectureSupportingService
 from app.services.auth_service import AuthService
 from app.services.business_architecture_service import BusinessArchitectureService
@@ -99,6 +100,10 @@ def get_solution_service(db: DbSession) -> Generator[SolutionService, None, None
 
 def get_implementation_service(db: DbSession) -> Generator[ImplementationService, None, None]:
     yield ImplementationService(db)
+
+
+def get_ai_service(db: DbSession) -> Generator[AiService, None, None]:
+    yield AiService(db)
 
 
 def get_workspace_member(

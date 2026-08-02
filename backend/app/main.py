@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.types import ExceptionHandler
 
 from app.api import (
+    ai_router,
     architecture_core_router,
     architecture_supporting_router,
     auth_router,
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(discovery_router)
     app.include_router(solution_router)
     app.include_router(implementation_router)
+    app.include_router(ai_router)
     return app
 
 
