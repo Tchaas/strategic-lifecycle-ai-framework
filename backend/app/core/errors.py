@@ -31,12 +31,17 @@ async def http_exception_handler(_: Request, exc: HTTPException) -> JSONResponse
 async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
     fields = []
     for error in exc.errors():
-        safe_error = {key: value for key, value in error.items() if key != "input"}
+        safe_error = {key: value for key, value in error.items() if key not in ("input", "ctx")}
         fields.append(safe_error)
     details = {"fields": fields}
+    if fields:
+        message = str(fields[0].get("msg", "Request validation failed"))
+        message = message.removeprefix("Value error, ")
+    else:
+        message = "Request validation failed"
     return JSONResponse(
         status_code=422,
-        content=error_body("validation_error", "Request validation failed", details),
+        content=error_body("validation_error", message, details),
     )
 
 
