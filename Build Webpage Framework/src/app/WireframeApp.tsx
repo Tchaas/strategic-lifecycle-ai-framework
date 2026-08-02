@@ -44,6 +44,7 @@ import type {
 } from '../types/model';
 import { api, getList, setTokens, clearTokens, getRefreshToken, ApiError } from '../api/client';
 import { listObjectives, createObjective, updateObjective } from '../api/objectives';
+import { getQuestions, generate, type AiResourceType, type AiQuestion } from '../api/ai';
 import { getArchitecture, createArchitecture, updateArchitecture } from '../api/architecture';
 import { listValueStreams, createValueStream, updateValueStream, deleteValueStream } from '../api/valueStreams';
 import { listCapabilities, createCapability, updateCapability, deleteCapability } from '../api/capabilities';
@@ -767,6 +768,17 @@ function TextInput({ label, value, onChange, type = 'text', readOnly = false }: 
   );
 }
 
+// Multi-line sibling of TextInput for paragraph-length fields. Same field styling as the
+// textareas already used elsewhere on the page (hud-field--area), without the Refine button.
+function TextAreaInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="hud-field hud-field--area">
+      <span>{label}</span>
+      <textarea value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
 function SelectInput({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: { value: string; label: string }[] }) {
   return (
     <label className="hud-field">
@@ -845,6 +857,112 @@ function AiTextArea({
       <textarea value={value} onChange={(event) => onChange(event.target.value)} />
       <button className="hud-mini-button" type="button" onClick={onRefine}>Refine</button>
     </label>
+  );
+}
+
+// Reusable AI interview modal. Fetches the question set for a resource type, collects
+// plain-language answers, and on explicit submit calls /generate — returning the suggested
+// field values to the caller via onGenerated. It persists nothing itself; the caller decides
+// what to do with the returned fields (here: pre-populate a create form for human review).
+// Built once so Cases and Discovery can reuse it by passing a different resourceType.
+function AiInterviewModal({
+  workspaceId,
+  resourceType,
+  parentId,
+  onGenerated,
+  onClose,
+}: {
+  workspaceId: string;
+  resourceType: AiResourceType;
+  parentId?: string;
+  onGenerated: (fields: Record<string, unknown>) => void;
+  onClose: () => void;
+}) {
+  const [questions, setQuestions] = useState<AiQuestion[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(true);
+  const [questionsError, setQuestionsError] = useState<ApiError | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingQuestions(true);
+    setQuestionsError(null);
+    getQuestions(workspaceId, resourceType)
+      .then((set) => { if (!cancelled) setQuestions(set.questions ?? []); })
+      .catch((err) => {
+        if (cancelled) return;
+        setQuestionsError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to load AI questions.', status: 0 }));
+      })
+      .finally(() => { if (!cancelled) setLoadingQuestions(false); });
+    return () => { cancelled = true; };
+  }, [workspaceId, resourceType]);
+
+  const setAnswer = (id: string, value: string) => setAnswers((prev) => ({ ...prev, [id]: value }));
+
+  // Submit is allowed only once every REQUIRED question has a non-empty answer.
+  const requiredMet = questions.every((question) => !question.required || (answers[question.id] ?? '').trim() !== '');
+  const canSubmit = !loadingQuestions && !questionsError && questions.length > 0 && requiredMet && !generating;
+
+  // The AI call fires ONLY here, on explicit submit — never on mount, typing, focus, or blur.
+  const submit = async () => {
+    if (!canSubmit) return;
+    setGenerateError(null);
+    setGenerating(true);
+    try {
+      // Send only non-empty answers, keyed by question id (e.g. "initiative", "outcomes").
+      const payloadAnswers = Object.fromEntries(
+        questions
+          .map((question) => [question.id, (answers[question.id] ?? '').trim()] as const)
+          .filter(([, value]) => value !== ''),
+      );
+      const result = await generate(workspaceId, { resourceType, answers: payloadAnswers, parentId });
+      onGenerated(result.fields ?? {});
+      onClose();
+    } catch (err) {
+      setGenerateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to generate suggestions.', status: 0 }));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="hud-modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="hud-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="hud-modal-head">
+          <div><Sparkles size={18} /> <strong>Draft with AI</strong></div>
+          <button className="hud-modal-close" type="button" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        </div>
+        <p className="hud-modal-intro">Answer what you can in plain language. AI drafts the fields for you to review and edit — nothing is saved until you click Create.</p>
+
+        {loadingQuestions && <p>Loading questions…</p>}
+        {questionsError && <p className="hud-form-error" role="alert">{renderApiMessage(questionsError, 'AI questions')}</p>}
+
+        {!loadingQuestions && !questionsError && questions.map((question) => (
+          <label className="hud-modal-question" key={question.id}>
+            <span className="hud-modal-prompt">{question.prompt}{question.required && <em> (required)</em>}</span>
+            <small className="hud-modal-helper">{question.helper}</small>
+            <textarea
+              value={answers[question.id] ?? ''}
+              maxLength={question.maxLength}
+              onChange={(event) => setAnswer(question.id, event.target.value)}
+            />
+          </label>
+        ))}
+
+        {generateError && <p className="hud-form-error" role="alert">{renderApiMessage(generateError, 'AI suggestions')}</p>}
+
+        {!loadingQuestions && !questionsError && (
+          <div className="hud-modal-actions">
+            <HudButton onClick={submit} disabled={!canSubmit}>
+              <Sparkles size={16} /> {generating ? 'Generating… this can take 5–15 seconds' : 'Generate draft'}
+            </HudButton>
+            <HudButton variant="ghost" onClick={onClose} disabled={generating}>Cancel</HudButton>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1435,20 +1553,60 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
 
-  // "New objective" form.
+  // "New objective" form — all 18 populatable fields, in model/display order.
   const emptyCreateForm = {
     strategicInitiativeName: '',
     executiveObjective: '',
     strategicValueCategory: '',
+    expectedBusinessOutcome: '',
+    financialImpact: '',
+    urgencyRationale: '',
+    targetImplementationYear: '',
+    targetImplementationStartDate: '',
+    targetImplementationEndDate: '',
     problemOpportunityStatement: '',
-    valueHypothesis: '',
+    costOfInaction: '',
+    currentLimitation: '',
+    impactedTeams: '',
     problemType: '',
+    valueHypothesis: '',
+    valueMeasurementApproach: '',
     expectedValueType: '',
+    valueRealizationTimeframe: '',
   };
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<ApiError | null>(null);
+
+  // AI interview → pre-populate the create form. The modal fires the AI call; applyGenerated
+  // maps its returned fields onto this form for human review. aiFilled drives the banner.
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiFilled, setAiFilled] = useState(false);
+
+  // Enum fields whose generated value must be one of the allowed options, else dropped.
+  const enumOptions: Partial<Record<keyof typeof emptyCreateForm, { value: string; label: string }[]>> = {
+    strategicValueCategory: strategicValueCategoryOptions,
+    problemType: problemTypeOptions,
+    expectedValueType: expectedValueTypeOptions,
+  };
+
+  const applyGenerated = (fields: Record<string, unknown>) => {
+    const next = { ...emptyCreateForm };
+    (Object.keys(emptyCreateForm) as (keyof typeof emptyCreateForm)[]).forEach((key) => {
+      const raw = fields[key];
+      if (raw == null) return; // null-safe: skip null/undefined
+      const value = String(raw);
+      const opts = enumOptions[key];
+      if (opts && !opts.some((option) => option.value === value)) return; // drop invalid enum
+      next[key] = value;
+    });
+    setCreateForm(next);
+    setAiFilled(true);
+    setShowCreate(true);
+    setShowAiModal(false);
+    setCreateError(null);
+  };
 
   // Inline edit (desktop) — one objective at a time. cardError is scoped to a single card id.
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1491,6 +1649,7 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
       await createObjective(apiWorkspaceId, body);
       setCreateForm(emptyCreateForm);
       setShowCreate(false);
+      setAiFilled(false);
       await loadObjectives();
     } catch (err) {
       setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create objective.', status: 0 }));
@@ -1569,20 +1728,48 @@ function ObjectivesPage({ tenant, ai, apiWorkspaceId }: { tenant: TenantData; ai
       <RuleNote>Cardinality: objectives {objectives.filter((objective) => objective.status !== 'archived').length} / {cardinalityLimits.strategicObjectivesPerWorkspace}. Active requires name, executive objective, value category, problem/opportunity statement, and value hypothesis.</RuleNote>
 
       <div className="hud-actions">
-        <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+        <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); setAiFilled(false); }}>
           <Plus size={16} /> {showCreate ? 'Close' : 'New objective'}
         </HudButton>
+        <HudButton variant="ghost" onClick={() => setShowAiModal(true)} disabled={!apiWorkspaceId}>
+          <Sparkles size={16} /> Draft with AI
+        </HudButton>
       </div>
+      {showAiModal && apiWorkspaceId && (
+        <AiInterviewModal
+          workspaceId={apiWorkspaceId}
+          resourceType="strategic_objective"
+          onGenerated={applyGenerated}
+          onClose={() => setShowAiModal(false)}
+        />
+      )}
       {showCreate && (
         <HudPanel>
+          {aiFilled && (
+            <div className="hud-ai-banner">
+              <Sparkles size={17} />
+              <span>AI filled these fields — edit any of them, then Create. Nothing is saved yet.</span>
+            </div>
+          )}
           <form onSubmit={submitCreate} className="hud-form">
             <TextInput label="Strategic initiative name (required)" value={createForm.strategicInitiativeName} onChange={(value) => setCreateField('strategicInitiativeName', value)} />
-            <TextInput label="Executive objective" value={createForm.executiveObjective} onChange={(value) => setCreateField('executiveObjective', value)} />
+            <TextAreaInput label="Executive objective" value={createForm.executiveObjective} onChange={(value) => setCreateField('executiveObjective', value)} />
             <SelectInput label="Strategic value category" value={createForm.strategicValueCategory} onChange={(value) => setCreateField('strategicValueCategory', value)} options={strategicValueCategoryOptions} />
-            <TextInput label="Problem / opportunity statement" value={createForm.problemOpportunityStatement} onChange={(value) => setCreateField('problemOpportunityStatement', value)} />
-            <TextInput label="Value hypothesis" value={createForm.valueHypothesis} onChange={(value) => setCreateField('valueHypothesis', value)} />
+            <TextAreaInput label="Expected business outcome" value={createForm.expectedBusinessOutcome} onChange={(value) => setCreateField('expectedBusinessOutcome', value)} />
+            <TextInput label="Financial impact" value={createForm.financialImpact} onChange={(value) => setCreateField('financialImpact', value)} />
+            <TextAreaInput label="Urgency rationale" value={createForm.urgencyRationale} onChange={(value) => setCreateField('urgencyRationale', value)} />
+            <TextInput label="Target implementation year" value={createForm.targetImplementationYear} onChange={(value) => setCreateField('targetImplementationYear', value)} />
+            <TextInput label="Target implementation start date" type="date" value={createForm.targetImplementationStartDate} onChange={(value) => setCreateField('targetImplementationStartDate', value)} />
+            <TextInput label="Target implementation end date" type="date" value={createForm.targetImplementationEndDate} onChange={(value) => setCreateField('targetImplementationEndDate', value)} />
+            <TextAreaInput label="Problem / opportunity statement" value={createForm.problemOpportunityStatement} onChange={(value) => setCreateField('problemOpportunityStatement', value)} />
+            <TextAreaInput label="Cost of inaction" value={createForm.costOfInaction} onChange={(value) => setCreateField('costOfInaction', value)} />
+            <TextAreaInput label="Current limitation" value={createForm.currentLimitation} onChange={(value) => setCreateField('currentLimitation', value)} />
+            <TextAreaInput label="Impacted teams" value={createForm.impactedTeams} onChange={(value) => setCreateField('impactedTeams', value)} />
             <SelectInput label="Problem type" value={createForm.problemType} onChange={(value) => setCreateField('problemType', value)} options={problemTypeOptions} />
+            <TextAreaInput label="Value hypothesis" value={createForm.valueHypothesis} onChange={(value) => setCreateField('valueHypothesis', value)} />
+            <TextAreaInput label="Value measurement approach" value={createForm.valueMeasurementApproach} onChange={(value) => setCreateField('valueMeasurementApproach', value)} />
             <SelectInput label="Expected value type" value={createForm.expectedValueType} onChange={(value) => setCreateField('expectedValueType', value)} options={expectedValueTypeOptions} />
+            <TextInput label="Value realization timeframe" value={createForm.valueRealizationTimeframe} onChange={(value) => setCreateField('valueRealizationTimeframe', value)} />
             {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'active objectives', 'Archive one to create another.')}</p>}
             <HudButton type="submit" disabled={creating || !createForm.strategicInitiativeName.trim()}><Plus size={16} /> {creating ? 'Creating…' : 'Create objective'}</HudButton>
           </form>

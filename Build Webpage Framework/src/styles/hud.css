@@ -1204,4 +1204,113 @@
       font-size: 9px;
     }
   }
+
+}
+
+/* AI interview modal. Kept in its OWN top-level @layer components block — never inside a
+   media query — so it applies at every viewport width. (An earlier version accidentally
+   nested here inside @media (max-width: 620px), so it only styled narrow screens.) */
+@layer components {
+  .hud-modal-backdrop {
+    align-items: flex-start;
+    background: rgba(2, 6, 17, 0.72);
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    overflow-y: auto;
+    padding: 40px 16px;
+    position: fixed;
+    z-index: 62;
+  }
+
+  .hud-modal {
+    background: var(--hud-panel-strong);
+    border: 1px solid rgba(34, 211, 238, 0.38);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-height: 85vh;
+    max-width: 640px;
+    overflow-y: auto;
+    padding: 22px;
+    width: 100%;
+  }
+
+  .hud-modal-head {
+    align-items: center;
+    color: var(--hud-text);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .hud-modal-head strong {
+    font-family: "Orbitron", ui-sans-serif, system-ui;
+    text-transform: uppercase;
+  }
+
+  .hud-modal-close {
+    background: transparent;
+    border: 1px solid rgba(34, 211, 238, 0.38);
+    color: var(--hud-text);
+    cursor: pointer;
+    padding: 6px;
+  }
+
+  .hud-modal-intro {
+    color: var(--hud-muted);
+    font-size: 13px;
+    margin: 0;
+  }
+
+  .hud-modal-question {
+    color: var(--hud-text);
+    display: grid;
+    gap: 6px;
+    font-size: 14px;
+  }
+
+  .hud-modal-prompt {
+    color: var(--hud-cyan);
+    font-size: 13px;
+  }
+
+  .hud-modal-prompt em {
+    color: var(--hud-amber);
+    font-style: normal;
+  }
+
+  .hud-modal-helper {
+    color: var(--hud-muted);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .hud-modal-question textarea {
+    background: rgba(2, 6, 17, 0.8);
+    border: 1px solid rgba(34, 211, 238, 0.38);
+    color: var(--hud-text);
+    min-height: 88px;
+    padding: 9px 10px;
+    resize: vertical;
+  }
+
+  .hud-modal-question textarea:focus {
+    border-color: var(--hud-green);
+    outline: none;
+  }
+
+  /* Pinned footer: stays flush to the panel's bottom edge while the questions scroll. The
+     negative side/bottom margins cancel the panel's 22px padding so it spans full width;
+     bottom: -22px offsets that padding so it sticks to the very bottom of the scroll box. */
+  .hud-modal-actions {
+    background: var(--hud-panel-strong);
+    border-top: 1px solid rgba(34, 211, 238, 0.22);
+    bottom: -22px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: auto -22px -22px;
+    padding: 14px 22px;
+    position: sticky;
+  }
 }
