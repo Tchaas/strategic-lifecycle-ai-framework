@@ -3792,6 +3792,34 @@ function CasesPage({ apiWorkspaceId }: { apiWorkspaceId: string | null }) {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<ApiError | null>(null);
 
+  // AI interview → pre-populate the create form. The modal fires the AI call; applyGenerated
+  // maps its returned fields onto this form for human review. aiFilled drives the banner.
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiFilled, setAiFilled] = useState(false);
+
+  // Enum fields whose generated value must be one of the allowed options, else dropped.
+  const enumOptions: Partial<Record<keyof typeof emptyCreateForm, { value: string; label: string }[]>> = {
+    priority: priorityOptions,
+    valueType: caseValueTypeOptions,
+  };
+
+  const applyGenerated = (fields: Record<string, unknown>) => {
+    const next = { ...emptyCreateForm };
+    (Object.keys(emptyCreateForm) as (keyof typeof emptyCreateForm)[]).forEach((key) => {
+      const raw = fields[key];
+      if (raw == null) return; // null-safe: skip null/undefined
+      const value = String(raw); // form holds strings; buildBody re-coerces the forecasts
+      const opts = enumOptions[key];
+      if (opts && !opts.some((option) => option.value === value)) return; // drop invalid enum
+      next[key] = value;
+    });
+    setCreateForm(next);
+    setAiFilled(true);
+    setShowCreate(true);
+    setShowAiModal(false);
+    setCreateError(null);
+  };
+
   // Inline edit (desktop) — one case at a time. cardError is scoped to a single card id.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState({ title: '', summary: '', problemOpportunityStatement: '', valueHypothesis: '', priority: '', forecastCost: '', forecastValue: '', valueType: '' });
@@ -3867,6 +3895,7 @@ function CasesPage({ apiWorkspaceId }: { apiWorkspaceId: string | null }) {
       await createBusinessCase(apiWorkspaceId, selectedObjId, buildBody(createForm));
       setCreateForm(emptyCreateForm);
       setShowCreate(false);
+      setAiFilled(false);
       await loadCases();
     } catch (err) {
       setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create lean business case.', status: 0 }));
@@ -4008,17 +4037,35 @@ function CasesPage({ apiWorkspaceId }: { apiWorkspaceId: string | null }) {
       </HudPanel>
 
       <div className="hud-actions">
-        <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); }}>
+        <HudButton onClick={() => { setShowCreate((prev) => !prev); setCreateError(null); setAiFilled(false); }}>
           <Plus size={16} /> {showCreate ? 'Close' : 'New lean business case'}
         </HudButton>
+        <HudButton variant="ghost" onClick={() => setShowAiModal(true)} disabled={!apiWorkspaceId || !selectedObjId}>
+          <Sparkles size={16} /> Draft with AI
+        </HudButton>
       </div>
+      {showAiModal && apiWorkspaceId && selectedObjId && (
+        <AiInterviewModal
+          workspaceId={apiWorkspaceId}
+          resourceType="lean_business_case"
+          parentId={selectedObjId}
+          onGenerated={applyGenerated}
+          onClose={() => setShowAiModal(false)}
+        />
+      )}
       {showCreate && (
         <HudPanel>
+          {aiFilled && (
+            <div className="hud-ai-banner">
+              <Sparkles size={17} />
+              <span>AI filled these fields — edit any of them, then Create. Nothing is saved yet.</span>
+            </div>
+          )}
           <form onSubmit={submitCreate} className="hud-form">
             <TextInput label="Title (required)" value={createForm.title} onChange={(value) => setCreateField('title', value)} />
-            <TextInput label="Summary" value={createForm.summary} onChange={(value) => setCreateField('summary', value)} />
-            <TextInput label="Problem / opportunity statement" value={createForm.problemOpportunityStatement} onChange={(value) => setCreateField('problemOpportunityStatement', value)} />
-            <TextInput label="Value hypothesis" value={createForm.valueHypothesis} onChange={(value) => setCreateField('valueHypothesis', value)} />
+            <TextAreaInput label="Summary" value={createForm.summary} onChange={(value) => setCreateField('summary', value)} />
+            <TextAreaInput label="Problem / opportunity statement" value={createForm.problemOpportunityStatement} onChange={(value) => setCreateField('problemOpportunityStatement', value)} />
+            <TextAreaInput label="Value hypothesis" value={createForm.valueHypothesis} onChange={(value) => setCreateField('valueHypothesis', value)} />
             <SelectInput label="Priority" value={createForm.priority} onChange={(value) => setCreateField('priority', value)} options={priorityOptions} />
             <TextInput label="Forecast cost" type="number" value={createForm.forecastCost} onChange={(value) => setCreateField('forecastCost', value)} />
             <TextInput label="Forecast value" type="number" value={createForm.forecastValue} onChange={(value) => setCreateField('forecastValue', value)} />
@@ -4175,6 +4222,23 @@ function DiscoveryPage({ tenant, apiWorkspaceId }: { tenant: TenantData; apiWork
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<ApiError | null>(null);
 
+  // AI interview → pre-populate the create form. The modal fires the AI call; applyGenerated
+  // maps its returned fields onto this form for human review. aiFilled drives the banner.
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiFilled, setAiFilled] = useState(false);
+  const applyGenerated = (fields: Record<string, unknown>) => {
+    const next = { ...emptyDiscoveryForm };
+    (Object.keys(emptyDiscoveryForm) as (keyof typeof emptyDiscoveryForm)[]).forEach((key) => {
+      const raw = fields[key];
+      if (raw == null) return; // null-safe: skip null/undefined
+      next[key] = String(raw);
+    });
+    setCreateForm(next);
+    setAiFilled(true);
+    setShowAiModal(false);
+    setCreateError(null);
+  };
+
   // Inline-edit state. editDraft carries the ten findings plus the update-only status enum.
   const [editing, setEditing] = useState(false);
   const [editDraft, setEditDraft] = useState({ ...emptyDiscoveryForm, status: '' });
@@ -4255,6 +4319,7 @@ function DiscoveryPage({ tenant, apiWorkspaceId }: { tenant: TenantData; apiWork
     // Switching case exits any open edit and clears create state so nothing carries across records.
     setEditing(false);
     setCreateForm(emptyDiscoveryForm);
+    setAiFilled(false);
     setCreateError(null);
     setEditError(null);
     setDiscoveryError(null);
@@ -4293,6 +4358,7 @@ function DiscoveryPage({ tenant, apiWorkspaceId }: { tenant: TenantData; apiWork
       const body = Object.fromEntries(Object.entries(createForm).filter(([, value]) => value !== '')) as Partial<Discovery>;
       await createDiscovery(apiWorkspaceId, selectedCaseId, body);
       setCreateForm(emptyDiscoveryForm);
+      setAiFilled(false);
       await loadDiscovery();
     } catch (err) {
       setCreateError(err instanceof ApiError ? err : new ApiError({ code: 'unknown_error', message: 'Failed to create discovery.', status: 0 }));
@@ -4386,6 +4452,16 @@ function DiscoveryPage({ tenant, apiWorkspaceId }: { tenant: TenantData; apiWork
         />
       </HudPanel>
 
+      {showAiModal && apiWorkspaceId && selectedCaseId && (
+        <AiInterviewModal
+          workspaceId={apiWorkspaceId}
+          resourceType="discovery"
+          parentId={selectedCaseId}
+          onGenerated={applyGenerated}
+          onClose={() => setShowAiModal(false)}
+        />
+      )}
+
       {casesError ? (
         <HudPanel><p>Could not load lean business cases: {casesError.message}</p></HudPanel>
       ) : casesLoading ? (
@@ -4402,12 +4478,18 @@ function DiscoveryPage({ tenant, apiWorkspaceId }: { tenant: TenantData; apiWork
         // No discovery for this case yet — offer a create form. Fields may be null; all optional.
         <HudPanel>
           <p>No discovery yet for {selectedCase?.title?.trim() || 'this case'}.</p>
+          {aiFilled && (
+            <div className="hud-ai-banner">
+              <Sparkles size={17} />
+              <span>AI filled these fields — edit any of them, then Create. Nothing is saved yet.</span>
+            </div>
+          )}
           <form onSubmit={submitCreate} className="hud-form">
             {discoveryFindingFields.map(([field, label]) => (
-              <TextInput key={field} label={label} value={createForm[field]} onChange={(value) => setCreateField(field, value)} />
+              <TextAreaInput key={field} label={label} value={createForm[field]} onChange={(value) => setCreateField(field, value)} />
             ))}
             <div className="hud-actions">
-              <HudButton type="button" variant="ghost" onClick={() => setCreateForm((prev) => mergeAiDraft(prev) as typeof emptyDiscoveryForm)}><Sparkles size={16} /> Draft findings with AI</HudButton>
+              <HudButton type="button" variant="ghost" onClick={() => setShowAiModal(true)} disabled={!apiWorkspaceId}><Sparkles size={16} /> Draft with AI</HudButton>
             </div>
             {createError && <p className="hud-form-error" role="alert">{renderApiMessage(createError, 'discovery for this case')}</p>}
             <HudButton type="submit" disabled={creating}><Plus size={16} /> {creating ? 'Creating…' : 'Create discovery'}</HudButton>
@@ -4427,7 +4509,7 @@ function DiscoveryPage({ tenant, apiWorkspaceId }: { tenant: TenantData; apiWork
             <div className="hud-ai-edit-panel">
               <div className="hud-ai-edit-grid">
                 {discoveryFindingFields.map(([field, label]) => (
-                  <TextInput key={field} label={label} value={editDraft[field]} onChange={(value) => setEditField(field, value)} />
+                  <TextAreaInput key={field} label={label} value={editDraft[field]} onChange={(value) => setEditField(field, value)} />
                 ))}
                 <SelectInput label="Status" value={editDraft.status} onChange={(value) => setEditField('status', value)} options={discoveryStatusOptions} />
               </div>

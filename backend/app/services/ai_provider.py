@@ -29,16 +29,89 @@ RESOURCE_SCHEMAS: dict[str, type[BaseModel]] = {
 
 _MICRO = Decimal(1_000_000)
 
+# One-line meaning of every populatable field, per resource type. Keys are the camelCase
+# schema aliases the model must emit. This is what lets the model tell, e.g., a journeyMap
+# from a personaFindings and keep every field distinct — the schema itself carries only names.
+FIELD_GLOSSARY: dict[str, dict[str, str]] = {
+    "strategic_objective": {
+        "strategicInitiativeName": "Short, specific name of the strategic initiative.",
+        "executiveObjective": "The leadership-level objective — what success looks like to executives.",
+        "strategicValueCategory": "Enum: the primary category of strategic value this pursues.",
+        "expectedBusinessOutcome": "The concrete business outcome expected once the initiative succeeds.",
+        "financialImpact": "The anticipated financial impact, described in the user's terms.",
+        "urgencyRationale": "Why this initiative is urgent to act on now.",
+        "targetImplementationYear": "The target year for implementation.",
+        "targetImplementationStartDate": "Target start date (YYYY-MM-DD) if the user indicated one.",
+        "targetImplementationEndDate": "Target end date (YYYY-MM-DD) if the user indicated one.",
+        "problemOpportunityStatement": "The underlying problem or opportunity the initiative addresses.",
+        "costOfInaction": "The cost, risk, or consequence of not acting.",
+        "currentLimitation": "The current limitation, gap, or constraint being addressed.",
+        "impactedTeams": "The teams, functions, or groups affected by this initiative.",
+        "problemType": "Enum: whether the problem is customer-facing, internal, or both.",
+        "valueHypothesis": "The hypothesis for how and why this initiative creates value.",
+        "valueMeasurementApproach": "How the realized value will be measured and tracked.",
+        "expectedValueType": "Enum: the nature of the expected value.",
+        "valueRealizationTimeframe": "When the value is expected to be realized.",
+    },
+    "lean_business_case": {
+        "title": "Short, specific title for the business case.",
+        "summary": "An executive summary of the case — the pitch in a few sentences.",
+        "problemOpportunityStatement": "The problem or opportunity this case is built around.",
+        "valueHypothesis": "The hypothesis for the value this case delivers and to whom.",
+        "priority": "Enum: the case's priority.",
+        "forecastCost": "Forecast cost as a number — only if the user supplied a figure.",
+        "forecastValue": "Forecast value as a number — only if the user supplied a figure.",
+        "valueType": "Enum: the type of value the case is expected to produce.",
+    },
+    "discovery": {
+        "problemStatement": "The core problem under investigation — the what and the why of the issue.",
+        "personaFindings": "Who the users/stakeholders are: their roles, goals, pains, and behaviours.",
+        "journeyMap": "The end-to-end experience those personas move through, stage by stage, and where it breaks down.",
+        "currentStateProcessMap": "How the work is actually done today — the sequence of steps, systems, and handoffs.",
+        "bottleneckAnalysis": "The specific constraints, delays, and inefficiencies in the current process and their causes.",
+        "dataFindings": "What the data shows — volumes, patterns, metrics, and evidence gathered.",
+        "legacyConstraints": "Existing technical, organisational, or contractual constraints that limit solutions.",
+        "futureStateNeeds": "The requirements and capabilities the desired future state must satisfy.",
+        "discoveryMetrics": "The metrics or KPIs that will show whether the future state succeeds.",
+        "governanceFindings": "Governance findings — ownership, compliance, decision rights, risk, and controls.",
+    },
+}
+
 SYSTEM_PROMPT = (
-    "You are a strategy assistant that drafts structured field values for a strategic "
+    "You are a senior business analyst drafting structured field values for a strategic "
     "lifecycle planning tool. You are given a user's answers to a short questionnaire and, "
-    "when relevant, the linked parent record. Produce a single JSON object whose keys are the "
-    "camelCase field names from the provided schema. Only include fields you can reasonably "
-    "populate from the answers and context; omit any field you have no basis for. Use enum "
-    "values exactly as listed in the schema. Format dates as YYYY-MM-DD. Never invent or set "
-    "status, identifiers, workspace, ownership, or audit fields. Respond with the JSON object "
-    "only — no prose, no markdown fences."
+    "when relevant, the linked parent record.\n\n"
+    "The user's answers are ROUGH NOTES, not finished copy. Your job is to SYNTHESIZE and "
+    "EXPAND those notes into the polished, professional artifact a business analyst would "
+    "write FROM them — never to echo, quote, or lightly reword what the user typed.\n\n"
+    "How to write the fields:\n"
+    "- Write each field as proper prose appropriate to THAT field's meaning, using the field "
+    "guide below. A journey map is not a persona finding; a bottleneck analysis is not a "
+    "process map. Match the register and content each field's name implies.\n"
+    "- Every field must be DISTINCT. NEVER put the same or near-identical text in two fields. "
+    "If two fields threaten to overlap, sharpen each to its own specific purpose.\n"
+    "- Where the user's input for a field is thin or absent, INFER sensible, domain-appropriate "
+    "content that is consistent with what they did say — do not repeat their words, and do not "
+    "leave an applicable field as a bare copy of another. Only omit a field when you genuinely "
+    "cannot infer anything consistent for it.\n"
+    "- Stay grounded: do NOT invent specific numbers, dates, monetary figures, product names, "
+    "or people the user did not provide. Stay within the user's domain, terminology, and level "
+    "of specificity.\n\n"
+    "Output format:\n"
+    "- Produce a single JSON object whose keys are the camelCase field names from the provided "
+    "schema. Use enum values exactly as listed in the schema. Format dates as YYYY-MM-DD.\n"
+    "- Never invent or set status, identifiers, workspace, ownership, or audit fields.\n"
+    "- Respond with the JSON object only — no prose, no markdown fences."
 )
+
+
+def _build_system_prompt(resource_type: str) -> str:
+    """Base instructions plus the field guide for this resource type."""
+    glossary = FIELD_GLOSSARY.get(resource_type, {})
+    if not glossary:
+        return SYSTEM_PROMPT
+    guide = "\n".join(f"- {name}: {meaning}" for name, meaning in glossary.items())
+    return f"{SYSTEM_PROMPT}\n\nField guide for this resource — write each one for its own distinct meaning:\n{guide}"
 
 
 @dataclass(frozen=True)
@@ -105,6 +178,7 @@ def generate_fields(
     schema_cls = RESOURCE_SCHEMAS[resource_type]
     client = Anthropic(api_key=settings.require_anthropic_api_key())
     model = settings.ai_model
+    system_prompt = _build_system_prompt(resource_type)
     user_prompt = _build_user_prompt(resource_type, answers, context, schema_cls)
 
     for _attempt in range(2):
@@ -112,7 +186,7 @@ def generate_fields(
             response = client.messages.create(
                 model=model,
                 max_tokens=4096,
-                system=SYSTEM_PROMPT,
+                system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )
         except Exception as exc:  # SDK / network / auth failure
