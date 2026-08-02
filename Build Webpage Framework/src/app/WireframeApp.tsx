@@ -1190,7 +1190,7 @@ function LandingPage() {
           <h1>AI-AUGMENTED LIFECYCLE</h1>
           <p>An AI-augmented framework for product discovery and software lifecycle transformation.</p>
           <div className="hud-actions">
-            <HudButton variant="ghost" href="/assets/research-paper.pdf" download>
+            <HudButton variant="ghost" href={`${import.meta.env.BASE_URL}assets/research-paper.pdf`} download>
               <ArrowDownToLine size={16} /> Download the research paper
             </HudButton>
           </div>
@@ -1338,7 +1338,7 @@ function LandingPage() {
         <HudPanel>
           <SectionTitle eyebrow="PROJECT DELIVERABLES" title="RESEARCH ITEMS" />
           <ul className="hud-plain-list hud-plain-list--columns">{researchDeliverables.map((item) => <li key={item}>{item}</li>)}</ul>
-          <HudButton variant="ghost" href="/assets/research-paper.pdf" download><ArrowDownToLine size={16} /> Download research paper</HudButton>
+          <HudButton variant="ghost" href={`${import.meta.env.BASE_URL}assets/research-paper.pdf`} download><ArrowDownToLine size={16} /> Download research paper</HudButton>
         </HudPanel>
         <HudPanel>
           <SectionTitle eyebrow="PROJECT INFO" title="RESEARCH CONTEXT" />
