@@ -1,12 +1,33 @@
-# Deviations Register — Architecture Reference Amendments
+# Earlier Decisions and V3.4 Replacements
 
-**Status of this document:** canonical. The architecture reference
-(`Strategic_Lifecycle_AI_Framework_Architecture.html`) remains the source of truth *as amended by
-this register*. Every entry below was an explicit, reviewed decision made during backend
-implementation (Stages 5–16), encoded in the stage's Codex prompt, and carried in the linked PR.
-Entry types: **Deviation** (contradicts or extends the reference contract), **Interpretation**
-(the reference was ambiguous; one reading was pinned), **Correction** (the reference or an earlier
-stage was wrong), **Addition** (new behavior the reference doesn't address).
+**Updated:** 2026-10-03.
+[V3.4_GAP_ANALYSIS_AND_PLAN.md](V3.4_GAP_ANALYSIS_AND_PLAN.md) governs current work,
+subject to the owner's latest instructions. The entries below preserve the history of Stages
+5-16; they are not permission to restore old behavior.
+
+## Rules replaced by v3.4
+
+| Earlier entry | Current instruction |
+|---|---|
+| #4: unique membership only within a workspace | Enforce at most one workspace membership per account across workspaces. |
+| #5: sign-up creates a workspace | Superseded: ordinary sign-up creates an account only; verification and workspace setup follow. |
+| #10: old invitation delivery and error names | Extend for real email, role assignment, delivery outcomes, and the v3.4 invitation journey; use the agreed error names. |
+| #11: user deletion can cascade to authored records | Superseded for user references: preserve authored history using the v3.4 nullable-reference rules. |
+| #13, #16, #19, #21: limits on numbers of business records | The cap-related portions are superseded. Remove structural caps; preserve unrelated rules unless v3.4 changes them. |
+| #21: missing company architecture during normal setup | Workspace creation also creates its required architecture record; update affected checks and tests. |
+| #24: AI described as stateless | Suggestions and usage may be stored. Business records still require an explicit user Save. |
+| #29: list response format | Retained: `{items, total, limit, offset}`. |
+| #9: outsiders receive 404, unauthorized members receive 403 | Retained; verify it on the server for each action. |
+
+Other entries must be checked against v3.4 before reuse. A.8 of the plan records unresolved
+keep/drop questions about extra routes. A recommendation there is not a settled decision.
+The earlier cardinality-error convention below is historical and ends with removal of the caps.
+
+The owner's 2026-10-03 decisions also supersede any earlier migration-first, dashboard-first,
+theme-replacement, sample-data-first, or connect-the-frontend-later instruction. Follow the
+plan's steps and page-completion checks.
+
+## Historical Entries
 
 | # | Stage | PR | Type | Decision | Rationale |
 |---|---|---|---|---|---|

@@ -1,87 +1,52 @@
-# Strategic Lifecycle AI Framework — Source of Truth
+# Project Documents
 
-Canonical reference for the web app. These documents define the system end to end —
-*what* it is (data, API, rules, UI) and *how* it is built, secured, and hosted.
-Build against them. If code and these documents disagree, these documents win.
+Read [V3.4_GAP_ANALYSIS_AND_PLAN.md](V3.4_GAP_ANALYSIS_AND_PLAN.md) first.
+It contains the current decisions, build order, page records, and checks for completion.
+The owner's latest instructions take priority over all documents.
 
-Suggested repo location: `docs/` (commit them together).
+## Current work
 
----
+The application already exists. Extend the backend and existing React UI.
+Accounts and permissions come first, followed by complete pages in the user's journey.
+Each page connects to the server and saves real records as it is built.
 
-## Documents
+There are no customers or real database records to preserve. Database work uses a clean,
+repeatable setup. Planning does not execute a reset.
 
-### `IMPLEMENTATION.md` — how we build, secure, and host it (read first)
-The engineering guardrail. Pins the **scope boundary** (to prevent code/feature drift),
-software best practices, **security & data protection**, the schema/API conventions, the
-**AWS hosting** plan (cost-optimized now, with a documented path to scale), **operational
-hardening & abuse prevention** (rate limiting, DB security, secret handling, caching, async
-email, load testing), and the public **landing page + research-paper download**. Ends with a
-Definition-of-Done / anti-drift checklist to run before every merge.
+Preserve the current UI appearance and structure. Add the required pages using the existing
+controls. Visual changes need explicit approval; a different mockup is not approval.
 
-### `Strategic_Lifecycle_AI_Framework_Architecture.html` — data · API · schema · rules
-The single reference to verify before the backend is scaffolded.
+No application changes are authorized by this documentation update.
 
-- **Three diagrams:** entity-relationship (structure), AI-assistance flow (how AI adds
-  detail without adding tables), and origin & reuse (how the same architecture is built
-  from either the strategic phase or discovery, and reused across objectives).
-- **Schema — 33 tables** (22 entities + 11 link tables): every column, type, foreign key,
-  and enum, with the `created_by_user_id` / `created_at` / `updated_at` convention noted.
-- **API — 90 endpoints** across 14 groups, including 4 stateless `/ai/*` endpoints
-  (`/ai/draft`, `/ai/refine`, `/ai/suggest-links`, `/ai/usage`).
-- **40 business rules** in 9 categories: tenancy & structure, cardinality, traceability
-  spine, status lifecycles, validation gates, financial model, deliverables & governance,
-  auth, and AI assistance.
+## Where to look
 
-### `Strategic_Lifecycle_Wireframe.html` — navigable UI prototype
-- 20 pages across **Public Site** (the landing/overview), **Account & Setup**,
-  **Phase 1 · Strategy**, **Phase 2 · Delivery**, and the **AI layer**.
-- **Landing page** (public surface): project overview, lifecycle, AI-with-human-oversight,
-  enterprise scenarios, governance, and the **research-paper download** — a public static
-  PDF with no auth and no new tables or endpoints.
-- "Show business rules" toggle overlays each rule where it governs a screen.
-- Discovery page includes the guided **roll-down builder** (impacted areas → architecture
-  → value streams → key activities → supporting components), each tagged by origin.
-- Worked example throughout: FedEx Network 2.0.
+| File | Purpose |
+|---|---|
+| [V3.4_GAP_ANALYSIS_AND_PLAN.md](V3.4_GAP_ANALYSIS_AND_PLAN.md) | Current decisions, ordered work, page checklist, open questions, and earlier gap inventory. |
+| [IMPLEMENTATION.md](IMPLEMENTATION.md) | Current working rules followed by clearly marked earlier implementation material. |
+| [DEVIATIONS.md](DEVIATIONS.md) | Earlier decisions, with a table explaining which v3.4 rules replace them. |
+| [../../CLAUDE.md](../../CLAUDE.md) | Repository instructions for implementation sessions. |
+| [../../AGENTS.md](../../AGENTS.md) | Agent instructions pointing to the same current plan. |
+| [Strategic_Lifecycle_AI_Framework_Architecture.html](Strategic_Lifecycle_AI_Framework_Architecture.html) | Earlier design reference; not the full v3.4 specification. |
+| [Strategic_Lifecycle_Wireframe.html](Strategic_Lifecycle_Wireframe.html) | Earlier prototype; its sample records and flow do not define current application behavior. |
 
----
+The running frontend starts at `../src/main.tsx`, which renders
+`../src/app/WireframeApp.tsx`. Its existing appearance is the starting point for new pages.
 
-## Invariants the build must honor
+## Missing source details
 
-- **Tenancy.** Workspace = company profile = tenant boundary. Every table is
-  workspace-scoped via `workspace_id`.
-- **Business Architecture is company-level** — exactly one per workspace, shared across all
-  objectives and cases. Optional for a new venture (it can be built as the company goes).
-- **Origin is provenance, not ownership.** Architecture components carry
-  `origin = architecture | discovery`. Either way they are workspace-scoped — never tied to
-  the discovery or case that created them — and therefore reusable by any future objective.
-  Reuse links to the existing row; it does not copy.
-- **Two entry points, one model.** The architecture can be established from the strategic
-  phase or from discovery (triggered by identifying impacted business areas). Same tables,
-  same roll-down: architecture → value streams → key activities, with capabilities /
-  processes / personas / information concepts / impacts hanging off the architecture.
-- **Forecast at three altitudes** (objective → case → discovery). **Actuals entered once**,
-  at implementation, per value stream (`implementation_value_streams.allocated_cost/value`).
-  Objective-level actuals are **computed**, never stored.
-- **Deliverables are suggestions** (`suggested → user_finalized`): the system seeds them from
-  traceability data, a human edits, then saves as final. No auto-regeneration.
-- **AI layer is stateless and adds no tables.** It is built on the **Claude API**, backend-mediated
-  (the key stays server-side), every call is user-triggered (nothing fires on typing), one structured call
-  drafts a whole component, and a cheaper model handles routine drafting. Suggestions live in
-  the browser until the user saves through the normal entity endpoints — which is the same
-  governance gate as deliverables.
-- **Traceability spine.** `case → feature → capability → value stream / key activity` is the
-  relationship every link table exists to preserve.
-- **Two surfaces, scope-neutral additions.** The public landing page reads no tenant data, and
-  the research-paper download is a public static PDF — neither adds a table nor an authenticated
-  endpoint. New features should follow the same discipline: add nothing that isn't written down.
+Record the accessible location and version of the original v3.4 PDF and the owner's additional
+UI in the plan before using them to decide details found only in those sources.
+Do not assume the earlier HTML files are the new PDF or the supplied UI.
 
----
+## Working agreement
 
-## Status & next step
+For each page, record who uses it, what it shows, its actions, saved fields, permission rules,
+errors, and the next page. Complete and verify the page, server operations, and saved records
+together. No sample-data fallback and no separate connection project at the end.
 
-Design is settled and verified against these documents (counts and relationships checked),
-and `IMPLEMENTATION.md` now governs how the build proceeds (scope, security, hosting).
+Stripe is out of scope. AI credit charging is deferred. Real email remains required.
+AI suggestions may be stored, but business records change only when the user explicitly saves.
+No old table count, deadline, theme proposal, or historical exception overrides the current plan.
 
-**Next:** generate the SQL DDL from this schema and hand it to Claude Code to scaffold the
-FastAPI backend, following `IMPLEMENTATION.md`. The frontend UI shells are shaped to these
-API contracts (camelCase JSON, snake_case Postgres) and wire to the backend after it exists.
+When a requirement changes, update the plan and affected instructions before implementation.

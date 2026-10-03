@@ -1,10 +1,52 @@
-# Strategic Lifecycle AI Framework — Implementation Guide
+# Implementation Guide
 
-**Status:** canonical implementation reference · **Audience:** anyone writing code for this web app
-**Companion documents:** `Strategic_Lifecycle_AI_Framework_Architecture.html` (schema · API · rules · diagrams),
-`Strategic_Lifecycle_Wireframe.html` (UI), `README.md` (index).
+**Current rules updated:** 2026-10-03.
+**Read first:** [V3.4_GAP_ANALYSIS_AND_PLAN.md](V3.4_GAP_ANALYSIS_AND_PLAN.md).
+The owner's latest instructions and that plan govern current work.
+
+## Current working rules
+
+1. Extend the existing FastAPI backend and React UI. There is no customer data to preserve;
+   database work establishes a clean, repeatable setup.
+2. Establish accounts, sign-in, email confirmation, password recovery, membership, roles,
+   and server permission checks before business-page work.
+3. Follow the user's journey. Complete each page together with its actual server requests,
+   saved records, permissions, errors, and browser checks.
+4. Preserve the current theme, layout structure, and navigation pattern. Reuse existing
+   controls for new pages. Visual changes require explicit owner approval.
+5. Do not use sample-data fallback or pretend saves. Tests may simulate failures and create
+   temporary records; completed pages must work with actual services and saved information.
+6. Before implementing a page, complete the page record in the plan. After implementation,
+   record checks actually run and apply the plan's page-completion checklist.
+7. Resolve missing requirements before implementing the affected behavior. New requirements
+   belong in the plan before code changes. No application changes are made by this update.
+
+## Earlier material: reference only
+
+The numbered sections below are retained to explain earlier decisions. **They are not current
+implementation instructions and cannot override the v3.4 plan**, even where they use the words
+"canonical", "authoritative", "source of truth", or "non-negotiable".
+
+In particular, do not follow these earlier assumptions:
+
+| Earlier assumption | Current instruction |
+|---|---|
+| Vue or a new frontend directory | Extend the existing React application in `Build Webpage Framework/`. |
+| Sign-up creates a workspace | Ordinary sign-up creates an account; verification and workspace setup follow. |
+| Fixed 33-table / 90-route scope | Use the agreed v3.4 requirements and verify the actual code, not an old count. |
+| Build with samples, connect later | Complete each page with its actual server connection and storage. |
+| AI stores nothing / adds no tables | Suggestions and usage may be stored; saving business records requires explicit user action. |
+| Earlier deployment or database-transfer instructions | Check the actual environment; no customer-data transfer is required. |
+| Earlier UI reference controls the theme | Preserve the current running UI; visual changes require explicit approval. |
+| Earlier scope excludes all downloads or operator tools | Follow the v3.4 scope and page order, with Stripe excluded and AI charging deferred. |
+
+Technical details below must be checked against the current code and v3.4 requirements before
+reuse. They are not proof of current hosting, installed tools, or completed security work.
+Do not silently choose an old instruction when the current plan leaves a question open.
 
 ---
+
+# Earlier Implementation Reference
 
 ## 0. How to use this document (read first)
 

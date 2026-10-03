@@ -1,49 +1,84 @@
 # Strategic Lifecycle AI Framework
 
-University capstone monorepo. Backend and frontend were built separately and are being
-wired together now. I have 3 days. Prefer the smallest change that works.
+Existing FastAPI/PostgreSQL backend and React frontend, being extended to v3.4.
+There is no fixed deadline. Build complete user actions without temporary shortcuts.
+
+## Read first
+
+- `Build Webpage Framework/Docs/V3.4_GAP_ANALYSIS_AND_PLAN.md` contains the current
+  decisions, build order, page records, and completion checks.
+- The owner's latest explicit instructions take priority. The plan overrides conflicting
+  older implementation notes, HTML references, mockups, and deviation entries.
+- Record an unresolved requirement before implementing it. Do not guess.
+- Current authorization is documentation only until the owner requests implementation.
+
+## Working rules
+
+- No customers use the database and there is no real data to preserve. Plan a clean,
+  repeatable database setup, not a customer-data transfer or compatibility project.
+  Do not reset a database as part of planning.
+- Extend existing working code. Establish accounts, sign-in, email confirmation, recovery,
+  membership, roles, and shared server permission checks before business-page work.
+- Follow the user's journey, page by page. Build each page's server connection, storage,
+  permissions, failure handling, and verification together.
+- Completed pages read and save actual workspace information. No sample-data fallback,
+  pretend success, or deferred connection work. Empty records display as empty.
+- Keep the current UI style and structure. Reuse existing controls and navigation patterns
+  when adding pages. Colors, fonts, branding, spacing, layout, or other aesthetic changes
+  require explicit owner approval. A different mockup is not approval.
+- Stripe is out of scope; AI credit charging is deferred. The four structural record caps
+  are removed with affected page work. Workspace member limits remain a separate rule.
+- Real email is required for confirmation, password recovery, invitations, and account
+  linking. Simulated responses in tests do not establish that actual delivery works.
 
 ## Layout
-- `backend/` — FastAPI + SQLAlchemy 2.0 + Alembic + Postgres currently running on local machine. Complete, ~100 endpoints.
-- `Build Webpage Framework/` — Vite + React 18 SPA. Complete UI, zero API calls.
-- `Build Webpage Framework/Docs/` — canonical spec. Outranks the code.
 
-## THE LIVE FRONTEND IS `src/app/WireframeApp.tsx` AND NOTHING ELSE
-`src/main.tsx` renders `WireframeApp`. The files `App.tsx` and every `PrototypeRoutes*.tsx`
-are dead code — nothing imports them. Never read, edit, or reference them. If you think you
-need something from them, stop and ask me first.
+- `backend/`: FastAPI, SQLAlchemy, Alembic, PostgreSQL. Existing code to extend and verify.
+- `Build Webpage Framework/`: Vite, React 18, existing UI and `src/api/` clients.
+- `Build Webpage Framework/Docs/`: current plan plus clearly marked earlier references.
 
-## Package manager
-Frontend uses **npm** (`npm install`, `npm run dev`). Ignore the README's pnpm instructions —
-package-lock.json is current, pnpm-lock.yaml is stale.
+## Active frontend
 
-## Two workspace ids (mid-transition)
-The frontend has two workspace identities while pages are being wired to the API:
-- `apiWorkspaceId` — the REAL id from `GET /workspaces`. Drives the header switcher and all
-  wired pages (currently just Objectives). Persisted under `slaf.activeWorkspace`.
-- `activeWorkspaceId` / `getTenantData()` — the MOCK id. Drives every not-yet-wired page.
-  It is now frozen (no UI changes it), so mock pages always show FedEx until wired.
-Wire remaining pages onto `apiWorkspaceId`, then delete the mock plumbing.
+`src/main.tsx` renders `src/app/WireframeApp.tsx`.
+Archived `App.tsx` and `PrototypeRoutes*.tsx` are not the running app. Do not read, edit,
+or use them as implementation instructions unless the owner requests it.
 
-## Non-negotiables
-- API JSON is camelCase; Postgres is snake_case. `app/schemas/base.py::ApiModel` maps them.
-- Every list endpoint returns `{items, total, limit, offset}` — never a bare array.
-- Errors are `{error: {code, message, details?}}`.
-- Cross-workspace access returns 404 by design, not 403. Do not "fix" this.
-- `ANTHROPIC_API_KEY` is backend-only. It must never appear in frontend code, in
-  `import.meta.env`, or in any committed file.
-- AI endpoints never write to the database. Only an explicit user Save persists anything.
+Some pages already use the server but still mix saved records with sample information.
+`apiWorkspaceId` is the saved workspace identity; `activeWorkspaceId` / `getTenantData()`
+provide older sample state. Remove each completed page's sample paths in that page's work,
+then remove shared helpers once unused. Check fields and actions, not just page counts.
 
-## Alembic gotcha
-`migrations/env.py` reads DATABASE_URL from the OS environment, NOT from `.env`.
-Always `export DATABASE_URL=...` in the shell before running alembic.
+## Package manager and checks
 
-## Verify commands
-The frontend has NO TypeScript installed and no tsconfig. `npx tsc --noEmit` will error — it
-is not a valid check. Use `npm run build` (vite/esbuild) to verify.
+Use npm for the frontend, following the existing repository working convention.
+The package-manager declaration and old pnpm notes disagree with that convention; do not
+change package-manager metadata or lockfiles during unrelated page work.
 
-## Working style
-- I am new to Claude Code. Explain what you're about to do in one or two sentences first.
-- Use plan mode for anything touching more than 3 files.
-- Make the smallest change that achieves the goal. Do not refactor things I didn't ask about.
-- When you finish a task, tell me the exact command to run to verify it worked.
+- Frontend build: `cd "Build Webpage Framework" && npm run build`.
+- Backend checks: use the project's environment and pytest against a dedicated test database.
+  Check test setup before running; it may recreate tables.
+- The frontend currently has no configured TypeScript checking command. Do not report
+  `npx tsc --noEmit` as a valid check without first establishing that setup.
+- During implementation, also exercise the page in the browser against the actual server.
+  Check saving, refresh, returning sign-in, failed requests, and other users' access.
+
+## Shared code rules
+
+- API JSON is camelCase; database fields are snake_case. Use `ApiModel`.
+- List responses use `{items, total, limit, offset}`.
+- Errors use `{error: {code, message, details?}}`.
+- Outsiders requesting another workspace's records receive 404. Members without permission
+  receive the appropriate 403. Enforce this on the server.
+- `ANTHROPIC_API_KEY` stays on the server, never in frontend code or committed secrets.
+- AI may store suggestions and usage as required. It must not save or change business
+  records without the user's explicit Save action.
+- Alembic reads `DATABASE_URL` from the shell environment, not `.env`. Its `migrations`
+  directory is a tool name, not a requirement to preserve disposable development records.
+
+## Keeping work aligned
+
+Before editing application code, identify the plan step and page, read its page record,
+and check the current implementation. Keep edits to the agreed behavior.
+Afterward, record changed files and checks actually run. A page is not complete until it
+passes the plan's completion checklist. Update the plan before changing agreed requirements.
+Explain work and findings in plain language. Do not claim checks passed when they were not run.
