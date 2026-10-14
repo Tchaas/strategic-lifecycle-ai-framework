@@ -45,7 +45,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          BASE_PATH: /strategic-lifecycle-ai-framework/
+          BASE_PATH: /
           VITE_API_BASE_URL: https://slaf-backend.onrender.com
 
       - name: Publish to gh-pages
@@ -55,4 +55,5 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: Build Webpage Framework/dist
+          cname: slaf.dev
           force_orphan: true
