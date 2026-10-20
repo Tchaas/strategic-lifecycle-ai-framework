@@ -1,6 +1,6 @@
 # Implementation Guide
 
-**Current rules updated:** 2026-10-03.
+**Current rules updated:** 2026-10-06.
 **Read first:** [V3.4_GAP_ANALYSIS_AND_PLAN.md](V3.4_GAP_ANALYSIS_AND_PLAN.md).
 The owner's latest instructions and that plan govern current work.
 
@@ -20,6 +20,13 @@ The owner's latest instructions and that plan govern current work.
    record checks actually run and apply the plan's page-completion checklist.
 7. Resolve missing requirements before implementing the affected behavior. New requirements
    belong in the plan before code changes. No application changes are made by this update.
+8. For the current onboarding increment, follow the plan's §0.0: creator/admin-only workspace
+   renaming, department management, and invitations; members can view departments and perform
+   other ordinary workspace work. Email verification grants admission automatically, with no
+   further approval. Setup requires at least one named department; other department fields are
+   optional. Admins can add more during setup or later and edit departments, but cannot delete
+   the last one. Keep the application runnable after each small increment and validate against
+   an isolated test database before changing the running environment.
 
 ## Earlier material: reference only
 

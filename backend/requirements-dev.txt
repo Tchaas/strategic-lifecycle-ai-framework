@@ -1,0 +1,5 @@
+-r requirements.lock
+pytest==9.1.1
+httpx==0.28.1
+aiosmtpd==1.4.6
+playwright==1.55.0

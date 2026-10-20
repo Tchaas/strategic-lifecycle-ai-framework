@@ -1,5 +1,7 @@
 import uuid
+from datetime import datetime
 
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models._columns import uuid_pk
@@ -13,6 +15,8 @@ class Workspace(AuditMixin, Base):
 
     id: Mapped[uuid.UUID] = uuid_pk()
     name: Mapped[str] = mapped_column(nullable=False)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    setup_completed_at: Mapped[datetime | None]
     legal_name: Mapped[str | None]
     business_unit: Mapped[str | None]
     description: Mapped[str | None]

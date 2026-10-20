@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 import sqlalchemy as sa
+from app.models import Base
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -20,14 +21,17 @@ def expect_integrity_error(conn: sa.Connection, statement: str, params: dict[str
 
 def test_schema_constraints_and_cascade(engine: sa.Engine) -> None:
     with engine.begin() as conn:
-        table_count = conn.scalar(text("""
-                SELECT count(*)
+        table_names = set(conn.scalars(text("""
+                SELECT table_name
                 FROM information_schema.tables
                 WHERE table_schema = 'public'
                   AND table_type = 'BASE TABLE'
                   AND table_name <> 'alembic_version'
-                """))
-        assert table_count == 33, table_count
+                """)))
+        assert table_names == set(Base.metadata.tables), {
+            "missing": set(Base.metadata.tables) - table_names,
+            "unexpected": table_names - set(Base.metadata.tables),
+        }
 
         pk_issues = conn.execute(text("""
                 SELECT c.relname, a.attname, format_type(a.atttypid, a.atttypmod), pg_get_expr(d.adbin, d.adrelid)
@@ -101,7 +105,11 @@ def test_schema_constraints_and_cascade(engine: sa.Engine) -> None:
                 VALUES (:workspace_id, :architecture_id, 'Order to Cash', :user_id)
                 RETURNING id
                 """),
-            {"workspace_id": workspace_id, "architecture_id": architecture_id, "user_id": user_id},
+            {
+                "workspace_id": workspace_id,
+                "architecture_id": architecture_id,
+                "user_id": user_id,
+            },
         )
         capability_id = conn.scalar(
             text("""
@@ -109,7 +117,11 @@ def test_schema_constraints_and_cascade(engine: sa.Engine) -> None:
                 VALUES (:workspace_id, :architecture_id, 'Billing', :user_id)
                 RETURNING id
                 """),
-            {"workspace_id": workspace_id, "architecture_id": architecture_id, "user_id": user_id},
+            {
+                "workspace_id": workspace_id,
+                "architecture_id": architecture_id,
+                "user_id": user_id,
+            },
         )
         conn.execute(
             text("""
@@ -141,7 +153,11 @@ def test_schema_constraints_and_cascade(engine: sa.Engine) -> None:
             INSERT INTO lean_business_cases (workspace_id, strategic_objective_id, owner_user_id, title, status, created_by_user_id)
             VALUES (:workspace_id, :objective_id, :user_id, 'Bad status case', 'bogus', :user_id)
             """,
-            {"workspace_id": workspace_id, "objective_id": objective_id, "user_id": user_id},
+            {
+                "workspace_id": workspace_id,
+                "objective_id": objective_id,
+                "user_id": user_id,
+            },
         )
         case_id = conn.scalar(
             text("""
@@ -149,11 +165,19 @@ def test_schema_constraints_and_cascade(engine: sa.Engine) -> None:
                 VALUES (:workspace_id, :objective_id, :user_id, 'Valid case', :user_id)
                 RETURNING id
                 """),
-            {"workspace_id": workspace_id, "objective_id": objective_id, "user_id": user_id},
+            {
+                "workspace_id": workspace_id,
+                "objective_id": objective_id,
+                "user_id": user_id,
+            },
         )
 
-        conn.execute(text("DELETE FROM workspaces WHERE id = :workspace_id"), {"workspace_id": workspace_id})
+        conn.execute(
+            text("DELETE FROM workspaces WHERE id = :workspace_id"),
+            {"workspace_id": workspace_id},
+        )
         remaining = conn.scalar(
-            text("SELECT count(*) FROM lean_business_cases WHERE id = :case_id"), {"case_id": case_id}
+            text("SELECT count(*) FROM lean_business_cases WHERE id = :case_id"),
+            {"case_id": case_id},
         )
         assert remaining == 0, remaining

@@ -8,23 +8,15 @@ from app.core.security import create_access_token, hash_password
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
+from onboarding_helpers import signup_workspace
+
 
 def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
 def signup(client: TestClient, email: str, workspace_name: str = "Acme") -> dict[str, Any]:
-    response = client.post(
-        "/auth/signup",
-        json={
-            "email": email,
-            "password": "correct-horse",
-            "fullName": email.split("@")[0].title(),
-            "workspaceName": workspace_name,
-        },
-    )
-    assert response.status_code == 201, response.text
-    return cast(dict[str, Any], response.json())
+    return signup_workspace(client, email, workspace_name)
 
 
 def create_password_user(engine: sa.Engine, email: str) -> uuid.UUID:
@@ -33,8 +25,8 @@ def create_password_user(engine: sa.Engine, email: str) -> uuid.UUID:
             uuid.UUID,
             conn.scalar(
                 text("""
-                    INSERT INTO users (email, full_name, auth_provider, password_hash)
-                    VALUES (:email, 'Member', 'password', :password_hash)
+                    INSERT INTO users (email, full_name, auth_provider, password_hash, email_verified)
+                    VALUES (:email, 'Member', 'password', :password_hash, true)
                     RETURNING id
                     """),
                 {"email": email, "password_hash": hash_password("correct-horse")},
@@ -47,10 +39,14 @@ def add_member(engine: sa.Engine, workspace_id: str, user_id: uuid.UUID, created
         conn.execute(
             text("""
                 INSERT INTO workspace_members
-                  (workspace_id, user_id, is_admin, joined_at, created_by_user_id)
-                VALUES (:workspace_id, :user_id, false, now(), :created_by_user_id)
+                  (workspace_id, user_id, role, joined_at, created_by_user_id)
+                VALUES (:workspace_id, :user_id, 'member', now(), :created_by_user_id)
                 """),
-            {"workspace_id": workspace_id, "user_id": user_id, "created_by_user_id": created_by_user_id},
+            {
+                "workspace_id": workspace_id,
+                "user_id": user_id,
+                "created_by_user_id": created_by_user_id,
+            },
         )
 
 
@@ -95,12 +91,15 @@ def create_discovery(client: TestClient, workspace_id: str, case_id: str, token:
 
 
 def create_architecture(client: TestClient, workspace_id: str, token: str) -> dict[str, Any]:
-    response = client.post(
-        f"/workspaces/{workspace_id}/business-architecture",
+    existing = client.get(f"/workspaces/{workspace_id}/business-architecture", headers=auth_headers(token))
+    assert existing.status_code == 200, existing.text
+    architecture_id = existing.json()["id"]
+    response = client.patch(
+        f"/workspaces/{workspace_id}/business-architecture/{architecture_id}",
         headers=auth_headers(token),
         json={"name": "Architecture"},
     )
-    assert response.status_code == 201, response.text
+    assert response.status_code == 200, response.text
     return cast(dict[str, Any], response.json())
 
 
@@ -287,36 +286,18 @@ def test_discovery_reference_links(client: TestClient) -> None:
     )
 
 
-def test_roll_down_guard_origin_and_normal_visibility(client: TestClient) -> None:
+def test_roll_down_uses_setup_architecture_and_preserves_origin(
+    client: TestClient,
+) -> None:
     owner = signup(client, "discovery-roll@example.com", "Discovery Roll Co")
     case = create_case_with_objective(client, owner)
     discovery = create_discovery(client, owner["workspace"]["id"], case["id"], owner["accessToken"])
-    no_ba_routes = [
-        ("value-streams", {"name": "Stream"}),
-        ("key-activities", {"valueStreamId": str(uuid.uuid4()), "activityName": "Activity"}),
-        ("capabilities", {"capabilityName": "Capability"}),
-        ("business-impacts", {"impactedArea": "Area"}),
-        ("personas", {"name": "Persona"}),
-        ("processes", {"processName": "Process"}),
-        ("information-concepts", {"conceptName": "Concept"}),
-    ]
-    for suffix, payload in no_ba_routes:
-        assert_error(
-            client.post(
-                f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/{suffix}",
-                headers=auth_headers(owner["accessToken"]),
-                json=payload,
-            ),
-            409,
-            "architecture_required",
-        )
-    architecture = client.post(
-        f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/business-architecture",
+    architecture = client.get(
+        f"/workspaces/{owner['workspace']['id']}/business-architecture",
         headers=auth_headers(owner["accessToken"]),
-        json={"name": "Discovery Architecture"},
     )
-    assert architecture.status_code == 201
-    assert architecture.json()["origin"] == "discovery"
+    assert architecture.status_code == 200
+    assert architecture.json()["origin"] == "architecture"
     assert_error(
         client.post(
             f"/workspaces/{owner['workspace']['id']}/business-architecture",
@@ -355,7 +336,12 @@ def test_roll_down_guard_origin_and_normal_visibility(client: TestClient) -> Non
         headers=auth_headers(owner["accessToken"]),
         json={"impactedArea": "Discovery Impact"},
     ).json()
-    assert [stream["origin"], activity["origin"], capability["origin"], impact["origin"]] == ["discovery"] * 4
+    assert [
+        stream["origin"],
+        activity["origin"],
+        capability["origin"],
+        impact["origin"],
+    ] == ["discovery"] * 4
     normal_streams = client.get(
         f"/workspaces/{owner['workspace']['id']}/business-architecture/{architecture.json()['id']}/value-streams",
         headers=auth_headers(owner["accessToken"]),
@@ -472,17 +458,16 @@ def test_discovery_tenancy_and_non_admin_writes(client: TestClient, engine: sa.E
         ).status_code
         == 200
     )
-    architecture = client.post(
-        f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/business-architecture",
+    architecture = client.get(
+        f"/workspaces/{owner['workspace']['id']}/business-architecture",
         headers=auth_headers(member_token),
-        json={"name": "Member architecture"},
     ).json()
     stream = client.post(
         f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/value-streams",
         headers=auth_headers(member_token),
         json={"name": "Member stream"},
     ).json()
-    assert architecture["origin"] == "discovery"
+    assert architecture["origin"] == "architecture"
     assert stream["origin"] == "discovery"
     assert (
         client.post(
@@ -548,7 +533,11 @@ def test_discovery_tenancy_and_non_admin_writes(client: TestClient, engine: sa.E
             f"/workspaces/{owner['workspace']['id']}/lean-business-cases/{case['id']}/discovery",
             {"problemStatement": "No"},
         ),
-        ("patch", f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}", {"problemStatement": "No"}),
+        (
+            "patch",
+            f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}",
+            {"problemStatement": "No"},
+        ),
         (
             "post",
             f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/personas/{stakeholder['id']}",
@@ -584,7 +573,11 @@ def test_discovery_tenancy_and_non_admin_writes(client: TestClient, engine: sa.E
             f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/business-architecture",
             {"name": "No"},
         ),
-        ("post", f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/value-streams", {"name": "No"}),
+        (
+            "post",
+            f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/value-streams",
+            {"name": "No"},
+        ),
         (
             "post",
             f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/key-activities",
@@ -600,7 +593,11 @@ def test_discovery_tenancy_and_non_admin_writes(client: TestClient, engine: sa.E
             f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/business-impacts",
             {"impactedArea": "No"},
         ),
-        ("post", f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/personas", {"name": "No"}),
+        (
+            "post",
+            f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/personas",
+            {"name": "No"},
+        ),
         (
             "post",
             f"/workspaces/{owner['workspace']['id']}/discovery/{discovery['id']}/processes",

@@ -18,7 +18,6 @@ def signup_payload(email: str = "alex@example.com") -> dict[str, str]:
         "email": email,
         "password": "correct-horse",
         "fullName": "Alex Wright",
-        "workspaceName": "Acme Strategy",
     }
 
 
@@ -69,44 +68,21 @@ def create_google_user(
         )
 
 
-def test_signup_happy_path_creates_user_workspace_member_and_tokens(client: TestClient, engine: sa.Engine) -> None:
+def test_signup_creates_only_unverified_account_and_tokens(client: TestClient, engine: sa.Engine) -> None:
     response = client.post("/auth/signup", json=signup_payload())
-
     assert response.status_code == 201
     body = response.json()
-    assert {"user", "workspace", "accessToken", "refreshToken", "expiresIn"} <= set(body)
-    assert "fullName" in body["user"]
-    assert "authProvider" in body["user"]
-    assert "createdByUserId" in body["workspace"]
-    assert "password_hash" not in response.text
-    assert "google_sub" not in response.text
-
-    user_id = body["user"]["id"]
-    workspace_id = body["workspace"]["id"]
+    assert "workspace" not in body
+    assert body["user"]["emailVerified"] is False
     with engine.begin() as conn:
-        counts = conn.execute(text("""
-                SELECT
-                  (SELECT count(*) FROM users) AS users_count,
-                  (SELECT count(*) FROM workspaces) AS workspaces_count,
-                  (SELECT count(*) FROM workspace_members) AS members_count
-                """)).one()
-        member = conn.execute(
-            text("SELECT is_admin FROM workspace_members WHERE user_id = :user_id"), {"user_id": user_id}
-        ).one()
-        workspace_creator = conn.scalar(
-            text("SELECT created_by_user_id FROM workspaces WHERE id = :id"), {"id": workspace_id}
+        assert conn.scalar(text("SELECT count(*) FROM users")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM workspaces")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM workspace_members")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM email_verification_tokens")) == 1
+        assert conn.scalar(text("SELECT token_hash FROM refresh_tokens LIMIT 1")) == hash_refresh_token(
+            body["refreshToken"]
         )
-        stored_hash = conn.scalar(text("SELECT token_hash FROM refresh_tokens LIMIT 1"))
-
-    assert counts == (1, 1, 1)
-    assert member.is_admin is True
-    assert str(workspace_creator) == user_id
-    assert stored_hash != body["refreshToken"]
-    assert stored_hash == hash_refresh_token(body["refreshToken"])
-
-    me = client.get("/me", headers={"Authorization": f"Bearer {body['accessToken']}"})
-    assert me.status_code == 200
-    assert me.json()["id"] == user_id
+    assert client.get("/me", headers={"Authorization": f"Bearer {body['accessToken']}"}).status_code == 200
 
 
 def test_signup_duplicate_email_rolls_back_case_insensitively(client: TestClient, engine: sa.Engine) -> None:
@@ -116,8 +92,8 @@ def test_signup_duplicate_email_rolls_back_case_insensitively(client: TestClient
     assert_error(response, 409, "email_taken")
     with engine.begin() as conn:
         assert conn.scalar(text("SELECT count(*) FROM users")) == 1
-        assert conn.scalar(text("SELECT count(*) FROM workspaces")) == 1
-        assert conn.scalar(text("SELECT count(*) FROM workspace_members")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM workspaces")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM workspace_members")) == 0
 
 
 def test_login_happy_path_bad_password_and_unknown_email(client: TestClient, engine: sa.Engine) -> None:
@@ -294,4 +270,4 @@ def test_validation_error_envelope_has_field_details(client: TestClient) -> None
 
     assert_error(response, 422, "validation_error")
     fields = response.json()["error"]["details"]["fields"]
-    assert any("workspaceName" in str(field["loc"]) for field in fields)
+    assert any("password" in str(field["loc"]) for field in fields)

@@ -3,7 +3,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from app.api.dependencies import get_current_user, get_workspace_member, get_workspace_service, require_workspace_admin
+from app.api.dependencies import (
+    get_current_user,
+    get_setup_member,
+    get_workspace_service,
+    require_workspace_admin,
+)
+from app.core.errors import AppError
 from app.core.pagination import Page, PaginationParams, paginate_items
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
@@ -21,12 +27,16 @@ from app.services.workspace_service import MemberDisplay, WorkspaceListResult, W
 router = APIRouter(tags=["workspaces"])
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
-WorkspaceMemberDep = Annotated[WorkspaceMember, Depends(get_workspace_member)]
+WorkspaceMemberDep = Annotated[WorkspaceMember, Depends(get_setup_member)]
 WorkspaceAdminDep = Annotated[WorkspaceMember, Depends(require_workspace_admin)]
 WorkspaceServiceDep = Annotated[WorkspaceService, Depends(get_workspace_service)]
 
 
-@router.post("/workspaces", response_model=WorkspaceProvisionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/workspaces",
+    response_model=WorkspaceProvisionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_workspace(
     payload: WorkspaceCreateRequest,
     current_user: CurrentUserDep,
@@ -41,6 +51,7 @@ def create_workspace(
             full_name=current_user.full_name,
             email=current_user.email,
             avatar_url=current_user.avatar_url,
+            role=result.member.role,
             is_admin=result.member.is_admin,
             joined_at=result.member.joined_at,
         ),
@@ -56,6 +67,7 @@ def list_workspaces(
     def mapper(result: WorkspaceListResult) -> WorkspaceListItem:
         return WorkspaceListItem(
             **WorkspaceResponse.model_validate(result.workspace).model_dump(),
+            role=result.member.role,
             is_admin=result.member.is_admin,
             joined_at=result.member.joined_at,
         )
@@ -76,9 +88,11 @@ def get_workspace(
 def update_workspace(
     workspace_id: uuid.UUID,
     payload: WorkspaceUpdateRequest,
-    _: WorkspaceAdminDep,
+    member: WorkspaceMemberDep,
     workspace_service: WorkspaceServiceDep,
 ) -> WorkspaceResponse:
+    if "name" in payload.model_fields_set and not member.is_admin:
+        raise AppError("admin_required", "Only the workspace admin can change its name", 403)
     return WorkspaceResponse.model_validate(workspace_service.update_workspace(workspace_id, payload))
 
 
@@ -104,7 +118,10 @@ def list_members(
     return paginate_items(workspace_service.list_members(workspace_id), pagination, member_display_response)
 
 
-@router.patch("/workspaces/{workspace_id}/members/{member_id}", response_model=WorkspaceMemberResponse)
+@router.patch(
+    "/workspaces/{workspace_id}/members/{member_id}",
+    response_model=WorkspaceMemberResponse,
+)
 def update_member(
     workspace_id: uuid.UUID,
     member_id: uuid.UUID,
@@ -122,6 +139,7 @@ def update_member(
         full_name=user.full_name,
         email=user.email,
         avatar_url=user.avatar_url,
+        role=member.role,
         is_admin=member.is_admin,
         joined_at=member.joined_at,
     )
@@ -147,6 +165,16 @@ def member_display_response(row: MemberDisplay) -> WorkspaceMemberResponse:
         full_name=row.user.full_name,
         email=row.user.email,
         avatar_url=row.user.avatar_url,
+        role=row.member.role,
         is_admin=row.member.is_admin,
         joined_at=row.member.joined_at,
     )
+
+
+@router.post("/workspaces/{workspace_id}/complete-setup", response_model=WorkspaceResponse)
+def complete_setup(
+    workspace_id: uuid.UUID,
+    _: WorkspaceAdminDep,
+    workspace_service: WorkspaceServiceDep,
+) -> WorkspaceResponse:
+    return WorkspaceResponse.model_validate(workspace_service.complete_setup(workspace_id))

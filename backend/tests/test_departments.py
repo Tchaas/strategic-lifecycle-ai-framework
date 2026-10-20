@@ -11,6 +11,8 @@ from app.core.security import create_access_token, hash_password
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
+from onboarding_helpers import signup_workspace
+
 REFERENCE_FKS = {
     ("departments", "parent_department_id"),
     ("value_streams", "linked_department_id"),
@@ -29,17 +31,7 @@ def auth_headers(token: str) -> dict[str, str]:
 
 
 def signup(client: TestClient, email: str, workspace_name: str = "Acme") -> dict[str, Any]:
-    response = client.post(
-        "/auth/signup",
-        json={
-            "email": email,
-            "password": "correct-horse",
-            "fullName": email.split("@")[0].title(),
-            "workspaceName": workspace_name,
-        },
-    )
-    assert response.status_code == 201, response.text
-    return cast(dict[str, Any], response.json())
+    return signup_workspace(client, email, workspace_name)
 
 
 def create_password_user(engine: sa.Engine, email: str, full_name: str = "User") -> uuid.UUID:
@@ -48,11 +40,15 @@ def create_password_user(engine: sa.Engine, email: str, full_name: str = "User")
             uuid.UUID,
             conn.scalar(
                 text("""
-                    INSERT INTO users (email, full_name, auth_provider, password_hash)
-                    VALUES (:email, :full_name, 'password', :password_hash)
+                    INSERT INTO users (email, full_name, auth_provider, password_hash, email_verified)
+                    VALUES (:email, :full_name, 'password', :password_hash, true)
                     RETURNING id
                     """),
-                {"email": email, "full_name": full_name, "password_hash": hash_password("correct-horse")},
+                {
+                    "email": email,
+                    "full_name": full_name,
+                    "password_hash": hash_password("correct-horse"),
+                },
             ),
         )
 
@@ -63,11 +59,15 @@ def add_member(engine: sa.Engine, workspace_id: str, user_id: uuid.UUID, created
             conn.scalar(
                 text("""
                     INSERT INTO workspace_members
-                      (workspace_id, user_id, is_admin, joined_at, created_by_user_id)
-                    VALUES (:workspace_id, :user_id, false, now(), :created_by_user_id)
+                      (workspace_id, user_id, role, joined_at, created_by_user_id)
+                    VALUES (:workspace_id, :user_id, 'member', now(), :created_by_user_id)
                     RETURNING id
                     """),
-                {"workspace_id": workspace_id, "user_id": user_id, "created_by_user_id": created_by_user_id},
+                {
+                    "workspace_id": workspace_id,
+                    "user_id": user_id,
+                    "created_by_user_id": created_by_user_id,
+                },
             )
         )
 
@@ -252,7 +252,13 @@ def test_parent_filter_returns_direct_children_only(client: TestClient) -> None:
     admin = signup(client, "filter-admin@example.com", "Filter Co")
     root = create_department(client, admin["workspace"]["id"], admin["accessToken"], "Root")
     child = create_department(client, admin["workspace"]["id"], admin["accessToken"], "Child", root["id"])
-    grandchild = create_department(client, admin["workspace"]["id"], admin["accessToken"], "Grandchild", child["id"])
+    grandchild = create_department(
+        client,
+        admin["workspace"]["id"],
+        admin["accessToken"],
+        "Grandchild",
+        child["id"],
+    )
     sibling = create_department(client, admin["workspace"]["id"], admin["accessToken"], "Sibling", root["id"])
 
     children = client.get(
@@ -261,14 +267,17 @@ def test_parent_filter_returns_direct_children_only(client: TestClient) -> None:
         params={"parentId": root["id"]},
     )
     assert children.status_code == 200
-    assert {row["id"] for row in children.json()["items"]} == {child["id"], sibling["id"]}
+    assert {row["id"] for row in children.json()["items"]} == {
+        child["id"],
+        sibling["id"],
+    }
 
     all_departments = client.get(
         f"/workspaces/{admin['workspace']['id']}/departments",
         headers=auth_headers(admin["accessToken"]),
     )
     assert all_departments.status_code == 200
-    assert {row["id"] for row in all_departments.json()["items"]} == {
+    assert {row["id"] for row in all_departments.json()["items"] if row["name"] != "Initial department"} == {
         root["id"],
         child["id"],
         grandchild["id"],
@@ -309,10 +318,7 @@ def test_delete_nulls_department_references(client: TestClient, engine: sa.Engin
     with engine.begin() as conn:
         architecture_id = conn.scalar(
             text("""
-                INSERT INTO business_architecture_components
-                  (workspace_id, name, created_by_user_id)
-                VALUES (:workspace_id, 'Architecture', :user_id)
-                RETURNING id
+                SELECT id FROM business_architecture_components WHERE workspace_id = :workspace_id
                 """),
             {"workspace_id": admin["workspace"]["id"], "user_id": admin["user"]["id"]},
         )

@@ -1,3 +1,4 @@
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +12,16 @@ class Settings(BaseSettings):
     cors_allowed_origins: str = ""
     invite_ttl: int = 604_800
     frontend_base_url: str = ""
+    email_provider: str = "smtp"
+    email_from: str = ""
+    verification_ttl: int = 86400
+    verification_resend_seconds: int = 60
+    password_reset_ttl: int = 3600
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_security: str = "starttls"
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
     rate_limit_enabled: bool = False
     rate_limit_login_per_minute: int = 10
     rate_limit_signup_per_minute: int = 5

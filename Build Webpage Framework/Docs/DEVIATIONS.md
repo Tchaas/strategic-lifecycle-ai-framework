@@ -1,11 +1,20 @@
 # Earlier Decisions and V3.4 Replacements
 
-**Updated:** 2026-10-03.
+**Updated:** 2026-10-06.
 [V3.4_GAP_ANALYSIS_AND_PLAN.md](V3.4_GAP_ANALYSIS_AND_PLAN.md) governs current work,
 subject to the owner's latest instructions. The entries below preserve the history of Stages
 5-16; they are not permission to restore old behavior.
 
 ## Rules replaced by v3.4
+
+The owner's 2026-10-06 onboarding decisions are recorded in the plan's §0.0. Department setup
+is mandatory. Only the creator/admin may rename the workspace, manage departments, or invite
+others; members can read departments and perform other ordinary workspace work. This narrows
+the historical blanket admin-only workspace-profile rule. Both paths require verified email,
+with automatic admission and no further approval step. Setup requires at least one named
+department; other department fields are optional. Admins may add departments during setup or
+later and edit them; protect the final department from deletion. Follow the plan's addressed
+invitation verification rule and its recorded implementation assumptions.
 
 | Earlier entry | Current instruction |
 |---|---|

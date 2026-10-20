@@ -1,10 +1,12 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
+from sqlalchemy import select
 
-from app.api.dependencies import get_auth_service, get_current_user
+from app.api.dependencies import DbSession, get_auth_service, get_current_user
 from app.core.config import settings
 from app.core.rate_limit import RateLimit, rate_limit_dependency
+from app.models.email import EmailOutbox
 from app.models.users import User
 from app.schemas.auth import (
     AuthTokens,
@@ -13,13 +15,15 @@ from app.schemas.auth import (
     LoginRequest,
     LoginResponse,
     LogoutRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     RefreshRequest,
     SignupRequest,
     SignupResponse,
     UserResponse,
-    WorkspaceResponse,
 )
 from app.services.auth_service import AuthService
+from app.services.email_service import queue_verification, verify_email
 
 router = APIRouter(tags=["auth"])
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
@@ -38,7 +42,6 @@ def signup(payload: SignupRequest, auth_service: AuthServiceDep) -> SignupRespon
     result = auth_service.signup(payload)
     return SignupResponse(
         user=UserResponse.model_validate(result.user),
-        workspace=WorkspaceResponse.model_validate(result.workspace),
         access_token=result.access_token,
         refresh_token=result.refresh_token,
         expires_in=result.expires_in,
@@ -110,6 +113,66 @@ def logout(
     return response
 
 
+@router.post(
+    "/auth/password-reset/request",
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(rate_limit_dependency(lambda: RateLimit("password_reset_request", 5)))],
+)
+def request_password_reset(payload: PasswordResetRequest, auth_service: AuthServiceDep) -> dict[str, str]:
+    auth_service.request_password_reset(payload)
+    return {"status": "accepted"}
+
+
+@router.post(
+    "/auth/password-reset/confirm",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(rate_limit_dependency(lambda: RateLimit("password_reset_confirm", 10)))],
+)
+def confirm_password_reset(payload: PasswordResetConfirm, auth_service: AuthServiceDep) -> Response:
+    auth_service.reset_password(payload)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/me", response_model=UserResponse)
 def me(current_user: CurrentUserDep) -> UserResponse:
     return UserResponse.model_validate(current_user)
+
+
+@router.post(
+    "/auth/verify-email/{token}",
+    response_model=UserResponse,
+    dependencies=[Depends(rate_limit_dependency(lambda: RateLimit("email_verify", 10)))],
+)
+def confirm_email(token: str, db: DbSession) -> UserResponse:
+    return UserResponse.model_validate(verify_email(db, token))
+
+
+@router.post(
+    "/auth/verification/resend",
+    status_code=202,
+    dependencies=[Depends(rate_limit_dependency(lambda: RateLimit("email_resend", 5)))],
+)
+def resend_email(user: CurrentUserDep, db: DbSession) -> dict[str, str]:
+    db.execute(select(User).where(User.id == user.id).with_for_update())
+    db.refresh(user)
+    if user.email_verified:
+        return {"status": "verified"}
+    queue_verification(db, user)
+    db.commit()
+    return {"status": "queued"}
+
+
+@router.get("/auth/verification/status")
+def email_status(user: CurrentUserDep, db: DbSession) -> dict[str, str]:
+    message = db.scalar(
+        select(EmailOutbox)
+        .where(EmailOutbox.user_id == user.id, EmailOutbox.kind == "verification")
+        .order_by(EmailOutbox.created_at.desc())
+        .limit(1)
+    )
+    return {
+        "status": "verified" if user.email_verified else message.status if message else "missing",
+        "deliveryProvider": message.delivery_provider if message else "unknown",
+        "currentProvider": settings.email_provider,
+        "deliveryError": message.last_error_code or "" if message else "",
+    }

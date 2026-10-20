@@ -8,6 +8,8 @@ from app.core.rate_limit import RateLimit, rate_limiter
 from app.services import auth_service
 from fastapi.testclient import TestClient
 
+from onboarding_helpers import signup_workspace
+
 
 def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
@@ -23,9 +25,7 @@ def signup_payload(email: str = "hardening@example.com") -> dict[str, str]:
 
 
 def signup(client: TestClient, email: str, workspace_name: str = "Hardening Co") -> dict[str, Any]:
-    response = client.post("/auth/signup", json=signup_payload(email) | {"workspaceName": workspace_name})
-    assert response.status_code == 201, response.text
-    return cast(dict[str, Any], response.json())
+    return signup_workspace(client, email, workspace_name)
 
 
 def create_objective(client: TestClient, workspace_id: str, token: str, name: str = "Objective") -> dict[str, Any]:

@@ -3,7 +3,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.api.dependencies import get_current_user, get_department_service, get_workspace_member, require_workspace_admin
+from app.api.dependencies import (
+    get_current_user,
+    get_department_service,
+    get_setup_member,
+    require_workspace_admin,
+)
 from app.core.pagination import Page, PaginationParams, paginate_items
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
@@ -13,7 +18,7 @@ from app.services.department_service import DepartmentService
 router = APIRouter(tags=["departments"])
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
-WorkspaceMemberDep = Annotated[WorkspaceMember, Depends(get_workspace_member)]
+WorkspaceMemberDep = Annotated[WorkspaceMember, Depends(get_setup_member)]
 WorkspaceAdminDep = Annotated[WorkspaceMember, Depends(require_workspace_admin)]
 DepartmentServiceDep = Annotated[DepartmentService, Depends(get_department_service)]
 ParentIdQuery = Annotated[uuid.UUID | None, Query(alias="parentId")]
