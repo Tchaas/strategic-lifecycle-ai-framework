@@ -8,23 +8,15 @@ from app.core.security import create_access_token, hash_password
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
+from onboarding_helpers import signup_workspace
+
 
 def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
 def signup(client: TestClient, email: str, workspace_name: str = "Acme") -> dict[str, Any]:
-    response = client.post(
-        "/auth/signup",
-        json={
-            "email": email,
-            "password": "correct-horse",
-            "fullName": email.split("@")[0].title(),
-            "workspaceName": workspace_name,
-        },
-    )
-    assert response.status_code == 201, response.text
-    return cast(dict[str, Any], response.json())
+    return signup_workspace(client, email, workspace_name)
 
 
 def create_password_user(engine: sa.Engine, email: str, full_name: str = "User") -> uuid.UUID:
@@ -33,11 +25,15 @@ def create_password_user(engine: sa.Engine, email: str, full_name: str = "User")
             uuid.UUID,
             conn.scalar(
                 text("""
-                    INSERT INTO users (email, full_name, auth_provider, password_hash)
-                    VALUES (:email, :full_name, 'password', :password_hash)
+                    INSERT INTO users (email, full_name, auth_provider, password_hash, email_verified)
+                    VALUES (:email, :full_name, 'password', :password_hash, true)
                     RETURNING id
                     """),
-                {"email": email, "full_name": full_name, "password_hash": hash_password("correct-horse")},
+                {
+                    "email": email,
+                    "full_name": full_name,
+                    "password_hash": hash_password("correct-horse"),
+                },
             ),
         )
 
@@ -47,10 +43,14 @@ def add_member(engine: sa.Engine, workspace_id: str, user_id: uuid.UUID, created
         conn.execute(
             text("""
                 INSERT INTO workspace_members
-                  (workspace_id, user_id, is_admin, joined_at, created_by_user_id)
-                VALUES (:workspace_id, :user_id, false, now(), :created_by_user_id)
+                  (workspace_id, user_id, role, joined_at, created_by_user_id)
+                VALUES (:workspace_id, :user_id, 'member', now(), :created_by_user_id)
                 """),
-            {"workspace_id": workspace_id, "user_id": user_id, "created_by_user_id": created_by_user_id},
+            {
+                "workspace_id": workspace_id,
+                "user_id": user_id,
+                "created_by_user_id": created_by_user_id,
+            },
         )
 
 
@@ -72,12 +72,15 @@ def create_department(client: TestClient, workspace_id: str, token: str, name: s
 def create_architecture(
     client: TestClient, workspace_id: str, token: str, name: str = "Architecture"
 ) -> dict[str, Any]:
-    response = client.post(
-        f"/workspaces/{workspace_id}/business-architecture",
+    existing = client.get(f"/workspaces/{workspace_id}/business-architecture", headers=auth_headers(token))
+    assert existing.status_code == 200, existing.text
+    architecture_id = existing.json()["id"]
+    response = client.patch(
+        f"/workspaces/{workspace_id}/business-architecture/{architecture_id}",
         headers=auth_headers(token),
         json={"name": name, "description": "Company architecture"},
     )
-    assert response.status_code == 201, response.text
+    assert response.status_code == 200, response.text
     return cast(dict[str, Any], response.json())
 
 
@@ -140,7 +143,7 @@ def test_architecture_singleton_lifecycle(client: TestClient) -> None:
     workspace_id = owner["workspace"]["id"]
     headers = auth_headers(owner["accessToken"])
 
-    assert_error(client.get(f"/workspaces/{workspace_id}/business-architecture", headers=headers), 404, "not_found")
+    assert client.get(f"/workspaces/{workspace_id}/business-architecture", headers=headers).status_code == 200
     architecture = create_architecture(client, workspace_id, owner["accessToken"])
     assert architecture["origin"] == "architecture"
     assert architecture["status"] == "draft"
@@ -157,7 +160,11 @@ def test_architecture_singleton_lifecycle(client: TestClient) -> None:
     patched = client.patch(
         f"/workspaces/{workspace_id}/business-architecture/{architecture['id']}",
         headers=headers,
-        json={"currentStateSummary": "Current", "futureStateSummary": "Future", "status": "active"},
+        json={
+            "currentStateSummary": "Current",
+            "futureStateSummary": "Future",
+            "status": "active",
+        },
     )
     assert patched.status_code == 200
     assert patched.json()["currentStateSummary"] == "Current"

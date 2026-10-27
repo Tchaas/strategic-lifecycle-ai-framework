@@ -6,30 +6,63 @@ from pydantic import field_validator
 from app.schemas.base import ApiModel
 
 
+def check_email(value: str) -> str:
+    if "@" not in value or "\n" in value or "\r" in value:
+        raise ValueError("Invalid email address")
+    return value.strip()
+
+
+def check_password(value: str) -> str:
+    if len(value) < 8:
+        raise ValueError("Password must be at least 8 characters")
+    return value
+
+
 class SignupRequest(ApiModel):
     email: str
     password: str
     full_name: str
-    workspace_name: str
+
+    @field_validator("full_name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Full name is required")
+        return value.strip()
 
     @field_validator("email")
     @classmethod
     def validate_email(cls, value: str) -> str:
-        if "@" not in value:
-            raise ValueError("Invalid email address")
-        return value
+        return check_email(value)
 
     @field_validator("password")
     @classmethod
     def validate_password(cls, value: str) -> str:
-        if len(value) < 8:
-            raise ValueError("Password must be at least 8 characters")
-        return value
+        return check_password(value)
 
 
 class LoginRequest(ApiModel):
     email: str
     password: str
+
+
+class PasswordResetRequest(ApiModel):
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return check_email(value)
+
+
+class PasswordResetConfirm(ApiModel):
+    token: str
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return check_password(value)
 
 
 class GoogleLoginRequest(ApiModel):
@@ -70,7 +103,6 @@ class AuthTokens(ApiModel):
 
 class SignupResponse(AuthTokens):
     user: UserResponse
-    workspace: WorkspaceResponse
 
 
 class LoginResponse(AuthTokens):

@@ -144,15 +144,18 @@ async function performRefresh(): Promise<boolean> {
       body: JSON.stringify({ refreshToken }),
     });
   } catch {
-    return false;
+    throw new ApiError({ code: 'service_unavailable', message: 'Unable to restore your session. Please try again.', status: 503 });
   }
 
-  if (!res.ok) return false;
+  if (res.status === 401) return false;
+  if (!res.ok) throw await toApiError(res);
 
   const data = (await res.json().catch(() => null)) as
     | { accessToken?: string; refreshToken?: string }
     | null;
-  if (!data?.accessToken || !data?.refreshToken) return false;
+  if (!data?.accessToken || !data?.refreshToken) {
+    throw new ApiError({ code: 'invalid_response', message: 'Unable to restore your session. Please try again.', status: 503 });
+  }
 
   setTokens(data.accessToken, data.refreshToken);
   return true;

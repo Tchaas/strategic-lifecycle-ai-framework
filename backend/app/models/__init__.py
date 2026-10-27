@@ -11,6 +11,7 @@ from app.models.discovery import Discovery
 from app.models.discovery_business_processes import DiscoveryBusinessProcess
 from app.models.discovery_information_concepts import DiscoveryInformationConcept
 from app.models.discovery_stakeholders_personas import DiscoveryStakeholderPersona
+from app.models.email import EmailOutbox, EmailVerificationToken, PasswordResetToken
 from app.models.features import Feature
 from app.models.implementation import Implementation
 from app.models.implementation_value_streams import ImplementationValueStream
@@ -36,6 +37,9 @@ from app.models.workspace_members import WorkspaceMember
 from app.models.workspaces import Workspace
 
 __all__ = [
+    "EmailOutbox",
+    "EmailVerificationToken",
+    "PasswordResetToken",
     "Base",
     "User",
     "RefreshToken",

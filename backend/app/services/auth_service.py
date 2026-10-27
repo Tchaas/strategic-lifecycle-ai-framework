@@ -19,12 +19,19 @@ from app.core.security import (
     verify_google_id_token,
     verify_password,
 )
+from app.models.email import PasswordResetToken
 from app.models.refresh_tokens import RefreshToken
 from app.models.users import User
-from app.models.workspaces import Workspace
-from app.schemas.auth import GoogleLoginRequest, LoginRequest, LogoutRequest, RefreshRequest, SignupRequest
-from app.schemas.workspaces import WorkspaceCreateRequest
-from app.services.workspace_service import provision_workspace_for_user
+from app.schemas.auth import (
+    GoogleLoginRequest,
+    LoginRequest,
+    LogoutRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
+    RefreshRequest,
+    SignupRequest,
+)
+from app.services.email_service import queue_password_changed, queue_password_reset, queue_verification
 
 INVALID_CREDENTIALS_MESSAGE = "Invalid email or password"
 DUMMY_PASSWORD_HASH = hash_password("stage16-dummy-password")
@@ -35,7 +42,6 @@ __all__ = [
     "LoginResult",
     "SignupResult",
     "TokenPair",
-    "provision_workspace_for_user",
 ]
 
 
@@ -49,7 +55,6 @@ class TokenPair:
 @dataclass(frozen=True)
 class SignupResult(TokenPair):
     user: User
-    workspace: Workspace
 
 
 @dataclass(frozen=True)
@@ -77,25 +82,21 @@ class AuthService:
         self.db.add(user)
         try:
             self.db.flush()
-            provisioned = provision_workspace_for_user(
-                self.db,
-                user,
-                WorkspaceCreateRequest(name=payload.workspace_name),
-                commit=False,
-            )
+            queue_verification(self.db, user)
             tokens = self._issue_tokens(user)
             self.db.commit()
         except IntegrityError as exc:
             self.db.rollback()
             raise AppError("email_taken", "An account with this email already exists", 409) from exc
-        return SignupResult(user=user, workspace=provisioned.workspace, **tokens.__dict__)
+        return SignupResult(user=user, **tokens.__dict__)
 
     def login(self, payload: LoginRequest) -> LoginResult:
         user = self._get_user_by_email(payload.email)
         if user is None:
             verify_password(payload.password, DUMMY_PASSWORD_HASH)
             raise AppError("invalid_credentials", INVALID_CREDENTIALS_MESSAGE, 401)
-        if user.auth_provider == "google":
+        # A Google account can also hold a password once one is added through password reset.
+        if user.auth_provider == "google" and not user.password_hash:
             raise AppError("provider_conflict", "This account signs in with Google", 409)
         if not user.password_hash or not verify_password(payload.password, user.password_hash):
             raise AppError("invalid_credentials", INVALID_CREDENTIALS_MESSAGE, 401)
@@ -118,7 +119,11 @@ class AuthService:
         if user is None:
             existing = self._get_user_by_email(email)
             if existing is not None:
-                raise AppError("provider_conflict", "This email is already registered with password sign-in", 409)
+                raise AppError(
+                    "provider_conflict",
+                    "This email is already registered with password sign-in",
+                    409,
+                )
             user = User(
                 email=email,
                 full_name=claims.get("name"),
@@ -166,6 +171,45 @@ class AuthService:
         if refresh_token is not None and refresh_token.revoked_at is None:
             refresh_token.revoked_at = utc_now()
             self.db.commit()
+
+    def request_password_reset(self, payload: PasswordResetRequest) -> None:
+        # Unknown accounts and the resend cooldown return the same response as a queued email.
+        user = self.db.scalar(select(User).where(User.email == payload.email).with_for_update())
+        if user is None:
+            return
+        queue_password_reset(self.db, user)
+        self.db.commit()
+
+    def reset_password(self, payload: PasswordResetConfirm) -> None:
+        # Lock the user before the token, consistently with email verification.
+        token_hash = hash_refresh_token(payload.token)
+        user_id = self.db.scalar(select(PasswordResetToken.user_id).where(PasswordResetToken.token_hash == token_hash))
+        if user_id is None:
+            raise AppError("invalid_token", "This password reset link is invalid", 400)
+        user = self.db.scalar(select(User).where(User.id == user_id).with_for_update())
+        record = self.db.scalar(
+            select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash).with_for_update()
+        )
+        if user is None or record is None:
+            raise AppError("invalid_token", "This password reset link is invalid", 400)
+        if record.used_at is not None:
+            raise AppError("token_used", "This link has already been used. Request a new password reset link.", 409)
+        if record.expires_at <= utc_now():
+            raise AppError("token_expired", "This link has expired. Request a new password reset link.", 410)
+        now = utc_now()
+        outstanding = self.db.scalars(
+            select(PasswordResetToken).where(
+                PasswordResetToken.user_id == user.id,
+                PasswordResetToken.used_at.is_(None),
+            )
+        )
+        for token in outstanding:
+            token.used_at = now
+        user.password_hash = hash_password(payload.password)
+        user.updated_at = now
+        self._revoke_all_user_tokens(user.id)
+        queue_password_changed(self.db, user)
+        self.db.commit()
 
     def _issue_tokens(self, user: User) -> TokenPair:
         refresh_token = generate_refresh_token()

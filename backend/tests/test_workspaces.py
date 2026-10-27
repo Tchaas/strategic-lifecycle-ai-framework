@@ -6,10 +6,10 @@ from typing import Any, cast
 
 import sqlalchemy as sa
 from app.core.security import create_access_token, hash_password
-from app.services.auth_service import provision_workspace_for_user as auth_provision_workspace_for_user
-from app.services.workspace_service import provision_workspace_for_user
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+
+from onboarding_helpers import signup_workspace
 
 
 def auth_headers(token: str) -> dict[str, str]:
@@ -17,17 +17,7 @@ def auth_headers(token: str) -> dict[str, str]:
 
 
 def signup(client: TestClient, email: str, workspace_name: str = "Acme") -> dict[str, Any]:
-    response = client.post(
-        "/auth/signup",
-        json={
-            "email": email,
-            "password": "correct-horse",
-            "fullName": email.split("@")[0].title(),
-            "workspaceName": workspace_name,
-        },
-    )
-    assert response.status_code == 201, response.text
-    return cast(dict[str, Any], response.json())
+    return signup_workspace(client, email, workspace_name)
 
 
 def create_password_user(engine: sa.Engine, email: str, full_name: str = "User") -> uuid.UUID:
@@ -36,11 +26,15 @@ def create_password_user(engine: sa.Engine, email: str, full_name: str = "User")
             uuid.UUID,
             conn.scalar(
                 text("""
-                    INSERT INTO users (email, full_name, auth_provider, password_hash)
-                    VALUES (:email, :full_name, 'password', :password_hash)
+                    INSERT INTO users (email, full_name, auth_provider, password_hash, email_verified)
+                    VALUES (:email, :full_name, 'password', :password_hash, true)
                     RETURNING id
                     """),
-                {"email": email, "full_name": full_name, "password_hash": hash_password("correct-horse")},
+                {
+                    "email": email,
+                    "full_name": full_name,
+                    "password_hash": hash_password("correct-horse"),
+                },
             ),
         )
 
@@ -76,7 +70,7 @@ def set_admin(engine: sa.Engine, workspace_id: str, user_id: str, is_admin: bool
         conn.execute(
             text("""
                 UPDATE workspace_members
-                SET is_admin = :is_admin
+                SET role = CASE WHEN :is_admin THEN 'admin' ELSE 'member' END
                 WHERE workspace_id = :workspace_id AND user_id = :user_id
                 """),
             {"workspace_id": workspace_id, "user_id": user_id, "is_admin": is_admin},
@@ -89,11 +83,15 @@ def add_member(engine: sa.Engine, workspace_id: str, user_id: uuid.UUID, created
             conn.scalar(
                 text("""
                     INSERT INTO workspace_members
-                      (workspace_id, user_id, is_admin, joined_at, created_by_user_id)
-                    VALUES (:workspace_id, :user_id, false, now(), :created_by_user_id)
+                      (workspace_id, user_id, role, joined_at, created_by_user_id)
+                    VALUES (:workspace_id, :user_id, 'member', now(), :created_by_user_id)
                     RETURNING id
                     """),
-                {"workspace_id": workspace_id, "user_id": user_id, "created_by_user_id": created_by_user_id},
+                {
+                    "workspace_id": workspace_id,
+                    "user_id": user_id,
+                    "created_by_user_id": created_by_user_id,
+                },
             )
         )
 
@@ -130,18 +128,17 @@ def test_post_workspaces_google_setup_path(client: TestClient, engine: sa.Engine
     assert body["workspace"]["createdByUserId"] == str(user_id)
     with engine.begin() as conn:
         assert conn.scalar(text("SELECT count(*) FROM workspaces")) == 1
-        assert conn.scalar(text("SELECT count(*) FROM workspace_members WHERE is_admin")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM workspace_members WHERE role = 'admin'")) == 1
 
 
-def test_signup_and_post_workspaces_share_provisioning_function(client: TestClient, engine: sa.Engine) -> None:
-    assert auth_provision_workspace_for_user is provision_workspace_for_user
+def test_password_and_google_users_create_workspace_after_signup(client: TestClient, engine: sa.Engine) -> None:
     signup_body = signup(client, "signup-shared@example.com", "Signup Workspace")
     user_id, token = create_google_user(engine, "post-shared@example.com")
     post_body = client.post("/workspaces", headers=auth_headers(token), json={"name": "Post Workspace"}).json()
 
     with engine.begin() as conn:
         rows = conn.execute(text("""
-                SELECT w.name, w.created_by_user_id, m.user_id, m.is_admin
+                SELECT w.name, w.created_by_user_id, m.user_id, (m.role = 'admin')
                 FROM workspaces w
                 JOIN workspace_members m ON m.workspace_id = w.id
                 ORDER BY w.name
@@ -505,7 +502,7 @@ def test_invite_accept_already_member_keeps_invite_pending(client: TestClient, e
             headers=auth_headers(create_access_token(member_user)),
         ),
         409,
-        "already_member",
+        "user_already_in_workspace",
     )
     with engine.begin() as conn:
         assert (

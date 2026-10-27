@@ -82,10 +82,15 @@ type RouteId =
   | 'requirements'
   | 'deliverables'
   | 'implementation'
-  | 'ai';
+  | 'ai'
+  | 'verify-email'
+  | 'forgot-password'
+  | 'reset-password'
+  | 'invite';
 
 type AuthSession = {
   email: string;
+  emailVerified: boolean;
   authProvider: 'password' | 'google';
   signedInAt: string;
 };
@@ -138,7 +143,7 @@ const apiWorkspaceStorageKey = 'slaf.activeWorkspace';
 const emptyAiDraftState = (): AiDraftState => ({ objectives: {}, cases: {}, discoveries: {} });
 
 // A workspace from the real GET /workspaces list — only id + name are needed for the switcher.
-type ApiWorkspace = { id: string; name: string };
+type ApiWorkspace = { id: string; name: string; isAdmin: boolean; role: string; setupCompletedAt: string | null };
 
 // Restore the persisted workspace choice, validating it still exists in the fetched list;
 // fall back to the first workspace (or null if the list is empty).
@@ -155,6 +160,10 @@ const routeByHash: Record<string, RouteId> = {
   '': 'landing',
   '/': 'landing',
   '/signup': 'signup',
+  '/verify-email': 'verify-email',
+  '/forgot-password': 'forgot-password',
+  '/reset-password': 'reset-password',
+  '/invite': 'invite',
   '/login': 'login',
   '/dashboard': 'dashboard',
   '/company': 'company',
@@ -499,7 +508,7 @@ const architectureDeliverables = [
   'Lifecycle transformation diagrams',
 ];
 
-const getRoute = (): RouteId => routeByHash[window.location.hash.replace(/^#/, '').split('?')[0]] || 'landing';
+const getRoute = (): RouteId => window.location.hash.startsWith('#/invite/') ? 'invite' : routeByHash[window.location.hash.replace(/^#/, '').split('?')[0]] || 'landing';
 const navigateTo = (route: RouteId) => {
   window.location.hash = hashByRoute[route] || '/';
 };
@@ -1366,41 +1375,26 @@ function AuthPage({ mode, onAuthenticated }: {
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [companyName, setCompanyName] = useState('');
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const passwordReset = mode === 'login' && new URLSearchParams(window.location.hash.split('?')[1]).get('reset') === 'done';
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      let userEmail: string;
-      let workspaces: ApiWorkspace[];
-      if (mode === 'signup') {
-        const res = await api.post<{ accessToken: string; refreshToken: string; user: { email: string }; workspace: { id: string; name: string } }>(
-          '/auth/signup',
-          { email, password, fullName, workspaceName: companyName },
-        );
-        setTokens(res.accessToken, res.refreshToken);
-        userEmail = res.user.email;
-        workspaces = [{ id: res.workspace.id, name: res.workspace.name }]; // signup returns the one new workspace
-      } else {
-        const res = await api.post<{ accessToken: string; refreshToken: string; user: { email: string } }>(
-          '/auth/login',
-          { email, password },
-        );
-        setTokens(res.accessToken, res.refreshToken);
-        const ws = await getList<ApiWorkspace>('/workspaces'); // login response has no workspace
-        userEmail = res.user.email;
-        workspaces = ws.items;
-      }
-      onAuthenticated(
-        { email: userEmail, authProvider: 'password', signedInAt: new Date().toISOString() },
-        workspaces,
+      const res = await api.post<{ accessToken: string; refreshToken: string; user: { email: string; emailVerified: boolean } }>(
+        mode === 'signup' ? '/auth/signup' : '/auth/login',
+        mode === 'signup' ? { email, password, fullName } : { email, password },
       );
-      navigateTo('dashboard');
+      setTokens(res.accessToken, res.refreshToken);
+      const ws = await getList<ApiWorkspace>('/workspaces');
+      onAuthenticated({ email: res.user.email, emailVerified: res.user.emailVerified, authProvider: 'password', signedInAt: new Date().toISOString() }, ws.items);
+      const invitation = sessionStorage.getItem('slaf.pendingInvite');
+      if (invitation) window.location.hash = `/invite/${invitation}`;
+      else navigateTo(ws.items[0] && !ws.items[0].setupCompletedAt ? 'departments' : 'company');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
@@ -1414,19 +1408,20 @@ function AuthPage({ mode, onAuthenticated }: {
         <SectionTitle
           eyebrow="Account"
           title={mode === 'signup' ? 'Sign Up' : 'Log In'}
-          subtitle="A successful sign-in flips the shell into authenticated workspace mode."
+          subtitle="Create an account, verify your email, and set up your workspace."
         />
-        <RuleNote>Route guard redirects gated lifecycle routes here while signed out. Credentials are verified against the backend and the session is restored on refresh.</RuleNote>
+        <RuleNote>Your email must be verified before you can set up or enter a workspace.</RuleNote>
       </HudPanel>
 
       <HudPanel className="hud-auth-card">
         <form onSubmit={submit} className="hud-form">
-          {mode === 'signup' && <TextInput label="Company / Workspace name" value={companyName} onChange={setCompanyName} />}
           {mode === 'signup' && <TextInput label="Full name" value={fullName} onChange={setFullName} />}
           <TextInput label="Email" value={email} onChange={setEmail} type="email" />
           <TextInput label="Password" value={password} onChange={setPassword} type="password" />
+          {passwordReset && <p role="status">Your password was changed and all sessions were signed out. Log in with your new password.</p>}
           {error && <p className="hud-form-error" role="alert">{error}</p>}
           <HudButton type="submit" disabled={submitting}>{mode === 'signup' ? <UserPlus size={16} /> : <LogIn size={16} />} {mode === 'signup' ? 'Create account' : 'Log in'}</HudButton>
+          {mode === 'login' && <HudButton variant="ghost" onClick={() => navigateTo('forgot-password')}>Forgot password?</HudButton>}
           <HudButton variant="ghost" disabled>
             <Sparkles size={16} /> Continue with Google
           </HudButton>
@@ -1468,80 +1463,305 @@ function DashboardPage({ tenant }: { tenant: TenantData }) {
   );
 }
 
-// Note: Company profile and team-access page for the active workspace. It shows the tenant boundary,
-// member roles, and invite status while keeping invite tokens hidden.
-function CompanyPage({ tenant }: { tenant: TenantData }) {
-  const members = tenant.workspaceMembers.map((member) => {
-    const user = state.users.find((candidate) => candidate.id === member.userId);
-    return [
-      user?.email || 'Unknown user',
-      user?.fullName || 'Unknown',
-      <HudBadge tone={member.isAdmin ? 'green' : 'cyan'}>{member.isAdmin ? 'admin' : 'member'}</HudBadge>,
-      new Date(member.joinedAt).toLocaleDateString(),
-    ];
-  });
-
-  return (
-    <div className="hud-page">
-      <SectionTitle eyebrow="Account & Setup" title="Company Profile" subtitle="The workspace is the tenant boundary for every lifecycle artifact." />
-      <HudPanel>
-        <FieldGrid rows={[
-          { label: 'Name', value: tenant.workspace.name },
-          { label: 'Legal name', value: tenant.workspace.legalName },
-          { label: 'Business unit', value: tenant.workspace.businessUnit },
-          { label: 'Description', value: tenant.workspace.description },
-          { label: 'Industry', value: tenant.workspace.industry },
-          { label: 'Operating model', value: tenant.workspace.operatingModel },
-          { label: 'Business model', value: tenant.workspace.businessModel },
-          { label: 'Primary customers', value: tenant.workspace.primaryCustomers },
-          { label: 'Primary products', value: tenant.workspace.primaryProducts },
-          { label: 'Strategic context', value: tenant.workspace.strategicContext },
-          { label: 'Company size', value: tenant.workspace.companySize },
-          { label: 'Headquarters region', value: tenant.workspace.headquartersRegion },
-          { label: 'Website', value: tenant.workspace.website },
-          { label: 'Logo URL', value: tenant.workspace.logoUrl },
-          { label: 'Annual revenue', value: formatCurrency(tenant.workspace.annualRevenue) },
-          { label: 'Workspace ID', value: tenant.workspace.id },
-        ]} />
-        <RuleNote>Annual revenue is static profile context only. It is not part of the forecast or actuals model.</RuleNote>
-      </HudPanel>
-      <HudPanel>
-        <SectionTitle eyebrow="Team" title="Team & access" />
-        <DataTable headers={['Email', 'Name', 'Access', 'Joined']} rows={members} />
-        <DataTable
-          headers={['Invited email', 'Invited by', 'Status', 'Accepted']}
-          rows={tenant.workspaceInvites.map((invite) => {
-            const inviter = state.users.find((user) => user.id === invite.invitedByUserId);
-            return [invite.invitedEmail, inviter?.email || 'Unknown', <StatusBadge status={invite.status} />, invite.acceptedAt ? new Date(invite.acceptedAt).toLocaleDateString() : 'Not accepted'];
-          })}
-        />
-        <RuleNote>Invite tokens exist in mock data for contract shape only and are never rendered.</RuleNote>
-      </HudPanel>
-    </div>
-  );
+const onboardingError = (error: unknown) => error instanceof ApiError ? error.message : 'The server could not be reached. Please try again.';
+const companyFields = [
+  ['name', 'Workspace name'], ['legalName', 'Legal name'], ['businessUnit', 'Business unit'],
+  ['description', 'Description'], ['industry', 'Industry'], ['operatingModel', 'Operating model'],
+  ['businessModel', 'Business model'], ['primaryCustomers', 'Primary customers'], ['primaryProducts', 'Primary products'],
+  ['strategicContext', 'Strategic context'], ['companySize', 'Company size'], ['headquartersRegion', 'Headquarters region'],
+  ['website', 'Website'], ['logoUrl', 'Logo URL'], ['annualRevenue', 'Annual revenue'],
+] as const;
+type SavedDepartment = { id: string; name: string; description: string | null; parentDepartmentId: string | null;
+  departmentHead: string | null; contactName: string | null; contactEmail: string | null; location: string | null; headcount: number | null };
+const departmentFields = [['name', 'Department name'], ['description', 'Description'], ['departmentHead', 'Department head'],
+  ['contactName', 'Contact name'], ['contactEmail', 'Contact email'], ['location', 'Location'], ['headcount', 'Headcount']] as const;
+async function allSetupRecords<T>(path: string): Promise<T[]> {
+  const result: T[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const page = await api.get<{ items: T[]; total: number }>(`${path}?limit=100&offset=${offset}`);
+    result.push(...page.items);
+    if (result.length >= page.total || page.items.length === 0) return result;
+  }
 }
 
-// Note: Department hierarchy page for optional org-structure metadata. Departments support references from
-// value streams and capabilities without owning or deleting lifecycle work.
-function DepartmentsPage({ tenant }: { tenant: TenantData }) {
-  return (
-    <ListPage
-      eyebrow="Account & Setup"
-      title="Departments"
-      subtitle="Optional organization structure. Value streams and capabilities can link to a department."
-      rule={`Departments are setup records scoped to ${tenant.workspace.name}.`}
-      rows={tenant.departments.map((department) => ({
-        id: department.id,
-        title: department.name,
-        meta: department.parentDepartmentId ? `Parent: ${department.parentDepartmentId}` : 'Top-level department',
-        badges: [],
-        fields: [
-          { label: 'Description', value: department.description },
-          { label: 'Workspace ID', value: department.workspaceId },
-        ],
-      }))}
-    />
-  );
+type VerificationDelivery = { status: string; deliveryProvider: string; currentProvider: string; deliveryError: string };
+
+function VerificationPending({ onRefresh }: { onRefresh: () => Promise<void> }) {
+  const [delivery, setDelivery] = useState<VerificationDelivery | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const result = await api.get<VerificationDelivery>('/auth/verification/status');
+        if (!cancelled) setDelivery(result);
+      } catch (e) { if (!cancelled) setError(onboardingError(e)); }
+    };
+    check();
+    const timer = window.setInterval(check, 5000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
+  const run = async (resend: boolean) => {
+    setBusy(true); setError('');
+    try {
+      if (resend) {
+        await api.post('/auth/verification/resend');
+        setDelivery(await api.get<VerificationDelivery>('/auth/verification/status'));
+      } else {
+        const current = await api.get<VerificationDelivery>('/auth/verification/status');
+        setDelivery(current);
+        if (current.status === 'verified') await onRefresh();
+        else setError('This account is not verified yet. Open the link in your most recent verification email, or request a new one below.');
+      }
+    } catch (e) { setError(onboardingError(e)); } finally { setBusy(false); }
+  };
+  let message = 'Checking verification email status…';
+  if (delivery) {
+    if (delivery.status === 'verified') message = 'Your email is verified. Continue below.';
+    else if (!delivery.deliveryProvider || !delivery.currentProvider || delivery.deliveryProvider !== delivery.currentProvider || delivery.deliveryProvider === 'unknown') {
+      message = 'Email delivery settings have changed or were not recorded for your previous message. Please request a new verification email.';
+    } else if (delivery.status === 'failed') {
+      message = 'Your verification email could not be sent. Request another email after the email service is available.';
+    } else if (delivery.status === 'sent') {
+      message = delivery.deliveryProvider === 'smtp-local'
+        ? 'Your verification email is in the local test inbox. No email was sent to your external address.'
+        : 'The email service accepted your verification email. Check your inbox and spam folder.';
+    } else if (delivery.status === 'queued') {
+      message = delivery.deliveryProvider === 'smtp-local'
+        ? 'Your verification email is queued for the local test inbox, not your external email account.'
+        : delivery.deliveryError ? 'Email delivery is delayed. The service is retrying.' : 'Your verification email is queued for delivery.';
+    } else message = 'No verification email was found. Please request one below.';
+  }
+  return <div className="hud-page"><SectionTitle eyebrow="Account" title="Verify your email" subtitle="Follow the verification link in your email to continue to workspace setup." />
+    <HudPanel><p role="status">{message}</p>
+      {delivery?.currentProvider === 'smtp-local' && <HudButton href="http://127.0.0.1:8025">Open local test inbox</HudButton>}
+      {error && <p role="alert" className="hud-form-error">{error}</p>}
+      <HudButton disabled={busy} onClick={() => run(false)}>I have verified my email</HudButton>
+      <HudButton disabled={busy} variant="ghost" onClick={() => run(true)}>Resend verification email</HudButton>
+    </HudPanel></div>;
+}
+
+function VerifyEmailPage({ signedIn, onRefresh }: { signedIn: boolean; onRefresh: () => Promise<void> }) {
+  const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [verified, setVerified] = useState(false);
+  const token = new URLSearchParams(window.location.hash.split('?')[1]).get('token');
+  const verify = async () => {
+    setBusy(true); setError('');
+    try {
+      if (!verified) { await api.post(`/auth/verify-email/${encodeURIComponent(token || '')}`); setVerified(true); }
+      if (signedIn) { await onRefresh(); navigateTo('company'); } else navigateTo('login');
+    } catch (e) { setError(onboardingError(e)); } finally { setBusy(false); }
+  };
+  return <div className="hud-page"><SectionTitle eyebrow="Account" title="Confirm your email" />
+    <HudPanel><p>Confirm your email to continue. You may need to sign in if you opened this link in a different browser.</p>
+      {error && <p role="alert" className="hud-form-error">{error}</p>}
+      <HudButton onClick={verify} disabled={busy || !token}>{verified ? 'Continue' : 'Verify email'}</HudButton>
+      <HudButton variant="ghost" onClick={() => navigateTo('login')}>Sign in</HudButton>
+    </HudPanel></div>;
+}
+
+function ForgotPasswordPage() {
+  const [email, setEmail] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [sent, setSent] = useState(false);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true); setError('');
+    try { await api.post('/auth/password-reset/request', { email }); setSent(true); }
+    catch (e) { setError(onboardingError(e)); } finally { setBusy(false); }
+  };
+  return <div className="hud-page"><SectionTitle eyebrow="Account" title="Forgot password" subtitle="Enter your account email and we will send a link to choose a new password." />
+    <HudPanel><form onSubmit={submit} className="hud-form">
+      <TextInput label="Email" value={email} onChange={setEmail} type="email" />
+      {sent && <p role="status">If an account exists for that email, we've sent a reset link. The link expires in 1 hour.</p>}
+      {error && <p role="alert" className="hud-form-error">{error}</p>}
+      <HudButton type="submit" disabled={busy || !email.trim()}>{sent ? 'Send another link' : 'Send reset link'}</HudButton>
+      <HudButton variant="ghost" onClick={() => navigateTo('login')}>Back to log in</HudButton>
+    </form></HudPanel></div>;
+}
+
+function ResetPasswordPage({ onPasswordChanged }: { onPasswordChanged: () => void }) {
+  const [password, setPassword] = useState(''); const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState(''); const [linkFailed, setLinkFailed] = useState(false); const [busy, setBusy] = useState(false);
+  const token = new URLSearchParams(window.location.hash.split('?')[1]).get('token');
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (password !== confirm) { setError('The passwords do not match.'); return; }
+    setBusy(true); setError('');
+    try {
+      await api.post('/auth/password-reset/confirm', { token, password });
+      onPasswordChanged();
+      window.location.hash = '/login?reset=done';
+    } catch (e) {
+      setError(onboardingError(e));
+      setLinkFailed(e instanceof ApiError && ['invalid_token', 'token_used', 'token_expired'].includes(e.code));
+    } finally { setBusy(false); }
+  };
+  return <div className="hud-page"><SectionTitle eyebrow="Account" title="Choose a new password" subtitle="Changing your password signs out every session, including this one." />
+    <HudPanel><form onSubmit={submit} className="hud-form">
+      {!token && <p role="alert" className="hud-form-error">This password reset link is incomplete. Request a new link.</p>}
+      <TextInput label="New password" value={password} onChange={setPassword} type="password" />
+      <TextInput label="Confirm new password" value={confirm} onChange={setConfirm} type="password" />
+      {error && <p role="alert" className="hud-form-error">{error}</p>}
+      <HudButton type="submit" disabled={busy || !token || !password || !confirm}>Change password</HudButton>
+      {(linkFailed || !token) && <HudButton variant="ghost" onClick={() => navigateTo('forgot-password')}>Request a new link</HudButton>}
+      <HudButton variant="ghost" onClick={() => navigateTo('login')}>Back to log in</HudButton>
+    </form></HudPanel></div>;
+}
+
+function SavedCompanyPage({ workspace, onRefresh }: { workspace: ApiWorkspace | null; onRefresh: () => Promise<void> }) {
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(Boolean(workspace)); const [loadFailed, setLoadFailed] = useState(false);
+  const [error, setError] = useState(''); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    if (!workspace) return;
+    setLoading(true); setError(''); setLoadFailed(false);
+    try {
+      const record = await api.get<Record<string, unknown>>(`/workspaces/${workspace.id}`);
+      setFields(Object.fromEntries(companyFields.map(([key]) => [key, record[key] == null ? '' : String(record[key])])));
+    } catch (e) { setError(onboardingError(e)); setLoadFailed(true); } finally { setLoading(false); }
+  }, [workspace?.id]);
+  useEffect(() => { load(); }, [load]);
+  const save = async (event: FormEvent) => {
+    event.preventDefault(); setBusy(true); setError(''); setMessage('');
+    try {
+      const payload = Object.fromEntries(companyFields.filter(([key]) => key !== 'name' || !workspace || workspace.isAdmin)
+        .map(([key]) => [key, key === 'annualRevenue' ? (fields[key] ? Number(fields[key]) : null) : fields[key] || null]));
+      if (workspace) await api.patch(`/workspaces/${workspace.id}`, payload);
+      else await api.post('/workspaces', payload);
+      await onRefresh(); setMessage('Company information saved.');
+      if (!workspace || !workspace.setupCompletedAt) navigateTo('departments');
+    } catch (e) { setError(onboardingError(e)); } finally { setBusy(false); }
+  };
+  return <div className="hud-page"><SectionTitle eyebrow="Account & Setup" title={workspace ? 'Company Profile' : 'Set up your workspace'} subtitle="Save your company information, then add at least one department." />
+    <HudPanel>{error && <p role="alert" className="hud-form-error">{error}</p>}
+      {loading ? <p>Loading company information…</p> : loadFailed ? <HudButton onClick={load}>Retry</HudButton> : <form className="hud-form" onSubmit={save}>
+        {companyFields.map(([key, label]) => <TextInput key={key} label={label} type={key === 'annualRevenue' ? 'number' : 'text'} value={fields[key] || ''}
+          readOnly={key === 'name' && Boolean(workspace && !workspace.isAdmin)} onChange={value => setFields(f => ({ ...f, [key]: value }))} />)}
+        <HudButton type="submit" disabled={busy || !fields.name?.trim()}>{workspace ? 'Save company information' : 'Create workspace'}</HudButton>
+        {workspace && !workspace.setupCompletedAt && <HudButton variant="ghost" onClick={() => navigateTo('departments')}>Continue to departments</HudButton>}
+        {message && <p role="status">{message}</p>}
+      </form>}
+    </HudPanel>{workspace?.setupCompletedAt && <WorkspaceTeam workspace={workspace} />}</div>;
+}
+
+function WorkspaceTeam({ workspace }: { workspace: ApiWorkspace }) {
+  const [members, setMembers] = useState<{ id: string; email: string; fullName: string; role: string }[]>([]);
+  const [invites, setInvites] = useState<{ id: string; invitedEmail: string; status: string; deliveryStatus: string }[]>([]);
+  const [email, setEmail] = useState(''); const [error, setError] = useState(''); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      const rows = await allSetupRecords<{ id: string; email: string; fullName: string; role: string }>(`/workspaces/${workspace.id}/members`);
+      setMembers(rows);
+      if (workspace.isAdmin) setInvites(await allSetupRecords<{ id: string; invitedEmail: string; status: string; deliveryStatus: string }>(`/workspaces/${workspace.id}/invites`));
+    } catch (e) { setError(onboardingError(e)); } finally { setLoading(false); }
+  }, [workspace.id, workspace.isAdmin]);
+  useEffect(() => { load(); }, [load]);
+  const invite = async (event: FormEvent) => {
+    event.preventDefault(); setBusy(true); setError(''); setMessage('');
+    try { await api.post(`/workspaces/${workspace.id}/invites`, { invitedEmail: email }); setEmail(''); await load(); setMessage('Invitation saved and queued for email delivery.'); }
+    catch (e) { setError(onboardingError(e)); } finally { setBusy(false); }
+  };
+  const resend = async (id: string) => {
+    setBusy(true); setError(''); setMessage('');
+    try { await api.post(`/workspaces/${workspace.id}/invites/${id}/resend`); await load(); setMessage('Invitation queued for delivery again.'); }
+    catch (e) { setError(onboardingError(e)); } finally { setBusy(false); }
+  };
+  return <HudPanel><SectionTitle eyebrow="Team" title="Team & access" />
+    {loading ? <p>Loading team…</p> : <DataTable headers={['Email', 'Name', 'Access']} rows={members.map(m => [m.email, m.fullName, m.role])} />}
+    {error && <p role="alert" className="hud-form-error">{error}</p>}
+    <HudButton variant="ghost" onClick={load} disabled={busy || loading}>Refresh team and email status</HudButton>
+    {workspace.isAdmin && <><DataTable headers={['Invited email', 'Invitation', 'Email delivery', 'Action']} rows={invites.map(i => [i.invitedEmail, i.status, i.deliveryStatus,
+      i.status === 'pending' ? <HudButton variant="ghost" disabled={busy} onClick={() => resend(i.id)}>Resend invitation</HudButton> : '—'])} />
+      <form className="hud-form" onSubmit={invite}><TextInput label="Invite email" type="email" value={email} onChange={setEmail} />
+      <HudButton type="submit" disabled={busy || !email.trim()}>Invite member</HudButton></form></>}
+    {message && <p role="status">{message}</p>}
+  </HudPanel>;
+}
+
+function SavedDepartmentsPage({ workspace, onRefresh }: { workspace: ApiWorkspace; onRefresh: () => Promise<void> }) {
+  const [departments, setDepartments] = useState<SavedDepartment[]>([]); const [fields, setFields] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(''); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
+  const base = `/workspaces/${workspace.id}/departments`;
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    try { setDepartments(await allSetupRecords<SavedDepartment>(base)); setLoaded(true); }
+    catch (e) { setError(onboardingError(e)); setLoaded(false); } finally { setLoading(false); }
+  }, [base]);
+  useEffect(() => { load(); }, [load]);
+  const save = async (event: FormEvent) => {
+    event.preventDefault(); setBusy(true); setError(''); setMessage('');
+    try {
+      const payload = Object.fromEntries(departmentFields.map(([key]) => [key, key === 'headcount' ? (fields[key] ? Number(fields[key]) : null) : fields[key] || null]));
+      payload.parentDepartmentId = fields.parentDepartmentId || null;
+      if (editing) await api.patch(`${base}/${editing}`, payload); else await api.post(base, payload);
+      setFields({}); setEditing(null); await load(); setMessage('Department saved.');
+    } catch (e) { setError(onboardingError(e)); } finally { setBusy(false); }
+  };
+  const remove = async (department: SavedDepartment) => {
+    if (!window.confirm(`Delete ${department.name}? Its child departments will become top-level departments.`)) return;
+    setBusy(true); setError(''); setMessage('');
+    try { await api.del(`${base}/${department.id}`); if (editing === department.id) { setEditing(null); setFields({}); } await load(); }
+    catch (e) { setError(onboardingError(e)); } finally { setBusy(false); }
+  };
+  const finish = async () => {
+    setBusy(true); setError('');
+    try { await api.post(`/workspaces/${workspace.id}/complete-setup`); await onRefresh(); navigateTo('company'); }
+    catch (e) { setError(onboardingError(e)); } finally { setBusy(false); }
+  };
+  return <div className="hud-page"><SectionTitle eyebrow="Account & Setup" title="Departments" subtitle="At least one department is required. You can add more now or later." />
+    {error && <p role="alert" className="hud-form-error">{error}</p>}{message && <p role="status">{message}</p>}
+    {loading ? <HudPanel>Loading departments…</HudPanel> : !loaded ? <HudButton onClick={load}>Retry</HudButton> : <>
+      {departments.length === 0 && <HudPanel>No departments yet. Add your first department below.</HudPanel>}
+      {departments.map(d => <HudPanel key={d.id}><h2>{d.name}</h2><FieldGrid rows={[
+        ...departmentFields.filter(([key]) => key !== 'name').map(([key, label]) => ({ label, value: d[key] })),
+        { label: 'Parent department', value: departments.find(p => p.id === d.parentDepartmentId)?.name || 'Top level' },
+      ]} />{workspace.isAdmin && <><HudButton variant="ghost" disabled={busy} onClick={() => { setEditing(d.id); setFields(Object.fromEntries(Object.entries(d).map(([k, v]) => [k, v == null ? '' : String(v)]))); }}>Edit department</HudButton>
+        <HudButton variant="ghost" disabled={busy || departments.length <= 1} onClick={() => remove(d)}>Delete department</HudButton></>}</HudPanel>)}
+      {workspace.isAdmin && <HudPanel><h2>{editing ? 'Edit department' : 'Add department'}</h2><form className="hud-form" onSubmit={save}>
+        {departmentFields.map(([key, label]) => <TextInput key={key} label={label} type={key === 'headcount' ? 'number' : key === 'contactEmail' ? 'email' : 'text'} value={fields[key] || ''} onChange={v => setFields(f => ({ ...f, [key]: v }))} />)}
+        <SelectInput label="Parent department (optional)" value={fields.parentDepartmentId || ''} onChange={v => setFields(f => ({ ...f, parentDepartmentId: v }))}
+          options={departments.filter(d => d.id !== editing).map(d => ({ value: d.id, label: d.name }))} />
+        <HudButton type="submit" disabled={busy || !fields.name?.trim()}>{editing ? 'Save department' : 'Add department'}</HudButton>
+        {editing && <HudButton variant="ghost" disabled={busy} onClick={() => { setEditing(null); setFields({}); }}>Cancel edit</HudButton>}
+      </form></HudPanel>}
+      {!workspace.setupCompletedAt && (workspace.isAdmin ? <HudButton disabled={busy || departments.length === 0 || Boolean(editing) || Boolean(fields.name)} onClick={finish}>Finish workspace setup</HudButton> : <RuleNote>Your workspace admin needs to finish department setup.</RuleNote>)}
+    </>}
+  </div>;
+}
+
+function InvitePage({ session, onRefresh, onAuthenticated }: { session: AuthSession | null; onRefresh: () => Promise<void>; onAuthenticated: (s: AuthSession, w: ApiWorkspace[]) => void }) {
+  const token = window.location.hash.split('/invite/')[1]?.split('?')[0] || '';
+  const [preview, setPreview] = useState<{ email: string; workspaceName: string } | null>(null);
+  const [name, setName] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  useEffect(() => { let cancelled = false;
+    sessionStorage.setItem('slaf.pendingInvite', token);
+    api.get<{ email: string; workspaceName: string }>(`/invites/${encodeURIComponent(token)}`).then(p => { if (!cancelled) setPreview(p); }).catch(e => { if (!cancelled) setError(onboardingError(e)); });
+    return () => { cancelled = true; };
+  }, [token]);
+  const accept = async (event: FormEvent) => {
+    event.preventDefault(); if (!preview) return; setBusy(true); setError('');
+    try {
+      if (session) await api.post(`/invites/${encodeURIComponent(token)}/accept`);
+      else {
+        const r = await api.post<{ accessToken: string; refreshToken: string; user: { email: string; emailVerified: boolean } }>(`/invites/${encodeURIComponent(token)}/register`, { email: preview.email, fullName: name, password });
+        setTokens(r.accessToken, r.refreshToken);
+        const ws = await getList<ApiWorkspace>('/workspaces');
+        onAuthenticated({ email: r.user.email, emailVerified: r.user.emailVerified, authProvider: 'password', signedInAt: new Date().toISOString() }, ws.items);
+      }
+      await onRefresh(); sessionStorage.removeItem('slaf.pendingInvite'); navigateTo('company');
+    } catch (e) { setError(onboardingError(e)); } finally { setBusy(false); }
+  };
+  return <div className="hud-page"><SectionTitle eyebrow="Account" title="Workspace invitation" subtitle={preview ? `Join ${preview.workspaceName}` : 'Loading invitation…'} /><HudPanel>
+    {error && <p role="alert" className="hud-form-error">{error}</p>}
+    {preview && <form className="hud-form" onSubmit={accept}><TextInput label="Invited email" value={preview.email} readOnly />
+      {!session && <><TextInput label="Full name" value={name} onChange={setName} /><TextInput label="Password" type="password" value={password} onChange={setPassword} /></>}
+      <HudButton type="submit" disabled={busy}>{session ? 'Accept invitation' : 'Create account and join'}</HudButton>
+      {!session && <HudButton variant="ghost" onClick={() => { sessionStorage.setItem('slaf.pendingInvite', token); navigateTo('login'); }}>Already have an account? Sign in</HudButton>}
+      <RuleNote>This invitation verifies its addressed email when accepted. No further approval is needed.</RuleNote>
+    </form>}
+  </HudPanel></div>;
 }
 
 // Note: Strategic objectives page for executive intent, activation-gate fields, metrics, traceability links,
@@ -5653,8 +5873,6 @@ function ImplementedPage({
   architectureLoading: boolean;
 }) {
   if (route === 'dashboard') return <DashboardPage tenant={tenant} />;
-  if (route === 'company') return <CompanyPage tenant={tenant} />;
-  if (route === 'departments') return <DepartmentsPage tenant={tenant} />;
   if (route === 'objectives') return <ObjectivesPage tenant={tenant} ai={ai} apiWorkspaceId={apiWorkspaceId} />;
   if (route === 'architecture') return <ArchitecturePage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architecture={architecture} architectureId={architectureId} refetchArchitecture={refetchArchitecture} architectureLoading={architectureLoading} />;
   if (route === 'value-streams') return <ValueStreamsPage tenant={tenant} apiWorkspaceId={apiWorkspaceId} architectureId={architectureId} architectureLoading={architectureLoading} />;
@@ -5676,6 +5894,8 @@ function ImplementedPage({
 
 export default function WireframeApp() {
   const [route, setRoute] = useState<RouteId>(getRoute);
+  const [currentHash, setCurrentHash] = useState(window.location.hash);
+  const [restoreError, setRestoreError] = useState('');
   const [session, setSession] = useState<AuthSession | null>(null);
   const [apiWorkspaceId, setApiWorkspaceId] = useState<string | null>(null);
   const [apiWorkspaces, setApiWorkspaces] = useState<ApiWorkspace[]>([]);
@@ -5733,7 +5953,7 @@ export default function WireframeApp() {
   }, [pendingAi, savedAi]);
 
   useEffect(() => {
-    const syncRoute = () => setRoute(getRoute());
+    const syncRoute = () => { setRoute(getRoute()); setCurrentHash(window.location.hash); };
     window.addEventListener('hashchange', syncRoute);
     return () => window.removeEventListener('hashchange', syncRoute);
   }, []);
@@ -5744,7 +5964,7 @@ export default function WireframeApp() {
   const refetchArchitecture = useCallback(async () => {
     const requestedWs = apiWorkspaceId;
     architectureRequestRef.current = requestedWs;
-    if (!requestedWs) {
+    if (!requestedWs || !apiWorkspaces.find(w => w.id === requestedWs)?.setupCompletedAt) {
       setArchitecture(null);
       setArchitectureLoading(false);
       return;
@@ -5767,34 +5987,43 @@ export default function WireframeApp() {
       // off while a newer request for a different workspace is already in flight.
       if (architectureRequestRef.current === requestedWs) setArchitectureLoading(false);
     }
-  }, [apiWorkspaceId]);
+  }, [apiWorkspaceId, apiWorkspaces]);
 
   useEffect(() => { refetchArchitecture(); }, [refetchArchitecture]);
 
+  const refreshIdentity = async () => {
+    const user = await api.get<{ email: string; emailVerified: boolean }>('/me');
+    const ws = await getList<ApiWorkspace>('/workspaces');
+    setSession({ email: user.email, emailVerified: user.emailVerified, authProvider: 'password', signedInAt: new Date().toISOString() });
+    applyWorkspaces(ws.items);
+  };
   useEffect(() => {
-    if (!getRefreshToken()) return; // authLoading is already false — nothing to restore
+    if (!getRefreshToken()) return;
     let cancelled = false;
     (async () => {
       try {
-        const user = await api.get<{ email: string }>('/me'); // client auto-refreshes on 401
+        const user = await api.get<{ email: string; emailVerified: boolean }>('/me');
         const ws = await getList<ApiWorkspace>('/workspaces');
         if (cancelled) return;
-        setSession({ email: user.email, authProvider: 'password', signedInAt: new Date().toISOString() });
+        setSession({ email: user.email, emailVerified: user.emailVerified, authProvider: 'password', signedInAt: new Date().toISOString() });
         applyWorkspaces(ws.items);
-      } catch {
-        clearTokens(); // dead/invalid session
-      } finally {
-        if (!cancelled) setAuthLoading(false);
-      }
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof ApiError && e.status === 401) clearTokens();
+        else setRestoreError(onboardingError(e));
+      } finally { if (!cancelled) setAuthLoading(false); }
     })();
     return () => { cancelled = true; };
   }, []);
-
   useEffect(() => {
-    if (authLoading) return; // don't redirect mid-restore, or a signed-in user flashes the login screen
+    if (authLoading || restoreError) return;
     if (!session && gatedRoutes.has(route)) navigateTo('login');
-    if (session && (route === 'login' || route === 'signup')) navigateTo('dashboard');
-  }, [route, session, authLoading]);
+    if (session && (route === 'login' || route === 'signup')) {
+      const token = sessionStorage.getItem('slaf.pendingInvite');
+      if (token) window.location.hash = `/invite/${token}`;
+      else navigateTo(apiWorkspaces[0] && !apiWorkspaces[0].setupCompletedAt ? 'departments' : 'company');
+    }
+  }, [route, session, authLoading, restoreError, apiWorkspaces]);
 
   // Store the full workspace list and pick the active one (restored + validated, else first).
   const applyWorkspaces = (items: ApiWorkspace[]) => {
@@ -5812,10 +6041,31 @@ export default function WireframeApp() {
     applyWorkspaces(workspaces);
   };
 
-  const content = useMemo(() => {
+  // A password reset revokes every session on the server; this browser forgets its copy too.
+  const clearLocalSession = () => {
+    clearTokens();
+    setSession(null);
+    setApiWorkspaceId(null);
+    setApiWorkspaces([]);
+    setArchitecture(null);
+  };
+
+  const currentWorkspace = apiWorkspaces.find(w => w.id === apiWorkspaceId) || null;
+  const content = (() => {
+    if (route === 'verify-email') return <VerifyEmailPage key={currentHash} signedIn={Boolean(session)} onRefresh={refreshIdentity} />;
+    if (route === 'forgot-password') return <ForgotPasswordPage />;
+    if (route === 'reset-password') return <ResetPasswordPage key={currentHash} onPasswordChanged={clearLocalSession} />;
+    if (route === 'invite') return <InvitePage key={currentHash} session={session} onRefresh={refreshIdentity} onAuthenticated={handleAuthenticated} />;
+    if (!session) {
+      if (route === 'landing') return <LandingPage />;
+      return <AuthPage key={route} mode={route === 'signup' ? 'signup' : 'login'} onAuthenticated={handleAuthenticated} />;
+    }
+    if (!session.emailVerified) return <VerificationPending onRefresh={refreshIdentity} />;
+    if (!currentWorkspace) return <SavedCompanyPage workspace={null} onRefresh={refreshIdentity} />;
+    if (!currentWorkspace.setupCompletedAt && route !== 'company') return <SavedDepartmentsPage key={currentWorkspace.id} workspace={currentWorkspace} onRefresh={refreshIdentity} />;
+    if (route === 'company' || route === 'signup' || route === 'login') return <SavedCompanyPage key={currentWorkspace.id} workspace={currentWorkspace} onRefresh={refreshIdentity} />;
+    if (route === 'departments') return <SavedDepartmentsPage key={currentWorkspace.id} workspace={currentWorkspace} onRefresh={refreshIdentity} />;
     if (route === 'landing') return <LandingPage />;
-    if (route === 'signup') return <AuthPage mode="signup" onAuthenticated={handleAuthenticated} />;
-    if (route === 'login') return <AuthPage mode="login" onAuthenticated={handleAuthenticated} />;
     return implementedRoutes.has(route) ? (
       <ImplementedPage
         route={route}
@@ -5830,7 +6080,7 @@ export default function WireframeApp() {
     ) : (
       <StageLaterPage route={route} />
     );
-  }, [route, tenant, aiActions, apiWorkspaceId, architecture, architectureId, refetchArchitecture, architectureLoading]);
+  })();
 
   const signOut = async () => {
     const refreshToken = getRefreshToken();
@@ -5839,14 +6089,11 @@ export default function WireframeApp() {
     } catch {
       // ignore network/logout errors — still clear the session locally
     }
-    clearTokens();
-    setSession(null);
-    setApiWorkspaceId(null);
-    setApiWorkspaces([]);
-    setArchitecture(null);
+    clearLocalSession();
     navigateTo('landing');
   };
 
+  if (restoreError) return <div className="hud-page"><HudPanel><p role="alert">{restoreError}</p><HudButton onClick={() => window.location.reload()}>Retry connection</HudButton></HudPanel></div>;
   if (authLoading) {
     return (
       <div className="hud-page hud-auth-page">

@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.security import utc_now
+from app.models.business_architecture_components import BusinessArchitectureComponent
+from app.models.departments import Department
 from app.models.lean_business_cases import LeanBusinessCase
 from app.models.strategic_objectives import StrategicObjective
 from app.models.users import User
@@ -60,8 +62,13 @@ def provision_workspace_for_user(
     *,
     commit: bool = True,
 ) -> WorkspaceProvisionResult:
+    db.execute(select(User).where(User.id == user.id).with_for_update())
+    if not user.email_verified:
+        raise AppError("email_unverified", "Verify your email before creating a workspace", 403)
+    if db.scalar(select(WorkspaceMember.id).where(WorkspaceMember.user_id == user.id)):
+        raise AppError("user_already_in_workspace", "You already belong to a workspace", 409)
     values = payload.model_dump()
-    workspace = Workspace(**values, created_by_user_id=user.id)
+    workspace = Workspace(**values, created_by_user_id=user.id, owner_user_id=user.id)
     db.add(workspace)
     db.flush()
     member = WorkspaceMember(
@@ -72,6 +79,15 @@ def provision_workspace_for_user(
         created_by_user_id=user.id,
     )
     db.add(member)
+    db.add(
+        BusinessArchitectureComponent(
+            workspace_id=workspace.id,
+            name=workspace.name,
+            created_by_user_id=user.id,
+            status="draft",
+            origin="architecture",
+        )
+    )
     db.flush()
     if commit:
         db.commit()
@@ -84,6 +100,21 @@ class WorkspaceService:
 
     def create_workspace(self, user: User, payload: WorkspaceCreateRequest) -> WorkspaceProvisionResult:
         return provision_workspace_for_user(self.db, user, payload)
+
+    def complete_setup(self, workspace_id: uuid.UUID) -> Workspace:
+        workspace = self.db.scalar(select(Workspace).where(Workspace.id == workspace_id).with_for_update())
+        if workspace is None:
+            raise AppError("not_found", "Resource not found", 404)
+        if not self.db.scalar(select(Department.id).where(Department.workspace_id == workspace_id).limit(1)):
+            raise AppError(
+                "department_required",
+                "Add at least one department to complete setup",
+                409,
+            )
+        if workspace.setup_completed_at is None:
+            workspace.setup_completed_at = utc_now()
+        self.db.commit()
+        return workspace
 
     def list_workspaces(self, user: User) -> list[WorkspaceListResult]:
         rows = self.db.execute(
@@ -167,7 +198,7 @@ class WorkspaceService:
             .select_from(WorkspaceMember)
             .where(
                 WorkspaceMember.workspace_id == workspace_id,
-                WorkspaceMember.is_admin.is_(True),
+                WorkspaceMember.role == "admin",
                 WorkspaceMember.id != excluding_member_id,
             )
         )

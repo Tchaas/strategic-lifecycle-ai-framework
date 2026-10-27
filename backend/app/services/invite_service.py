@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.errors import AppError
 from app.core.security import utc_now
+from app.models.email import EmailOutbox
 from app.models.users import User
 from app.models.workspace_invites import WorkspaceInvite
 from app.models.workspace_members import WorkspaceMember
@@ -40,6 +41,13 @@ class InviteService:
         invited_by: User,
         payload: InviteCreateRequest,
     ) -> InviteCreateResult:
+        workspace = self.db.get(Workspace, workspace_id)
+        if workspace is None or workspace.setup_completed_at is None:
+            raise AppError(
+                "setup_required",
+                "Complete department setup before inviting members",
+                403,
+            )
         if self._email_is_member(workspace_id, payload.invited_email):
             raise AppError("already_member", "This user is already a workspace member", 409)
         pending = self.db.scalar(
@@ -64,6 +72,17 @@ class InviteService:
             created_by_user_id=invited_by.id,
         )
         self.db.add(invite)
+        self.db.flush()
+        self.db.add(
+            EmailOutbox(
+                delivery_provider=settings.email_provider,
+                kind="invitation",
+                invite_id=invite.id,
+                recipient=payload.invited_email,
+                subject="Workspace invitation",
+                body=f"You have been invited to join a workspace. Accept your invitation:\n\n{build_invite_url(token)}",
+            )
+        )
         self.db.commit()
         return InviteCreateResult(invite=invite, invite_url=build_invite_url(token))
 
@@ -85,8 +104,54 @@ class InviteService:
             self.db.commit()
         return invites
 
+    def delivery_status(self, invite_id: uuid.UUID) -> str:
+        message = self.db.scalar(
+            select(EmailOutbox)
+            .where(EmailOutbox.invite_id == invite_id)
+            .order_by(EmailOutbox.created_at.desc())
+            .limit(1)
+        )
+        return message.status if message else "missing"
+
+    def resend_invite(self, workspace_id: uuid.UUID, invite_id: uuid.UUID) -> None:
+        invite = self.db.scalar(
+            select(WorkspaceInvite)
+            .where(
+                WorkspaceInvite.id == invite_id,
+                WorkspaceInvite.workspace_id == workspace_id,
+            )
+            .with_for_update()
+        )
+        if invite is None:
+            raise AppError("not_found", "Resource not found", 404)
+        self.preview(invite.invite_token or "")
+        latest = self.db.scalar(
+            select(EmailOutbox)
+            .where(EmailOutbox.invite_id == invite.id)
+            .order_by(EmailOutbox.created_at.desc())
+            .limit(1)
+        )
+        if latest and (utc_now() - latest.created_at).total_seconds() < 60:
+            raise AppError(
+                "rate_limited",
+                "Please wait a minute before resending an invitation",
+                429,
+            )
+        self.db.add(
+            EmailOutbox(
+                delivery_provider=settings.email_provider,
+                kind="invitation",
+                invite_id=invite.id,
+                recipient=invite.invited_email,
+                subject="Workspace invitation",
+                body=f"Accept your workspace invitation:\n\n{build_invite_url(invite.invite_token or '')}",
+            )
+        )
+        self.db.commit()
+
     def accept_invite(self, token: str, user: User) -> InviteAcceptResult:
-        invite = self.db.scalar(select(WorkspaceInvite).where(WorkspaceInvite.invite_token == token))
+        self.db.execute(select(User).where(User.id == user.id).with_for_update())
+        invite = self.db.scalar(select(WorkspaceInvite).where(WorkspaceInvite.invite_token == token).with_for_update())
         if invite is None:
             raise AppError("not_found", "Resource not found", 404)
         now = utc_now()
@@ -97,9 +162,13 @@ class InviteService:
             self.db.commit()
             raise AppError("invite_expired", "Invite has expired", 410)
         if invite.invited_email.casefold() != user.email.casefold():
-            raise AppError("email_mismatch", "Invite email does not match the authenticated user", 403)
-        if self._user_is_member(invite.workspace_id, user.id):
-            raise AppError("already_member", "This user is already a workspace member", 409)
+            raise AppError(
+                "email_mismatch",
+                "Invite email does not match the authenticated user",
+                403,
+            )
+        if self.db.scalar(select(WorkspaceMember.id).where(WorkspaceMember.user_id == user.id)):
+            raise AppError("user_already_in_workspace", "You already belong to a workspace", 409)
 
         member = WorkspaceMember(
             workspace_id=invite.workspace_id,
@@ -108,6 +177,7 @@ class InviteService:
             joined_at=now,
             created_by_user_id=user.id,
         )
+        user.email_verified = True
         invite.status = "accepted"
         invite.accepted_at = now
         self.db.add(member)
@@ -117,6 +187,19 @@ class InviteService:
             raise AppError("not_found", "Resource not found", 404)
         self.db.commit()
         return InviteAcceptResult(workspace=workspace, member=member)
+
+    def preview(self, token: str) -> dict[str, str]:
+        invite = self.db.scalar(select(WorkspaceInvite).where(WorkspaceInvite.invite_token == token))
+        if invite is None:
+            raise AppError("not_found", "Resource not found", 404)
+        if invite.status == "accepted":
+            raise AppError("invite_consumed", "Invite has already been accepted", 409)
+        if invite.status != "pending" or invite.expires_at is None or invite.expires_at <= utc_now():
+            raise AppError("invite_expired", "Invite has expired", 410)
+        workspace = self.db.get(Workspace, invite.workspace_id)
+        if workspace is None:
+            raise AppError("not_found", "Resource not found", 404)
+        return {"email": invite.invited_email, "workspaceName": workspace.name}
 
     def _email_is_member(self, workspace_id: uuid.UUID, email: str) -> bool:
         return (

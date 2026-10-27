@@ -1,10 +1,19 @@
 import uuid
 from datetime import datetime
 
+from pydantic import field_validator
+
 from app.schemas.base import ApiModel
 
 
 class WorkspaceBase(ApiModel):
+    @field_validator("name", check_fields=False)
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Workspace name is required")
+        return value.strip()
+
     name: str
     legal_name: str | None = None
     business_unit: str | None = None
@@ -27,6 +36,13 @@ class WorkspaceCreateRequest(WorkspaceBase):
 
 
 class WorkspaceUpdateRequest(ApiModel):
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str | None) -> str:
+        if value is None or not value.strip():
+            raise ValueError("Workspace name is required")
+        return value.strip()
+
     name: str | None = None
     legal_name: str | None = None
     business_unit: str | None = None
@@ -45,6 +61,8 @@ class WorkspaceUpdateRequest(ApiModel):
 
 
 class WorkspaceResponse(WorkspaceBase):
+    setup_completed_at: datetime | None
+    owner_user_id: uuid.UUID | None
     id: uuid.UUID
     created_by_user_id: uuid.UUID
     created_at: datetime
@@ -52,6 +70,7 @@ class WorkspaceResponse(WorkspaceBase):
 
 
 class WorkspaceListItem(WorkspaceResponse):
+    role: str
     is_admin: bool | None
     joined_at: datetime | None
 
@@ -62,6 +81,7 @@ class WorkspaceMemberResponse(ApiModel):
     full_name: str | None
     email: str
     avatar_url: str | None
+    role: str
     is_admin: bool | None
     joined_at: datetime | None
 
@@ -78,6 +98,13 @@ class WorkspaceProvisionResponse(ApiModel):
 class InviteCreateRequest(ApiModel):
     invited_email: str
 
+    @field_validator("invited_email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        if "@" not in value or "\n" in value or "\r" in value:
+            raise ValueError("Invalid email address")
+        return value.strip()
+
 
 class InviteCreateResponse(ApiModel):
     id: uuid.UUID
@@ -90,6 +117,7 @@ class InviteCreateResponse(ApiModel):
 
 
 class InviteListItem(ApiModel):
+    delivery_status: str = "missing"
     id: uuid.UUID
     invited_email: str
     invited_by_user_id: uuid.UUID

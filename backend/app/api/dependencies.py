@@ -12,6 +12,7 @@ from app.core.errors import AppError
 from app.core.security import decode_access_token
 from app.models.users import User
 from app.models.workspace_members import WorkspaceMember
+from app.models.workspaces import Workspace
 from app.services.ai_service import AiService
 from app.services.architecture_supporting_service import ArchitectureSupportingService
 from app.services.auth_service import AuthService
@@ -106,7 +107,7 @@ def get_ai_service(db: DbSession) -> Generator[AiService, None, None]:
     yield AiService(db)
 
 
-def get_workspace_member(
+def get_setup_member(
     workspace_id: uuid.UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: DbSession,
@@ -119,11 +120,23 @@ def get_workspace_member(
     )
     if member is None:
         raise AppError("not_found", "Resource not found", 404)
+    if not current_user.email_verified:
+        raise AppError("email_unverified", "Verify your email to continue", 403)
+    return member
+
+
+def get_workspace_member(
+    member: Annotated[WorkspaceMember, Depends(get_setup_member)],
+    db: DbSession,
+) -> WorkspaceMember:
+    workspace = db.get(Workspace, member.workspace_id)
+    if workspace is None or workspace.setup_completed_at is None:
+        raise AppError("setup_required", "Complete workspace and department setup first", 403)
     return member
 
 
 def require_workspace_admin(
-    member: Annotated[WorkspaceMember, Depends(get_workspace_member)],
+    member: Annotated[WorkspaceMember, Depends(get_setup_member)],
 ) -> WorkspaceMember:
     if not member.is_admin:
         raise AppError("admin_required", "Workspace admin privileges are required", 403)
