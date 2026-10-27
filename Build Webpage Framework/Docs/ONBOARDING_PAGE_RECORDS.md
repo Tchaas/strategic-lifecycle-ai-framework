@@ -101,6 +101,45 @@ on every login has been established.
   same delivery path. Production rollout remains unperformed and is not implied by a web
   frontend push or local protocol tests.
 
+### SMTP service decision (2026-10-27)
+
+Owner decisions: use Resend as the SMTP service; send from `no-reply@slaf.dev`; complete the
+local real-inbox acceptance check before any hosted rollout. The owner creates the Resend
+account, adds its DNS records in Cloudflare, and enters the API key in `backend/.env`
+personally; credentials are not passed through the conversation or committed.
+
+- Settings (Resend SMTP documentation, checked 2026-10-27): host `smtp.resend.com`, username
+  `resend`, password = Resend API key. Port 587 or 2587 with `starttls`; 465 or 2465 with `ssl`.
+  A verified sending domain is a prerequisite. The existing transport supports these settings;
+  no application code change is required for local acceptance.
+- Hosting remains undecided. Render's free tier blocks outbound ports 25/465/587 and offers no
+  background-worker service (render.com/docs/free, checked 2026-10-27). Resend's 2465/2587
+  ports avoid the port block but not the worker limitation. Settle hosting before rollout.
+- **Status:** local real-inbox acceptance passed 2026-10-27 (evidence below). Hosted rollout,
+  invitation email through Resend, and workspace setup in this run remain unchecked.
+
+### Real-inbox acceptance evidence (2026-10-27)
+
+- Resend domain `slaf.dev` set up through Cloudflare auto-configure; DKIM at
+  `resend._domainkey`, SPF/MX through `send.slaf.dev` (CNAME to Resend). Preflight: SMTP TLS
+  and authentication passed. Stack started with `scripts/run_local.py --email-provider smtp`.
+- `email_outbox` (all `delivery_provider=smtp`, one attempt each): verification to a Gmail and
+  a Yahoo address, a resent Gmail verification, `password_reset`, and `password_changed`, all
+  `sent`. The owner received them in external inboxes and used the links.
+- Tokens: Yahoo and resent Gmail verification tokens used; both accounts `email_verified`.
+  Reset token issued 17:55, used 17:56; three of four earlier Gmail sessions revoked, one new
+  sign-in live. A duplicate-email signup was refused by `uq_users_email`.
+- A resend to an old `example.com` test account was refused by Resend
+  (`smtp_message_rejected`), recorded `failed` without retry, as designed.
+- Reused-link refusal was observed by the owner; API access logging is disabled
+  (`--no-access-log`), so no request log corroborates it.
+- Found: links use `FRONTEND_BASE_URL` (`http://127.0.0.1:5173` locally) and do not open on
+  another device such as a phone. Expected for local testing; hosted links use the public URL.
+- Fixed: "I have verified my email" gave no feedback when the signed-in account was still
+  unverified. `VerificationPending` in `src/app/WireframeApp.tsx` now checks
+  `/auth/verification/status`, continues when verified, and otherwise shows an error in the
+  existing alert. Frontend `npm run build` passed; the owner confirmed the message in the browser.
+
 ### Earlier delivery implementation (2026-10-06)
 
 Email-delivery correction (2026-10-06): the owner expects verification messages in users'

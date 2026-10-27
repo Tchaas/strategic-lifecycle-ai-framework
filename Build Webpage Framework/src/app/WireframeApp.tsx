@@ -1508,7 +1508,12 @@ function VerificationPending({ onRefresh }: { onRefresh: () => Promise<void> }) 
       if (resend) {
         await api.post('/auth/verification/resend');
         setDelivery(await api.get<VerificationDelivery>('/auth/verification/status'));
-      } else await onRefresh();
+      } else {
+        const current = await api.get<VerificationDelivery>('/auth/verification/status');
+        setDelivery(current);
+        if (current.status === 'verified') await onRefresh();
+        else setError('This account is not verified yet. Open the link in your most recent verification email, or request a new one below.');
+      }
     } catch (e) { setError(onboardingError(e)); } finally { setBusy(false); }
   };
   let message = 'Checking verification email status…';
